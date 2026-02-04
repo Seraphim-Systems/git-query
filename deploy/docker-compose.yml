@@ -1,0 +1,97 @@
+version: '3.8'
+
+services:
+  # Backend API Gateway
+  backend:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.backend
+    container_name: git-query-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - CHAT_AGENT_URL=http://chat-agent:8001
+      - RECOMMENDER_URL=http://recommender:8002
+      - DATABASE_URL=postgresql://user:pass@db:5432/gitquery
+    depends_on:
+      - chat-agent
+      - recommender
+      - db
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # Chat Agent MCP Server
+  chat-agent:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.chat-agent
+    container_name: git-query-chat-agent
+    ports:
+      - "8001:8001"
+    environment:
+      - RECOMMENDER_TOOL_URL=http://recommender:8002
+      - MODEL_PATH=/models/chat_model
+    volumes:
+      - ../models/chat_model:/models/chat_model:ro
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # Recommender MCP Tool Server
+  recommender:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.recommender
+    container_name: git-query-recommender
+    ports:
+      - "8002:8002"
+    environment:
+      - MODEL_PATH=/models/recommender_model
+      - DATABASE_URL=postgresql://user:pass@db:5432/gitquery
+    volumes:
+      - ../models/recommender_model:/models/recommender_model:ro
+    depends_on:
+      - db
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # Web Frontend with Nginx
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+    container_name: git-query-web
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # PostgreSQL Database
+  db:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.db
+    container_name: git-query-db
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=pass
+      - POSTGRES_DB=gitquery
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - app-network
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+
+networks:
+  app-network:
+    driver: bridge
