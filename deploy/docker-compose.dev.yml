@@ -1,0 +1,21 @@
+# Development override - exposes ports to host for debugging
+services:
+  app:
+    ports:
+      - "8000:8000"
+
+  chat-agent:
+    ports:
+      - "8001:8001"
+
+  recommender:
+    ports:
+      - "8002:8002"
+
+  nginx:
+    ports:
+      - "80:80"
+
+  db:
+    ports:
+      - "5432:5432"

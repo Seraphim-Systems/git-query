@@ -1,14 +1,11 @@
-version: '3.8'
-
 services:
-  # Backend API Gateway
-  backend:
+  # Application API Gateway
+  app:
+    image: git-query-app:${APP_VERSION:-latest}
     build:
       context: ..
-      dockerfile: deploy/Dockerfile.backend
-    container_name: git-query-backend
-    ports:
-      - "8000:8000"
+      dockerfile: deploy/Dockerfile.app
+    container_name: git-query-app
     environment:
       - CHAT_AGENT_URL=http://chat-agent:8001
       - RECOMMENDER_URL=http://recommender:8002
@@ -23,12 +20,11 @@ services:
 
   # Chat Agent MCP Server
   chat-agent:
+    image: git-query-chat-agent:${CHAT_AGENT_VERSION:-latest}
     build:
       context: ..
       dockerfile: deploy/Dockerfile.chat-agent
     container_name: git-query-chat-agent
-    ports:
-      - "8001:8001"
     environment:
       - RECOMMENDER_TOOL_URL=http://recommender:8002
       - MODEL_PATH=/models/chat_model
@@ -40,12 +36,11 @@ services:
 
   # Recommender MCP Tool Server
   recommender:
+    image: git-query-recommender:${RECOMMENDER_VERSION:-latest}
     build:
       context: ..
       dockerfile: deploy/Dockerfile.recommender
     container_name: git-query-recommender
-    ports:
-      - "8002:8002"
     environment:
       - MODEL_PATH=/models/recommender_model
       - DATABASE_URL=postgresql://user:pass@db:5432/gitquery
@@ -57,22 +52,22 @@ services:
       - app-network
     restart: unless-stopped
 
-  # Web Frontend with Nginx
-  web:
+  # Nginx (reverse proxy and static files)
+  nginx:
+    image: git-query-nginx:${NGINX_VERSION:-latest}
     build:
       context: ..
       dockerfile: deploy/Dockerfile.web
-    container_name: git-query-web
-    ports:
-      - "80:80"
+    container_name: git-query-nginx
     depends_on:
-      - backend
+      - app
     networks:
       - app-network
     restart: unless-stopped
 
   # PostgreSQL Database
   db:
+    image: git-query-db:${DB_VERSION:-latest}
     build:
       context: ..
       dockerfile: deploy/Dockerfile.db
@@ -83,8 +78,6 @@ services:
       - POSTGRES_DB=gitquery
     volumes:
       - postgres-data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     networks:
       - app-network
     restart: unless-stopped
