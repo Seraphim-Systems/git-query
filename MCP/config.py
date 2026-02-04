@@ -20,8 +20,13 @@ class Settings(BaseSettings):
     # API Keys
     openai_api_key: str = ""
 
-    # Database
+    # Databases
     database_url: str = ""
+    mongodb_url: str = ""
+    cosmos_db_url: str = ""
+    cosmos_db_key: str = ""
+    qdrant_url: str = ""
+    redis_url: str = ""
 
     # CORS
     allowed_origins: str = "http://localhost:3000,http://localhost:8080"

@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     model_name: str = "gpt-4"
 
+    # Databases
+    mongodb_url: str = ""
+    redis_url: str = ""
+
     # Logging
     log_level: str = "INFO"
 

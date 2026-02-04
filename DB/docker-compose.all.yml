@@ -1,0 +1,171 @@
+version: '3.8'
+
+# Master docker-compose file to start all databases
+# Usage: docker-compose -f docker-compose.all.yml up -d
+
+services:
+  # MongoDB - General application database
+  mongodb:
+    image: mongo:7.0
+    container_name: gitquery-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-mongopass}
+      MONGO_INITDB_DATABASE: ${MONGO_DB:-gitquery}
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongodb-data:/data/db
+      - mongodb-config:/data/configdb
+      - ./mongodb/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    networks:
+      - db-network
+    restart: unless-stopped
+    command: mongod --auth
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Azure Cosmos DB Emulator - Large-scale repository data
+  cosmos-db:
+    image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:latest
+    container_name: gitquery-cosmos-db
+    environment:
+      AZURE_COSMOS_EMULATOR_PARTITION_COUNT: ${COSMOS_PARTITION_COUNT:-10}
+      AZURE_COSMOS_EMULATOR_ENABLE_DATA_PERSISTENCE: "true"
+      AZURE_COSMOS_EMULATOR_IP_ADDRESS_OVERRIDE: ${COSMOS_IP:-127.0.0.1}
+    ports:
+      - "${COSMOS_PORT:-8081}:8081"
+      - "10250-10255:10250-10255"
+    volumes:
+      - cosmos-data:/data/db
+      - ./cosmos/cosmos-init.js:/docker-entrypoint-initdb.d/cosmos-init.js:ro
+    networks:
+      - db-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-k", "-f", "https://localhost:8081/_explorer/index.html"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 3G
+
+  # Qdrant - Vector database
+  qdrant:
+    image: qdrant/qdrant:v1.7.4
+    container_name: gitquery-qdrant
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: "6334"
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:-}
+      QDRANT__LOG_LEVEL: ${QDRANT_LOG_LEVEL:-INFO}
+    ports:
+      - "${QDRANT_HTTP_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrant-storage:/qdrant/storage
+      - qdrant-snapshots:/qdrant/snapshots
+    networks:
+      - db-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 1 bash -c '</dev/tcp/localhost/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Qdrant initialization service
+  qdrant-init:
+    build:
+      context: .
+      dockerfile: ./qdrant/Dockerfile.qdrant-init
+    container_name: gitquery-qdrant-init
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    environment:
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: "6333"
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+    networks:
+      - db-network
+    restart: "no"
+
+  # Redis - Cache database
+  redis:
+    image: redis:7.2-alpine
+    container_name: gitquery-redis
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    networks:
+      - db-network
+    restart: unless-stopped
+    command: >
+      sh -c '
+      if [ -n "$REDIS_PASSWORD" ]; then
+        redis-server /usr/local/etc/redis/redis.conf --requirepass "$REDIS_PASSWORD"
+      else
+        redis-server /usr/local/etc/redis/redis.conf
+      fi
+      '
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PostgreSQL - Legacy/compatibility database
+  postgres:
+    image: postgres:16-alpine
+    container_name: gitquery-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pass}
+      POSTGRES_DB: ${POSTGRES_DB:-gitquery}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    networks:
+      - db-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-gitquery}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mongodb-data:
+    name: gitquery-mongodb-data
+  mongodb-config:
+    name: gitquery-mongodb-config
+  cosmos-data:
+    name: gitquery-cosmos-data
+  qdrant-storage:
+    name: gitquery-qdrant-storage
+  qdrant-snapshots:
+    name: gitquery-qdrant-snapshots
+  redis-data:
+    name: gitquery-redis-data
+  postgres-data:
+    name: gitquery-postgres-data
+
+networks:
+  db-network:
+    name: gitquery-db-network
+    driver: bridge

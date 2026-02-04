@@ -9,13 +9,18 @@ services:
     environment:
       - CHAT_AGENT_URL=http://chat-agent:8001
       - RECOMMENDER_URL=http://recommender:8002
-      - DATABASE_URL=postgresql://user:pass@db:5432/gitquery
+      - DATABASE_URL=postgresql://user:pass@gitquery-postgres:5432/gitquery
+      - MONGODB_URL=mongodb://admin:mongopass@gitquery-mongodb:27017/gitquery?authSource=admin
+      - COSMOS_DB_URL=https://gitquery-cosmos-db:8081
+      - COSMOS_DB_KEY=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==
+      - QDRANT_URL=http://gitquery-qdrant:6333
+      - REDIS_URL=redis://gitquery-redis:6379
     depends_on:
       - chat-agent
       - recommender
-      - db
     networks:
       - app-network
+      - gitquery-db-network
     restart: unless-stopped
 
   # Chat Agent MCP Server
@@ -28,10 +33,13 @@ services:
     environment:
       - RECOMMENDER_TOOL_URL=http://recommender:8002
       - MODEL_PATH=/models/chat_model
+      - MONGODB_URL=mongodb://admin:mongopass@gitquery-mongodb:27017/gitquery?authSource=admin
+      - REDIS_URL=redis://gitquery-redis:6379
     volumes:
       - ../models/chat_model:/models/chat_model:ro
     networks:
       - app-network
+      - gitquery-db-network
     restart: unless-stopped
 
   # Recommender MCP Tool Server
@@ -43,13 +51,17 @@ services:
     container_name: git-query-recommender
     environment:
       - MODEL_PATH=/models/recommender_model
-      - DATABASE_URL=postgresql://user:pass@db:5432/gitquery
+      - DATABASE_URL=postgresql://user:pass@gitquery-postgres:5432/gitquery
+      - MONGODB_URL=mongodb://admin:mongopass@gitquery-mongodb:27017/gitquery?authSource=admin
+      - COSMOS_DB_URL=https://gitquery-cosmos-db:8081
+      - COSMOS_DB_KEY=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==
+      - QDRANT_URL=http://gitquery-qdrant:6333
+      - REDIS_URL=redis://gitquery-redis:6379
     volumes:
       - ../models/recommender_model:/models/recommender_model:ro
-    depends_on:
-      - db
     networks:
       - app-network
+      - gitquery-db-network
     restart: unless-stopped
 
   # MCP Server - Generic tools host
@@ -63,8 +75,12 @@ services:
       - MCP_HOST=0.0.0.0
       - MCP_PORT=8000
       - LOG_LEVEL=INFO
+      - DATABASE_URL=postgresql://user:pass@gitquery-postgres:5432/gitquery
+      - MONGODB_URL=mongodb://admin:mongopass@gitquery-mongodb:27017/gitquery?authSource=admin
+      - REDIS_URL=redis://gitquery-redis:6379
     networks:
       - app-network
+      - gitquery-db-network
     restart: unless-stopped
 
   # ChatbotClient - Pydantic AI powered chatbot
@@ -79,10 +95,13 @@ services:
     environment:
       - MCP_SERVER_URL=http://mcp-server:8000
       - LOG_LEVEL=INFO
+      - MONGODB_URL=mongodb://admin:mongopass@gitquery-mongodb:27017/gitquery?authSource=admin
+      - REDIS_URL=redis://gitquery-redis:6379
     depends_on:
       - mcp-server
     networks:
       - app-network
+      - gitquery-db-network
 
   # Nginx (reverse proxy and static files)
   nginx:
@@ -97,26 +116,13 @@ services:
       - app-network
     restart: unless-stopped
 
-  # PostgreSQL Database
-  db:
-    image: git-query-db:${DB_VERSION:-latest}
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile.db
-    container_name: git-query-db
-    environment:
-      - POSTGRES_USER=user
-      - POSTGRES_PASSWORD=pass
-      - POSTGRES_DB=gitquery
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    networks:
-      - app-network
-    restart: unless-stopped
-
 volumes:
-  postgres-data:
+  # Application volumes only - database volumes managed in ../DB/
 
 networks:
   app-network:
     driver: bridge
+  
+  gitquery-db-network:
+    external: true
+    name: gitquery-db-network
