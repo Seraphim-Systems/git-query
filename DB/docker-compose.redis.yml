@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7.2-alpine
+    container_name: gitquery-redis
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    networks:
+      - db-network
+    restart: unless-stopped
+    command: >
+      sh -c '
+      if [ -n "$REDIS_PASSWORD" ]; then
+        redis-server /usr/local/etc/redis/redis.conf --requirepass "$REDIS_PASSWORD"
+      else
+        redis-server /usr/local/etc/redis/redis.conf
+      fi
+      '
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  redis-data:
+    name: gitquery-redis-data
+
+networks:
+  db-network:
+    name: gitquery-db-network
+    driver: bridge
+    external: true

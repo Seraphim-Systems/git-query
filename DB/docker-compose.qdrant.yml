@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.7.4
+    container_name: gitquery-qdrant
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: "6334"
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:-}
+      QDRANT__LOG_LEVEL: ${QDRANT_LOG_LEVEL:-INFO}
+    ports:
+      - "${QDRANT_HTTP_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrant-storage:/qdrant/storage
+      - qdrant-snapshots:/qdrant/snapshots
+    networks:
+      - db-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 1 bash -c '</dev/tcp/localhost/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  qdrant-init:
+    build:
+      context: .
+      dockerfile: ./qdrant/Dockerfile.qdrant-init
+    container_name: gitquery-qdrant-init
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    environment:
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: "6333"
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+    networks:
+      - db-network
+    restart: "no"
+
+volumes:
+  qdrant-storage:
+    name: gitquery-qdrant-storage
+  qdrant-snapshots:
+    name: gitquery-qdrant-snapshots
+
+networks:
+  db-network:
+    name: gitquery-db-network
+    driver: bridge
+    external: true
