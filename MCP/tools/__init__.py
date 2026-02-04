@@ -17,8 +17,8 @@ def get_tool(tool_name: str) -> Callable | None:
 def list_tools() -> list[dict[str, Any]]:
     """List all available tools with their metadata."""
     from .example_tool import TOOL_DEFINITIONS
+
     return TOOL_DEFINITIONS
 
 
 __all__ = ["get_tool", "list_tools", "TOOL_REGISTRY"]
-

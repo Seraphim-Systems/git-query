@@ -1,4 +1,5 @@
 """Example tools for the MCP server."""
+
 from typing import Any
 
 
@@ -22,7 +23,7 @@ async def get_recommendation(user_id: str, category: str = "general") -> dict[st
             {"id": "2", "name": "Item 2", "score": 0.87},
             {"id": "3", "name": "Item 3", "score": 0.82},
         ],
-        "generated_at": "2026-02-04T00:00:00Z"
+        "generated_at": "2026-02-04T00:00:00Z",
     }
 
 
@@ -45,7 +46,7 @@ async def search_items(query: str, limit: int = 10) -> dict[str, Any]:
             {"id": "1", "name": f"Result for '{query}' #1", "relevance": 0.98},
             {"id": "2", "name": f"Result for '{query}' #2", "relevance": 0.85},
         ],
-        "total_count": 2
+        "total_count": 2,
     }
 
 
@@ -59,16 +60,16 @@ TOOL_DEFINITIONS = [
                 "name": "user_id",
                 "type": "string",
                 "description": "The user identifier",
-                "required": True
+                "required": True,
             },
             {
                 "name": "category",
                 "type": "string",
                 "description": "The category of recommendations",
                 "required": False,
-                "default": "general"
-            }
-        ]
+                "default": "general",
+            },
+        ],
     },
     {
         "name": "search_items",
@@ -78,16 +79,15 @@ TOOL_DEFINITIONS = [
                 "name": "query",
                 "type": "string",
                 "description": "Search query string",
-                "required": True
+                "required": True,
             },
             {
                 "name": "limit",
                 "type": "integer",
                 "description": "Maximum number of results to return",
                 "required": False,
-                "default": 10
-            }
-        ]
-    }
+                "default": 10,
+            },
+        ],
+    },
 ]
-

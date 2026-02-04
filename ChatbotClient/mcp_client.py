@@ -27,24 +27,20 @@ class MCPClient:
             logger.error(f"Failed to list tools from MCP server: {e}")
             return []
 
-    async def execute_tool(self, tool_name: str, parameters: dict[str, Any]) -> dict[str, Any]:
+    async def execute_tool(
+        self, tool_name: str, parameters: dict[str, Any]
+    ) -> dict[str, Any]:
         """Execute a tool on the MCP server."""
         try:
             response = await self.client.post(
                 "/tools/execute",
-                json={
-                    "tool_name": tool_name,
-                    "parameters": parameters
-                }
+                json={"tool_name": tool_name, "parameters": parameters},
             )
             response.raise_for_status()
             return response.json()
         except Exception as e:
             logger.error(f"Failed to execute tool {tool_name}: {e}")
-            return {
-                "success": False,
-                "error": str(e)
-            }
+            return {"success": False, "error": str(e)}
 
     async def health_check(self) -> bool:
         """Check if MCP server is healthy."""
@@ -63,4 +59,3 @@ class MCPClient:
 
 # Global MCP client instance
 mcp_client = MCPClient()
-

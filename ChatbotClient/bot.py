@@ -36,12 +36,14 @@ agent = Agent(
     model=model,
     system_prompt=SYSTEM_PROMPT,
     deps_type=ChatbotDependencies,
-    retries=2
+    retries=2,
 )
 
 
 @agent.tool
-async def get_recommendation(ctx: RunContext[ChatbotDependencies], user_id: str, category: str = "general") -> dict:
+async def get_recommendation(
+    ctx: RunContext[ChatbotDependencies], user_id: str, category: str = "general"
+) -> dict:
     """
     Get personalized recommendations for a user.
 
@@ -53,22 +55,25 @@ async def get_recommendation(ctx: RunContext[ChatbotDependencies], user_id: str,
     logger.info(f"Tool called: get_recommendation(user_id={user_id}, category={category})")
 
     result = await mcp_client.execute_tool(
-        "get_recommendation",
-        {"user_id": user_id, "category": category}
+        "get_recommendation", {"user_id": user_id, "category": category}
     )
 
     # Track tool call
-    ctx.deps.tool_calls.append({
-        "tool": "get_recommendation",
-        "parameters": {"user_id": user_id, "category": category},
-        "result": result
-    })
+    ctx.deps.tool_calls.append(
+        {
+            "tool": "get_recommendation",
+            "parameters": {"user_id": user_id, "category": category},
+            "result": result,
+        }
+    )
 
     return result
 
 
 @agent.tool
-async def search_items(ctx: RunContext[ChatbotDependencies], query: str, limit: int = 10) -> dict:
+async def search_items(
+    ctx: RunContext[ChatbotDependencies], query: str, limit: int = 10
+) -> dict:
     """
     Search for items in the system.
 
@@ -80,16 +85,17 @@ async def search_items(ctx: RunContext[ChatbotDependencies], query: str, limit: 
     logger.info(f"Tool called: search_items(query={query}, limit={limit})")
 
     result = await mcp_client.execute_tool(
-        "search_items",
-        {"query": query, "limit": limit}
+        "search_items", {"query": query, "limit": limit}
     )
 
     # Track tool call
-    ctx.deps.tool_calls.append({
-        "tool": "search_items",
-        "parameters": {"query": query, "limit": limit},
-        "result": result
-    })
+    ctx.deps.tool_calls.append(
+        {
+            "tool": "search_items",
+            "parameters": {"query": query, "limit": limit},
+            "result": result,
+        }
+    )
 
     return result
 
@@ -113,4 +119,3 @@ async def chat(message: str, user_id: str = None) -> tuple[str, list[dict]]:
     except Exception as e:
         logger.error(f"Error processing chat message: {e}")
         return f"I apologize, but I encountered an error: {str(e)}", deps.tool_calls
-
