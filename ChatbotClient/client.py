@@ -13,7 +13,7 @@ from mcp_client import mcp_client
 # Configure logging
 logging.basicConfig(
     level=settings.log_level,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,9 @@ async def check_mcp_connection():
                 console.print(f"  • {tool['name']}: {tool['description']}")
     else:
         console.print("[red]✗ Failed to connect to MCP server[/red]")
-        console.print(f"[yellow]Make sure the MCP server is running at {settings.mcp_server_url}[/yellow]")
+        console.print(
+            f"[yellow]Make sure the MCP server is running at {settings.mcp_server_url}[/yellow]"
+        )
         return False
 
     return True
@@ -44,12 +46,14 @@ async def check_mcp_connection():
 
 async def interactive_chat():
     """Run interactive chat session."""
-    console.print(Panel.fit(
-        "[bold blue]Welcome to the ChatbotClient![/bold blue]\n"
-        "Powered by Pydantic AI\n\n"
-        "Type 'exit' or 'quit' to end the session.",
-        title="Chatbot Client"
-    ))
+    console.print(
+        Panel.fit(
+            "[bold blue]Welcome to the ChatbotClient![/bold blue]\n"
+            "Powered by Pydantic AI\n\n"
+            "Type 'exit' or 'quit' to end the session.",
+            title="Chatbot Client",
+        )
+    )
 
     # Check MCP connection
     if not await check_mcp_connection():
@@ -62,7 +66,7 @@ async def interactive_chat():
             # Get user input
             user_input = Prompt.ask("\n[bold cyan]You[/bold cyan]")
 
-            if user_input.lower() in ['exit', 'quit', 'bye']:
+            if user_input.lower() in ["exit", "quit", "bye"]:
                 console.print("\n[yellow]Goodbye! 👋[/yellow]\n")
                 break
 
@@ -76,7 +80,7 @@ async def interactive_chat():
             response, tool_calls = await chat(user_input)
 
             # Display response
-            console.print(f"\n[bold green]Bot:[/bold green]")
+            console.print("\n[bold green]Bot:[/bold green]")
             console.print(Panel(Markdown(response)))
 
             # Show tool calls if any
@@ -104,4 +108,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-

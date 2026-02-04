@@ -86,10 +86,7 @@ async def execute_tool(request: ToolExecuteRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(
-        "server:app",
-        host=settings.mcp_host,
-        port=settings.mcp_port,
-        reload=True
-    )
 
+    uvicorn.run(
+        "server:app", host=settings.mcp_host, port=settings.mcp_port, reload=True
+    )
