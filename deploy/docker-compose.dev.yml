@@ -12,6 +12,10 @@ services:
     ports:
       - "8002:8002"
 
+  mcp-server:
+    ports:
+      - "8003:8000"
+
   nginx:
     ports:
       - "80:80"

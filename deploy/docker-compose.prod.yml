@@ -34,6 +34,18 @@ services:
       - API_SECRET=${API_SECRET}
     restart: always
 
+  mcp-server:
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+    restart: always
+
+  chatbot-client:
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - MODEL_NAME=${CHATBOT_MODEL_NAME:-gpt-4}
+    restart: always
+
   db:
     environment:
       - POSTGRES_USER=${DB_USER}

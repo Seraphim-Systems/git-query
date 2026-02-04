@@ -52,6 +52,38 @@ services:
       - app-network
     restart: unless-stopped
 
+  # MCP Server - Generic tools host
+  mcp-server:
+    image: git-query-mcp-server:${MCP_VERSION:-latest}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.mcp
+    container_name: git-query-mcp-server
+    environment:
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=8000
+      - LOG_LEVEL=INFO
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # ChatbotClient - Pydantic AI powered chatbot
+  chatbot-client:
+    image: git-query-chatbot-client:${CHATBOT_CLIENT_VERSION:-latest}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.chatbot-client
+    container_name: git-query-chatbot-client
+    stdin_open: true
+    tty: true
+    environment:
+      - MCP_SERVER_URL=http://mcp-server:8000
+      - LOG_LEVEL=INFO
+    depends_on:
+      - mcp-server
+    networks:
+      - app-network
+
   # Nginx (reverse proxy and static files)
   nginx:
     image: git-query-nginx:${NGINX_VERSION:-latest}
