@@ -1,0 +1,128 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: gitquery-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_DB:-gitquery}
+      MONGO_INITDB_ENABLE_TLS: "${MONGO_ENABLE_TLS:-false}"
+    volumes:
+      - mongodb-data:/data/db
+      - mongodb-config:/data/configdb
+      - ./mongodb/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    networks:
+      - gitquery-db-network
+    restart: unless-stopped
+    command: mongod --auth --bind_ip_all
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+
+  cosmos-db:
+    image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:latest
+    container_name: gitquery-cosmos-db
+    environment:
+      AZURE_COSMOS_EMULATOR_PARTITION_COUNT: ${COSMOS_PARTITION_COUNT:-10}
+      AZURE_COSMOS_EMULATOR_ENABLE_DATA_PERSISTENCE: "true"
+      AZURE_COSMOS_EMULATOR_IP_ADDRESS_OVERRIDE: "0.0.0.0"
+    volumes:
+      - cosmos-data:/data/db
+      - ./cosmos/cosmos-init.js:/docker-entrypoint-initdb.d/cosmos-init.js:ro
+    networks:
+      - gitquery-db-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-k", "-f", "https://localhost:8081/_explorer/index.html"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 3G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+
+  qdrant:
+    image: qdrant/qdrant:v1.7.4
+    container_name: gitquery-qdrant
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: "6334"
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY}
+      QDRANT__LOG_LEVEL: ${QDRANT_LOG_LEVEL:-INFO}
+      QDRANT__SERVICE__ENABLE_TLS: "${QDRANT_ENABLE_TLS:-false}"
+    volumes:
+      - qdrant-storage:/qdrant/storage
+      - qdrant-snapshots:/qdrant/snapshots
+    networks:
+      - gitquery-db-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 1 bash -c '</dev/tcp/localhost/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  qdrant-init:
+    build:
+      context: .
+      dockerfile: ./qdrant/Dockerfile.qdrant-init
+    container_name: gitquery-qdrant-init
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    environment:
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: "6333"
+      QDRANT_API_KEY: ${QDRANT_API_KEY}
+    networks:
+      - gitquery-db-network
+    restart: "no"
+
+volumes:
+  mongodb-data:
+    name: gitquery-mongodb-data
+  mongodb-config:
+    name: gitquery-mongodb-config
+  cosmos-data:
+    name: gitquery-cosmos-data
+  qdrant-storage:
+    name: gitquery-qdrant-storage
+  qdrant-snapshots:
+    name: gitquery-qdrant-snapshots
+
+networks:
+  gitquery-db-network:
+    name: gitquery-db-network
+    driver: bridge
+    internal: false
+    driver_opts:
+      com.docker.network.bridge.name: "gitquery-db0"
+      com.docker.network.bridge.enable_icc: "true"
+      com.docker.network.bridge.enable_ip_masquerade: "true"
