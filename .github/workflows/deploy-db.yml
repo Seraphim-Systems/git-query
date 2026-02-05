@@ -1,0 +1,131 @@
+name: Deploy Databases to Hetzner
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_mongodb:
+        description: 'Deploy MongoDB'
+        required: true
+        default: 'true'
+        type: boolean
+      deploy_cosmos:
+        description: 'Deploy Cosmos DB'
+        required: true
+        default: 'true'
+        type: boolean
+      deploy_qdrant:
+        description: 'Deploy Qdrant'
+        required: true
+        default: 'true'
+        type: boolean
+      deploy_redis:
+        description: 'Deploy Redis'
+        required: true
+        default: 'true'
+        type: boolean
+
+jobs:
+  deploy-databases:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create deployment .env file
+        run: |
+          cat > .env.deploy <<EOF
+          # MongoDB Configuration
+          MONGO_USER=${{ secrets.MONGO_USER }}
+          MONGO_PASSWORD=${{ secrets.MONGO_PASSWORD }}
+          MONGO_DB=gitquery
+          
+          # Cosmos DB Configuration
+          COSMOS_PARTITION_COUNT=10
+          
+          # Qdrant Configuration
+          QDRANT_API_KEY=${{ secrets.QDRANT_API_KEY }}
+          QDRANT_LOG_LEVEL=INFO
+          
+          # Redis Configuration
+          REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
+          
+          # Nginx Configuration
+          NGINX_PORT=80
+          SERVER_NAME=${{ secrets.SERVER_NAME }}
+          
+          # Data Ingestion API Key
+          DATA_INGESTION_API_KEY=${{ secrets.DATA_INGESTION_API_KEY }}
+          EOF
+
+      - name: Copy files to Hetzner server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          source: "infrastructure/docker/docker-compose.db.yml,infrastructure/docker/Dockerfile.*,src/storage,web/nginx.conf,.env.deploy"
+          target: "/opt/git-query-db"
+          strip_components: 0
+
+      - name: Deploy databases on Hetzner
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          script: |
+            cd /opt/git-query-db
+            
+            # Move .env file
+            mv .env.deploy .env
+            
+            # Stop existing services
+            docker-compose -f infrastructure/docker/docker-compose.db.yml down
+            
+            # Build services
+            SERVICES=""
+            if [ "${{ inputs.deploy_mongodb }}" == "true" ]; then
+              SERVICES="$SERVICES mongodb"
+            fi
+            if [ "${{ inputs.deploy_cosmos }}" == "true" ]; then
+              SERVICES="$SERVICES cosmos-db"
+            fi
+            if [ "${{ inputs.deploy_qdrant }}" == "true" ]; then
+              SERVICES="$SERVICES qdrant qdrant-init"
+            fi
+            if [ "${{ inputs.deploy_redis }}" == "true" ]; then
+              SERVICES="$SERVICES redis"
+            fi
+            
+            # Start selected database services and web container
+            docker-compose -f infrastructure/docker/docker-compose.db.yml up -d $SERVICES nginx
+            
+            # Wait for services to be healthy
+            sleep 10
+            
+            # Show status
+            docker-compose -f infrastructure/docker/docker-compose.db.yml ps
+            
+            # Clean up old images
+            docker system prune -af --volumes=false
+
+      - name: Verify deployment
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          script: |
+            cd /opt/git-query-db
+            echo "Checking service health..."
+            docker-compose -f infrastructure/docker/docker-compose.db.yml ps
+            
+            # Test endpoint
+            curl -f http://localhost/health || exit 1
+            echo "Deployment successful!"
+
+      - name: Clean up local secrets
+        if: always()
+        run: rm -f .env.deploy
