@@ -1,0 +1,51 @@
+# Production override - optimized settings, secrets from environment
+name: git-query
+
+services:
+  mongodb:
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_DB}
+    restart: always
+
+  cosmos-db:
+    environment:
+      AZURE_COSMOS_EMULATOR_PARTITION_COUNT: ${COSMOS_PARTITION_COUNT:-20}
+      AZURE_COSMOS_EMULATOR_ENABLE_DATA_PERSISTENCE: 'true'
+    restart: always
+
+  qdrant:
+    environment:
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY}
+      QDRANT__LOG_LEVEL: WARN
+    restart: always
+
+  redis:
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    restart: always
+
+  nginx:
+    # Expose nginx externally in production
+    ports:
+      - "80:80"
+    environment:
+      - ENVIRONMENT=production
+    restart: always
+
+  mcp-server:
+    environment:
+      - LOG_LEVEL=INFO
+      - MONGODB_URL=mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongodb:27017/gitquery?authSource=admin
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    restart: always
+
+  chatbot-client:
+    environment:
+      - LOG_LEVEL=INFO
+      - MONGODB_URL=mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongodb:27017/gitquery?authSource=admin
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - MODEL_NAME=${CHATBOT_MODEL_NAME:-gpt-4}
+    restart: always
