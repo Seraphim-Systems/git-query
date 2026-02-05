@@ -1,0 +1,19 @@
+FROM nginx:alpine
+
+# Copy nginx configuration template
+COPY web/nginx-db.conf.template /etc/nginx/templates/default.conf.template
+
+# Copy web application files (optional - can be empty for DB-only deployment)
+RUN mkdir -p /usr/share/nginx/html
+COPY web/*.html /usr/share/nginx/html/ 2>/dev/null || echo "No HTML files to copy"
+COPY web/*.js /usr/share/nginx/html/ 2>/dev/null || echo "No JS files to copy"
+COPY web/*.css /usr/share/nginx/html/ 2>/dev/null || echo "No CSS files to copy"
+
+# Create a default index.html if none exists
+RUN if [ ! -f /usr/share/nginx/html/index.html ]; then \
+  echo '<!DOCTYPE html><html><head><title>Git-Query Database API</title></head><body><h1>Git-Query Database API</h1><p>API is running. Visit <a href="/api/docs">/api/docs</a> for interactive documentation.</p></body></html>' > /usr/share/nginx/html/index.html; \
+  fi
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]
