@@ -45,7 +45,6 @@ jobs:
           COSMOS_PARTITION_COUNT=10
           
           # Qdrant Configuration
-          QDRANT_API_KEY=${{ secrets.QDRANT_API_KEY }}
           QDRANT_LOG_LEVEL=INFO
           
           # Redis Configuration

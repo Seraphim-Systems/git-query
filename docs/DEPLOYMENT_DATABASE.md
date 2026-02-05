@@ -31,7 +31,6 @@ HETZNER_SSH_KEY=<your-ssh-private-key>
 MONGO_USER=admin
 MONGO_PASSWORD=<strong-password>
 REDIS_PASSWORD=<strong-password>
-QDRANT_API_KEY=<api-key>
 
 # API Configuration
 DATA_INGESTION_API_KEY=<strong-api-key>
@@ -136,7 +135,7 @@ MONGO_USER=admin
 MONGO_PASSWORD=your-password
 MONGO_DB=gitquery
 REDIS_PASSWORD=your-redis-password
-QDRANT_API_KEY=your-qdrant-key
+
 DATA_INGESTION_API_KEY=your-api-key
 SERVER_NAME=db.yourdomain.com
 NGINX_PORT=80
