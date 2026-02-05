@@ -1,0 +1,27 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY src/storage/requirements.txt /app/requirements-storage.txt
+RUN pip install --no-cache-dir -r requirements-storage.txt
+
+# Install additional dependencies for API
+RUN pip install --no-cache-dir \
+  fastapi==0.109.0 \
+  uvicorn[standard]==0.27.0 \
+  pymongo==4.6.1 \
+  redis==5.0.1 \
+  qdrant-client==1.7.3 \
+  python-multipart==0.0.6 \
+  pandas==2.1.4
+
+# Copy API service
+COPY src/storage/db_query_api.py /app/db_query_api.py
+COPY src/storage/__init__.py /app/__init__.py
+
+# Expose port
+EXPOSE 8080
+
+# Run the API
+CMD ["uvicorn", "db_query_api:app", "--host", "0.0.0.0", "--port", "8080", "--log-level", "info"]

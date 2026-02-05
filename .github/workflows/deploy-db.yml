@@ -65,8 +65,8 @@ jobs:
           host: ${{ secrets.HETZNER_HOST }}
           username: ${{ secrets.HETZNER_USER }}
           key: ${{ secrets.HETZNER_SSH_KEY }}
-          source: "infrastructure/docker/docker-compose.db.yml,infrastructure/docker/Dockerfile.*,src/storage,web/nginx.conf,.env.deploy"
-          target: "/opt/git-query-db"
+          source: "infrastructure/docker/docker-compose.db.yml,infrastructure/docker/Dockerfile.*,src/storage,web/nginx-db.conf.template,.env.deploy"
+          target: "/home/${{ secrets.HETZNER_USER }}/git-query"
           strip_components: 0
 
       - name: Deploy databases on Hetzner
@@ -76,7 +76,7 @@ jobs:
           username: ${{ secrets.HETZNER_USER }}
           key: ${{ secrets.HETZNER_SSH_KEY }}
           script: |
-            cd /opt/git-query-db
+            cd /home/${{ secrets.HETZNER_USER }}/git-query
             
             # Move .env file
             mv .env.deploy .env
@@ -118,7 +118,7 @@ jobs:
           username: ${{ secrets.HETZNER_USER }}
           key: ${{ secrets.HETZNER_SSH_KEY }}
           script: |
-            cd /opt/git-query-db
+            cd /home/${{ secrets.HETZNER_USER }}/git-query
             echo "Checking service health..."
             docker-compose -f infrastructure/docker/docker-compose.db.yml ps
             
