@@ -1,4 +1,5 @@
 """Configuration settings for MCP server."""
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 

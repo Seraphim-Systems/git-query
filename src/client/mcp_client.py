@@ -25,7 +25,7 @@ class MCPClient:
             data = response.json()
             return data.get("tools", [])
         except Exception as e:
-            logger.error(f"Failed to list tools from MCP server: {e}")
+            logger.error("Failed to list tools from MCP server: %s", e)
             return []
 
     async def execute_tool(
@@ -40,7 +40,7 @@ class MCPClient:
             response.raise_for_status()
             return response.json()
         except Exception as e:
-            logger.error(f"Failed to execute tool {tool_name}: {e}")
+            logger.error("Failed to execute tool %s: %s", tool_name, e)
             return {"success": False, "error": str(e)}
 
     async def health_check(self) -> bool:
@@ -50,7 +50,7 @@ class MCPClient:
             response.raise_for_status()
             return True
         except Exception as e:
-            logger.error(f"MCP server health check failed: {e}")
+            logger.error("MCP server health check failed: %s", e)
             return False
 
     async def close(self):

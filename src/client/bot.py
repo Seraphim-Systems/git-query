@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 # System prompt for the chatbot
-SYSTEM_PROMPT = """You are a helpful AI assistant for a recommendation system. 
+SYSTEM_PROMPT = """You are a helpful AI assistant for a recommendation system.
 You can help users find recommendations and search for items.
 
 You have access to tools that can:
@@ -54,7 +54,7 @@ async def get_recommendation(
         category: The category of recommendations
     """
     logger.info(
-        f"Tool called: get_recommendation(user_id={user_id}, category={category})"
+        "Tool called: get_recommendation(user_id=%s, category=%s)", user_id, category
     )
 
     result = await mcp_client.execute_tool(
@@ -85,7 +85,7 @@ async def search_items(
         query: Search query string
         limit: Maximum number of results
     """
-    logger.info(f"Tool called: search_items(query={query}, limit={limit})")
+    logger.info("Tool called: search_items(query=%s, limit=%d)", query, limit)
 
     result = await mcp_client.execute_tool(
         "search_items", {"query": query, "limit": limit}
@@ -120,5 +120,5 @@ async def chat(message: str, user_id: str = None) -> tuple[str, list[dict]]:
         result = await agent.run(message, deps=deps)
         return result.data, deps.tool_calls
     except Exception as e:
-        logger.error(f"Error processing chat message: {e}")
+        logger.error("Error processing chat message: %s", e)
         return f"I apologize, but I encountered an error: {str(e)}", deps.tool_calls

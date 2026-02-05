@@ -99,7 +99,7 @@ async def interactive_chat():
             break
         except Exception as e:
             console.print(f"\n[red]Error: {e}[/red]")
-            logger.error(f"Error in interactive chat: {e}", exc_info=True)
+            logger.error("Error in interactive chat: %s", e, exc_info=True)
 
 
 async def main():
