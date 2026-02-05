@@ -9,7 +9,6 @@ services:
     environment:
       - CHAT_AGENT_URL=http://chat-agent:8001
       - RECOMMENDER_URL=http://recommender:8002
-      - DATABASE_URL=postgresql://user:pass@gitquery-postgres:5432/gitquery
       - MONGODB_URL=mongodb://admin:mongopass@gitquery-mongodb:27017/gitquery?authSource=admin
       - COSMOS_DB_URL=https://gitquery-cosmos-db:8081
       - COSMOS_DB_KEY=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==
@@ -51,7 +50,6 @@ services:
     container_name: git-query-recommender
     environment:
       - MODEL_PATH=/models/recommender_model
-      - DATABASE_URL=postgresql://user:pass@gitquery-postgres:5432/gitquery
       - MONGODB_URL=mongodb://admin:mongopass@gitquery-mongodb:27017/gitquery?authSource=admin
       - COSMOS_DB_URL=https://gitquery-cosmos-db:8081
       - COSMOS_DB_KEY=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==
@@ -75,7 +73,6 @@ services:
       - MCP_HOST=0.0.0.0
       - MCP_PORT=8000
       - LOG_LEVEL=INFO
-      - DATABASE_URL=postgresql://user:pass@gitquery-postgres:5432/gitquery
       - MONGODB_URL=mongodb://admin:mongopass@gitquery-mongodb:27017/gitquery?authSource=admin
       - REDIS_URL=redis://gitquery-redis:6379
     networks:

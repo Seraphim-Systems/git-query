@@ -21,7 +21,6 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
 
     # Databases
-    database_url: str = ""
     mongodb_url: str = ""
     cosmos_db_url: str = ""
     cosmos_db_key: str = ""

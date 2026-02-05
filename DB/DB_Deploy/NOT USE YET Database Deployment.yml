@@ -1,0 +1,214 @@
+name: Deploy to DEV Server
+
+on:
+  push:
+    branches:
+      - dev
+  workflow_dispatch:
+
+env:
+  DEPLOY_PATH: ${{ secrets.SERVER_DEPLOY_PATH }}
+
+jobs:
+  deploy:
+    name: Deploy and Initialize Databases
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SERVER_SSH_KEY }}
+      
+      - name: Add server to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+      
+      - name: Deploy code to server
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+            # Create deployment directory if it doesn't exist
+            mkdir -p ${{ env.DEPLOY_PATH }}
+            
+            # Navigate to deployment directory
+            cd ${{ env.DEPLOY_PATH }}
+            
+            # Pull latest code or clone if doesn't exist
+            if [ -d ".git" ]; then
+              git fetch origin
+              git reset --hard origin/dev
+              git clean -fd
+            else
+              git clone --branch dev https://github.com/${{ github.repository }} .
+            fi
+            
+            echo "✓ Code deployed successfully"
+          EOF
+      
+      - name: Setup environment variables
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+            cd ${{ env.DEPLOY_PATH }}/DB
+            
+            # Create .env file with secrets
+            cat > .env << ENVFILE
+            # MongoDB Configuration
+            MONGO_USER=${{ secrets.MONGO_USER }}
+            MONGO_PASSWORD=${{ secrets.MONGO_PASSWORD }}
+            MONGO_DB=gitquery
+            MONGO_PORT=27017
+            
+            # Cosmos DB Configuration (using emulator)
+            COSMOS_DB_URL=https://localhost:8081
+            COSMOS_DB_KEY=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==
+            COSMOS_DB_NAME=gitquery_cosmos
+            
+            # Qdrant Configuration
+            QDRANT_HTTP_PORT=6333
+            QDRANT_GRPC_PORT=6334
+            
+            # Redis Configuration
+            REDIS_PORT=6379
+            
+            # Application Secrets
+            SECRET_KEY=${{ secrets.SECRET_KEY }}
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            
+            # API Keys
+            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+            GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
+            ENVFILE
+            
+            echo "✓ Environment variables configured"
+          EOF
+      
+      - name: Create Docker network
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+            # Create external network if it doesn't exist
+            if ! docker network inspect gitquery-db-network >/dev/null 2>&1; then
+              docker network create gitquery-db-network
+              echo "✓ Created Docker network: gitquery-db-network"
+            else
+              echo "✓ Docker network already exists"
+            fi
+          EOF
+      
+      - name: Stop existing database containers
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+            cd ${{ env.DEPLOY_PATH }}/DB
+            
+            # Stop and remove existing containers
+            docker-compose -f docker-compose.all.yml down || true
+            
+            echo "✓ Stopped existing containers"
+          EOF
+      
+      - name: Start database containers
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+            cd ${{ env.DEPLOY_PATH }}/DB
+            
+            # Pull latest images
+            docker-compose -f docker-compose.all.yml pull
+            
+            # Start all databases
+            docker-compose -f docker-compose.all.yml up -d
+            
+            echo "✓ Database containers started"
+          EOF
+      
+      - name: Wait for databases to be healthy
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+            cd ${{ env.DEPLOY_PATH }}/DB
+            
+            echo "Waiting for databases to become healthy..."
+            
+            # Wait up to 5 minutes for all containers to be healthy
+            TIMEOUT=300
+            ELAPSED=0
+            
+            while [ $ELAPSED -lt $TIMEOUT ]; do
+              UNHEALTHY=$(docker-compose -f docker-compose.all.yml ps --format json | jq -r 'select(.Health != "healthy") | .Name' | wc -l)
+              
+              if [ "$UNHEALTHY" -eq "0" ]; then
+                echo "✓ All databases are healthy"
+                break
+              fi
+              
+              echo "Waiting for databases... ($ELAPSED/$TIMEOUT seconds)"
+              sleep 10
+              ELAPSED=$((ELAPSED + 10))
+            done
+            
+            if [ $ELAPSED -ge $TIMEOUT ]; then
+              echo "⚠ Warning: Some databases may not be healthy yet"
+              docker-compose -f docker-compose.all.yml ps
+            fi
+          EOF
+      
+      - name: Initialize Qdrant collections
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+            cd ${{ env.DEPLOY_PATH }}/DB
+            
+            # Run Qdrant initialization
+            docker-compose -f docker-compose.qdrant.yml up qdrant-init
+            
+            echo "✓ Qdrant collections initialized"
+          EOF
+      
+      - name: Install Python dependencies
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+            cd ${{ env.DEPLOY_PATH }}
+            
+            # Install/update Python dependencies
+            python3 -m pip install --upgrade pip
+            pip3 install -r requirements.txt
+            pip3 install -r DB/requirements.txt
+            
+            echo "✓ Python dependencies installed"
+          EOF
+      
+      - name: Run database health check
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+            cd ${{ env.DEPLOY_PATH }}/DB
+            
+            # Display container status
+            echo "=== Database Container Status ==="
+            docker ps --filter name=gitquery --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+            
+            # Display network info
+            echo ""
+            echo "=== Network Configuration ==="
+            docker network inspect gitquery-db-network --format '{{range .Containers}}{{.Name}}: {{.IPv4Address}}{{"\n"}}{{end}}'
+          EOF
+      
+      - name: Deployment Summary
+        run: |
+          echo "================================"
+          echo "Deployment completed successfully!"
+          echo "================================"
+          echo "Server: ${{ secrets.SERVER_HOST }}"
+          echo "Path: ${{ env.DEPLOY_PATH }}"
+          echo "Branch: dev"
+          echo ""
+          echo "Databases deployed:"
+          echo "  • MongoDB (port 27017)"
+          echo "  • Cosmos DB Emulator (port 8081)"
+          echo "  • Qdrant (ports 6333-6334)"
+          echo "  • Redis (port 6379)"
+          echo ""
+          echo "Next steps:"
+          echo "  1. Run GitHub scraper: python3 pipelines/github_scraper.py"
+          echo "  2. Run ETL pipeline: python3 pipelines/cosmos_to_mongo_etl.py"
+          echo "  3. Generate embeddings: python3 pipelines/qdrant_embedding_service.py"
+

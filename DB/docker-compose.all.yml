@@ -126,29 +126,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # PostgreSQL - Legacy/compatibility database
-  postgres:
-    image: postgres:16-alpine
-    container_name: gitquery-postgres
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pass}
-      POSTGRES_DB: ${POSTGRES_DB:-gitquery}
-      PGDATA: /var/lib/postgresql/data/pgdata
-    ports:
-      - "${POSTGRES_PORT:-5433}:5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-      - ./postgres/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
-    networks:
-      - db-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-gitquery}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
 volumes:
   mongodb-data:
     name: gitquery-mongodb-data
@@ -162,8 +139,6 @@ volumes:
     name: gitquery-qdrant-snapshots
   redis-data:
     name: gitquery-redis-data
-  postgres-data:
-    name: gitquery-postgres-data
 
 networks:
   db-network:

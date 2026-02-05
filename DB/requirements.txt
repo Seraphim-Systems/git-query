@@ -9,9 +9,6 @@ hiredis>=2.3.0  # Performance boost for redis-py
 # Qdrant Vector Database
 qdrant-client>=1.7.0
 
-# PostgreSQL
-psycopg2-binary>=2.9.9
-
 # Azure Cosmos DB
 azure-cosmos>=4.5.0
 
