@@ -3,9 +3,6 @@ Database clients for Git-Query application.
 Provides unified access to all database services.
 """
 
-import os
-import sys
-from pathlib import Path
 from typing import Optional
 
 # Import database configuration

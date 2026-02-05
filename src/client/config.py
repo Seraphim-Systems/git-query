@@ -1,4 +1,5 @@
 """Configuration settings for ChatbotClient."""
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
