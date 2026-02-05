@@ -64,7 +64,7 @@ class SessionMiddleware(BaseHTTPMiddleware):
             preferences = await user_service.get_user_preferences(session.user_id)
             request.state.preferences = preferences
         except Exception as e:
-            logger.error(f"Error loading user preferences: {e}")
+            logger.error("Error loading user preferences: %s", e)
             # Continue with default preferences
             from src.gateway.services.user_service import UserPreferences
 
