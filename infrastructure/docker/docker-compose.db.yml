@@ -40,7 +40,6 @@ services:
       - "10252"
       - "10253"
       - "10254"
-      retries: 3
 
   qdrant:
     image: qdrant/qdrant:v1.7.4

@@ -42,7 +42,7 @@ redis_client: Optional[redis.Redis] = None
 qdrant_client: Optional[QdrantClient] = None
 
 
-def get_api_key(api_key: str = Security(api_key_header)) -> str:
+def get_api_key(api_key: Optional[str] = Security(api_key_header)) -> str:
     """Validate API key for data ingestion endpoints"""
     if api_key == DATA_INGESTION_API_KEY:
         return api_key
@@ -55,27 +55,33 @@ async def startup_db_clients():
     global mongo_client, redis_client, qdrant_client
 
     try:
-        mongo_client = MongoClient(MONGODB_URL)
+        client = MongoClient(MONGODB_URL)
         # Test connection
-        mongo_client.admin.command("ping")
+        client.admin.command("ping")
+        mongo_client = client
         print("✓ MongoDB connected")
     except Exception as e:
+        mongo_client = None
         print(f"✗ MongoDB connection failed: {e}")
 
     try:
-        redis_client = redis.from_url(REDIS_URL, decode_responses=True)
-        redis_client.ping()
+        client = redis.from_url(REDIS_URL, decode_responses=True)
+        client.ping()
+        redis_client = client
         print("✓ Redis connected")
     except Exception as e:
+        redis_client = None
         print(f"✗ Redis connection failed: {e}")
 
     try:
-        qdrant_client = QdrantClient(
+        client = QdrantClient(
             host=QDRANT_HOST, port=QDRANT_PORT, api_key=QDRANT_API_KEY
         )
-        qdrant_client.get_collections()
+        client.get_collections()
+        qdrant_client = client
         print("✓ Qdrant connected")
     except Exception as e:
+        qdrant_client = None
         print(f"✗ Qdrant connection failed: {e}")
 
 
@@ -135,9 +141,9 @@ class MongoInsert(BaseModel):
     documents: List[Dict[str, Any]] = Field(..., description="Documents to insert")
 
 
-@app.post("/api/mongodb/query")
+@app.post("/api/mongodb/query", dependencies=[Depends(get_api_key)])
 async def query_mongodb(query: MongoQuery):
-    """Query MongoDB collections"""
+    """Query MongoDB collections (requires API key)"""
     if not mongo_client:
         raise HTTPException(status_code=503, detail="MongoDB not available")
 
@@ -186,9 +192,9 @@ async def insert_mongodb(insert: MongoInsert):
         raise HTTPException(status_code=500, detail=f"Insert failed: {str(e)}")
 
 
-@app.get("/api/mongodb/collections")
+@app.get("/api/mongodb/collections", dependencies=[Depends(get_api_key)])
 async def list_mongodb_collections(database: str = "gitquery"):
-    """List all collections in a MongoDB database"""
+    """List all collections in a MongoDB database (requires API key)"""
     if not mongo_client:
         raise HTTPException(status_code=503, detail="MongoDB not available")
 
@@ -207,9 +213,9 @@ async def list_mongodb_collections(database: str = "gitquery"):
 # ============================================================================
 
 
-@app.get("/api/redis/get/{key}")
+@app.get("/api/redis/get/{key}", dependencies=[Depends(get_api_key)])
 async def get_redis_key(key: str):
-    """Get value from Redis by key"""
+    """Get value from Redis by key (requires API key)"""
     if not redis_client:
         raise HTTPException(status_code=503, detail="Redis not available")
 
@@ -238,9 +244,9 @@ async def set_redis_key(
         raise HTTPException(status_code=500, detail=f"Set failed: {str(e)}")
 
 
-@app.get("/api/redis/keys")
+@app.get("/api/redis/keys", dependencies=[Depends(get_api_key)])
 async def list_redis_keys(pattern: str = "*", limit: int = Query(default=100, le=1000)):
-    """List Redis keys matching pattern"""
+    """List Redis keys matching pattern (requires API key)"""
     if not redis_client:
         raise HTTPException(status_code=503, detail="Redis not available")
 
@@ -276,9 +282,9 @@ class QdrantInsert(BaseModel):
     )
 
 
-@app.post("/api/qdrant/search")
+@app.post("/api/qdrant/search", dependencies=[Depends(get_api_key)])
 async def search_qdrant(query: QdrantQuery):
-    """Search Qdrant vector database"""
+    """Search Qdrant vector database (requires API key)"""
     if not qdrant_client:
         raise HTTPException(status_code=503, detail="Qdrant not available")
 
@@ -325,9 +331,9 @@ async def insert_qdrant(insert: QdrantInsert):
         raise HTTPException(status_code=500, detail=f"Insert failed: {str(e)}")
 
 
-@app.get("/api/qdrant/collections")
+@app.get("/api/qdrant/collections", dependencies=[Depends(get_api_key)])
 async def list_qdrant_collections():
-    """List all Qdrant collections"""
+    """List all Qdrant collections (requires API key)"""
     if not qdrant_client:
         raise HTTPException(status_code=503, detail="Qdrant not available")
 
