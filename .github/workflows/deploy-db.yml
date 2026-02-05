@@ -6,22 +6,22 @@ on:
       deploy_mongodb:
         description: 'Deploy MongoDB'
         required: true
-        default: 'true'
+        default: true
         type: boolean
       deploy_cosmos:
         description: 'Deploy Cosmos DB'
         required: true
-        default: 'true'
+        default: true
         type: boolean
       deploy_qdrant:
         description: 'Deploy Qdrant'
         required: true
-        default: 'true'
+        default: true
         type: boolean
       deploy_redis:
         description: 'Deploy Redis'
         required: true
-        default: 'true'
+        default: true
         type: boolean
 
 jobs:
