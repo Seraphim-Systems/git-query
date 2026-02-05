@@ -1,10 +1,6 @@
 version: '3.8'
 
-# Master docker-compose file to start all databases
-# Usage: docker-compose -f docker-compose.all.yml up -d
-
 services:
-  # MongoDB - General application database
   mongodb:
     image: mongo:7.0
     container_name: gitquery-mongodb
@@ -28,7 +24,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # Azure Cosmos DB Emulator - Large-scale repository data
   cosmos-db:
     image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:latest
     container_name: gitquery-cosmos-db
@@ -57,7 +52,6 @@ services:
           cpus: '2.0'
           memory: 3G
 
-  # Qdrant - Vector database
   qdrant:
     image: qdrant/qdrant:v1.7.4
     container_name: gitquery-qdrant
@@ -81,7 +75,6 @@ services:
       retries: 5
       start_period: 10s
 
-  # Qdrant initialization service
   qdrant-init:
     build:
       context: .
@@ -98,34 +91,6 @@ services:
       - db-network
     restart: "no"
 
-  # Redis - Cache database
-  redis:
-    image: redis:7.2-alpine
-    container_name: gitquery-redis
-    environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
-    volumes:
-      - redis-data:/data
-      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
-    networks:
-      - db-network
-    restart: unless-stopped
-    command: >
-      sh -c '
-      if [ -n "$REDIS_PASSWORD" ]; then
-        redis-server /usr/local/etc/redis/redis.conf --requirepass "$REDIS_PASSWORD"
-      else
-        redis-server /usr/local/etc/redis/redis.conf
-      fi
-      '
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
 volumes:
   mongodb-data:
     name: gitquery-mongodb-data
@@ -137,8 +102,6 @@ volumes:
     name: gitquery-qdrant-storage
   qdrant-snapshots:
     name: gitquery-qdrant-snapshots
-  redis-data:
-    name: gitquery-redis-data
 
 networks:
   db-network:

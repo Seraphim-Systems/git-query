@@ -1,10 +1,5 @@
-// MongoDB General Database Initialization Script
-
 db = db.getSiblingDB('gitquery');
 
-// Create collections for general application data
-
-// User profiles and preferences
 db.createCollection('users', {
     validator: {
         $jsonSchema: {
@@ -44,7 +39,6 @@ db.createCollection('users', {
     }
 });
 
-// Chat sessions
 db.createCollection('chat_sessions', {
     validator: {
         $jsonSchema: {
@@ -96,13 +90,16 @@ db.createCollection('chat_sessions', {
     }
 });
 
-// User repository interactions
 db.createCollection('user_interactions', {
     validator: {
         $jsonSchema: {
             bsonType: "object",
-            required: ["user_id", "repo_id", "interaction_type", "timestamp"],
+            required: ["interaction_id", "user_id", "repo_id", "timestamp"],
             properties: {
+                interaction_id: {
+                    bsonType: "string",
+                    description: "Unique interaction identifier"
+                },
                 user_id: {
                     bsonType: "string",
                     description: "User identifier"
@@ -122,27 +119,30 @@ db.createCollection('user_interactions', {
                 },
                 metadata: {
                     bsonType: "object",
-                    description: "Additional metadata"
+                    description: "Additional interaction data"
                 }
             }
         }
     }
 });
 
-// Recommendations history
 db.createCollection('recommendations', {
     validator: {
         $jsonSchema: {
             bsonType: "object",
-            required: ["user_id", "repo_id", "score", "timestamp"],
+            required: ["recommendation_id", "user_id", "repo_id", "created_at"],
             properties: {
+                recommendation_id: {
+                    bsonType: "string",
+                    description: "Unique recommendation identifier"
+                },
                 user_id: {
                     bsonType: "string",
                     description: "User identifier"
                 },
                 repo_id: {
                     bsonType: "string",
-                    description: "Repository identifier"
+                    description: "Recommended repository ID"
                 },
                 score: {
                     bsonType: "double",
@@ -152,33 +152,39 @@ db.createCollection('recommendations', {
                     bsonType: "string",
                     description: "Recommendation reason"
                 },
-                timestamp: {
+                created_at: {
                     bsonType: "date",
-                    description: "Recommendation timestamp"
+                    description: "Creation timestamp"
                 },
-                clicked: {
-                    bsonType: "bool",
-                    description: "Whether user clicked on recommendation"
+                feedback: {
+                    bsonType: "object",
+                    description: "User feedback"
                 }
             }
         }
     }
 });
 
-// Create indexes
 db.users.createIndex({ "user_id": 1 }, { unique: true });
 db.users.createIndex({ "username": 1 }, { unique: true });
-db.users.createIndex({ "email": 1 });
+db.users.createIndex({ "email": 1 }, { unique: true });
+db.users.createIndex({ "created_at": -1 });
 
 db.chat_sessions.createIndex({ "session_id": 1 }, { unique: true });
-db.chat_sessions.createIndex({ "user_id": 1, "created_at": -1 });
+db.chat_sessions.createIndex({ "user_id": 1 });
+db.chat_sessions.createIndex({ "created_at": -1 });
+db.chat_sessions.createIndex({ "updated_at": -1 });
 
-db.user_interactions.createIndex({ "user_id": 1, "timestamp": -1 });
-db.user_interactions.createIndex({ "repo_id": 1, "timestamp": -1 });
+db.user_interactions.createIndex({ "interaction_id": 1 }, { unique: true });
+db.user_interactions.createIndex({ "user_id": 1 });
+db.user_interactions.createIndex({ "repo_id": 1 });
+db.user_interactions.createIndex({ "timestamp": -1 });
 db.user_interactions.createIndex({ "interaction_type": 1 });
 
-db.recommendations.createIndex({ "user_id": 1, "timestamp": -1 });
+db.recommendations.createIndex({ "recommendation_id": 1 }, { unique: true });
+db.recommendations.createIndex({ "user_id": 1 });
 db.recommendations.createIndex({ "repo_id": 1 });
+db.recommendations.createIndex({ "created_at": -1 });
 db.recommendations.createIndex({ "score": -1 });
 
-print("MongoDB general database initialization completed");
+print('✓ MongoDB initialized successfully');

@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-"""
-Qdrant Vector Database Initialization Script
-Creates collections for vector embeddings used in repository recommendations
-"""
 
 import os
 import time
@@ -10,11 +6,9 @@ import sys
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, OptimizersConfigDiff
 
-# Wait for Qdrant to be ready
 print("Waiting for Qdrant to be ready...")
 time.sleep(5)
 
-# Connect to Qdrant
 qdrant_host = os.getenv("QDRANT_HOST", "localhost")
 qdrant_port = int(os.getenv("QDRANT_PORT", "6333"))
 qdrant_api_key = os.getenv("QDRANT_API_KEY")
@@ -31,8 +25,6 @@ except Exception as e:
     print(f"Error connecting to Qdrant: {e}")
     sys.exit(1)
 
-# Collection for repository embeddings
-# Using 768 dimensions (typical for models like sentence-transformers)
 EMBEDDING_DIM = 768
 
 collections_config = [
@@ -59,7 +51,6 @@ collections_config = [
 for config in collections_config:
     collection_name = config["name"]
     
-    # Check if collection exists
     try:
         collections = client.get_collections().collections
         if any(c.name == collection_name for c in collections):
@@ -68,7 +59,6 @@ for config in collections_config:
     except Exception as e:
         print(f"Error checking collections: {e}")
     
-    # Create collection
     try:
         client.create_collection(
             collection_name=collection_name,
@@ -77,7 +67,7 @@ for config in collections_config:
                 distance=config["distance"]
             ),
             optimizers_config=OptimizersConfigDiff(
-                indexing_threshold=10000  # Optimize for large datasets
+                indexing_threshold=10000
             )
         )
         print(f"✓ Created collection: {collection_name}")
