@@ -1,12 +1,5 @@
-// Azure Cosmos DB Initialization Script
-// Note: For production, use actual Azure Cosmos DB service
-// This is a MongoDB API emulation for local development
-
 db = db.getSiblingDB('gitquery_cosmos');
 
-// Create collections for large-scale data
-
-// GitHub repositories metadata
 db.createCollection('repositories', {
     validator: {
         $jsonSchema: {
@@ -62,7 +55,6 @@ db.createCollection('repositories', {
     }
 });
 
-// Repository activity logs (commits, releases, etc.)
 db.createCollection('repository_activity', {
     validator: {
         $jsonSchema: {
@@ -91,16 +83,15 @@ db.createCollection('repository_activity', {
     }
 });
 
-// Create indexes for efficient queries
 db.repositories.createIndex({ "repo_id": 1 }, { unique: true });
 db.repositories.createIndex({ "full_name": 1 }, { unique: true });
 db.repositories.createIndex({ "owner": 1 });
 db.repositories.createIndex({ "language": 1 });
 db.repositories.createIndex({ "stars": -1 });
 db.repositories.createIndex({ "updated_at": -1 });
-db.repositories.createIndex({ "topics": 1 });
 
-db.repository_activity.createIndex({ "repo_id": 1, "timestamp": -1 });
+db.repository_activity.createIndex({ "repo_id": 1 });
+db.repository_activity.createIndex({ "timestamp": -1 });
 db.repository_activity.createIndex({ "activity_type": 1 });
 
-print("Azure Cosmos DB (MongoDB API) initialization completed");
+print('✓ Cosmos DB initialized successfully');
