@@ -19,7 +19,7 @@ async def search_qdrant(query: QdrantQuery):
         raise HTTPException(status_code=503, detail="Qdrant not available")
 
     try:
-        results = qdrant_client.search(  # pylint: disable=no-member
+        results = qdrant_client.search(
             collection_name=query.collection,
             query_vector=query.vector,
             limit=query.limit,
@@ -55,9 +55,7 @@ async def insert_qdrant(insert: QdrantInsert):
             for point in insert.points
         ]
 
-        qdrant_client.upsert(  # pylint: disable=no-member
-            collection_name=insert.collection, points=points
-        )
+        qdrant_client.upsert(collection_name=insert.collection, points=points)
 
         return {"collection": insert.collection, "inserted_count": len(points)}
     except Exception as e:
@@ -72,7 +70,7 @@ async def list_qdrant_collections():
         raise HTTPException(status_code=503, detail="Qdrant not available")
 
     try:
-        collections = qdrant_client.get_collections()  # pylint: disable=no-member
+        collections = qdrant_client.get_collections()
         return {
             "collections": [
                 {
