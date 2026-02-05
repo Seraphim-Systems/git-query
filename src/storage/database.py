@@ -1,4 +1,9 @@
-from DB.db_config import db_clients, get_mongodb_db, get_cosmos_db, get_qdrant_client
+from src.storage.db_config import (
+    db_clients,
+    get_mongodb_db,
+    get_cosmos_db,
+    get_qdrant_client,
+)
 
 
 class DatabaseManager:

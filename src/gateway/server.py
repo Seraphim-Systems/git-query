@@ -24,23 +24,23 @@ logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app_instance: FastAPI):
     """Application lifespan manager - initialize and cleanup resources."""
     logger.info("Starting API Gateway...")
 
     # Initialize Redis
     redis = Redis.from_url(settings.redis_url, decode_responses=True)
-    app.state.redis = redis
-    logger.info(f"Connected to Redis: {settings.redis_url}")
+    app_instance.state.redis = redis
+    logger.info("Connected to Redis: %s", settings.redis_url)
 
     # Initialize MongoDB
     mongo_client = AsyncIOMotorClient(settings.mongodb_url)
-    app.state.mongodb = mongo_client[settings.mongodb_db]
-    logger.info(f"Connected to MongoDB: {settings.mongodb_url}")
+    app_instance.state.mongodb = mongo_client[settings.mongodb_db]
+    logger.info("Connected to MongoDB: %s", settings.mongodb_url)
 
     # Initialize services
-    app.state.session_manager = SessionManager(redis)
-    app.state.user_service = UserService(app.state.mongodb, redis)
+    app_instance.state.session_manager = SessionManager(redis)
+    app_instance.state.user_service = UserService(app_instance.state.mongodb, redis)
     logger.info("Services initialized")
 
     yield
@@ -79,9 +79,9 @@ app.add_middleware(
 
 # Exception handlers
 @app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
+async def global_exception_handler(_request: Request, exc: Exception):
     """Global exception handler."""
-    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    logger.error("Unhandled exception: %s", exc, exc_info=True)
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
