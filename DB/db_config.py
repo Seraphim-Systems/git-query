@@ -11,14 +11,6 @@ from dataclasses import dataclass
 class DatabaseConfig:
     """Configuration for all databases used in the application"""
     
-    # PostgreSQL (Legacy/Compatibility)
-    postgres_url: str
-    postgres_host: str
-    postgres_port: int
-    postgres_user: str
-    postgres_password: str
-    postgres_db: str
-    
     # MongoDB (General Database)
     mongodb_url: str
     mongodb_host: str
@@ -47,17 +39,6 @@ class DatabaseConfig:
     @classmethod
     def from_env(cls) -> "DatabaseConfig":
         """Load configuration from environment variables"""
-        
-        # PostgreSQL
-        postgres_host = os.getenv("POSTGRES_HOST", "localhost")
-        postgres_port = int(os.getenv("POSTGRES_PORT", "5432"))
-        postgres_user = os.getenv("POSTGRES_USER", "user")
-        postgres_password = os.getenv("POSTGRES_PASSWORD", "pass")
-        postgres_db = os.getenv("POSTGRES_DB", "gitquery")
-        postgres_url = os.getenv(
-            "DATABASE_URL",
-            f"postgresql://{postgres_user}:{postgres_password}@{postgres_host}:{postgres_port}/{postgres_db}"
-        )
         
         # MongoDB
         mongodb_host = os.getenv("MONGO_HOST", "localhost")
@@ -88,12 +69,6 @@ class DatabaseConfig:
         redis_url = os.getenv("REDIS_URL", f"redis://{redis_host}:{redis_port}")
         
         return cls(
-            postgres_url=postgres_url,
-            postgres_host=postgres_host,
-            postgres_port=postgres_port,
-            postgres_user=postgres_user,
-            postgres_password=postgres_password,
-            postgres_db=postgres_db,
             mongodb_url=mongodb_url,
             mongodb_host=mongodb_host,
             mongodb_port=mongodb_port,
@@ -128,25 +103,11 @@ class DatabaseClients:
     def __init__(self):
         if not self._initialized:
             self.config = DatabaseConfig.from_env()
-            self._postgres_client = None
             self._mongodb_client = None
             self._cosmos_client = None
             self._qdrant_client = None
             self._redis_client = None
             self._initialized = True
-    
-    @property
-    def postgres(self):
-        """Get PostgreSQL client (lazy initialization)"""
-        if self._postgres_client is None:
-            import psycopg2
-            from psycopg2.pool import ThreadedConnectionPool
-            self._postgres_client = ThreadedConnectionPool(
-                minconn=1,
-                maxconn=10,
-                dsn=self.config.postgres_url
-            )
-        return self._postgres_client
     
     @property
     def mongodb(self):
@@ -196,8 +157,6 @@ class DatabaseClients:
     
     def close_all(self):
         """Close all database connections"""
-        if self._postgres_client:
-            self._postgres_client.closeall()
         if self._mongodb_client:
             self._mongodb_client.close()
         if self._cosmos_client:
@@ -231,13 +190,3 @@ def get_qdrant_client():
 def get_redis_client():
     """Get Redis client instance"""
     return db_clients.redis
-
-
-def get_postgres_connection():
-    """Get PostgreSQL connection from pool"""
-    return db_clients.postgres.getconn()
-
-
-def return_postgres_connection(conn):
-    """Return PostgreSQL connection to pool"""
-    db_clients.postgres.putconn(conn)

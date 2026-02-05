@@ -40,10 +40,6 @@ class DatabaseManager:
         """Get Redis client."""
         return self._clients.redis
     
-    def get_postgres(self):
-        """Get PostgreSQL connection pool."""
-        return self._clients.postgres
-    
     def close_all(self):
         """Close all database connections."""
         self._clients.close_all()
