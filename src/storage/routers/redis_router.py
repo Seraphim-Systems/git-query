@@ -45,7 +45,19 @@ async def set_redis_key(
 
 @router.get("/keys", dependencies=[Depends(get_api_key)])
 async def list_redis_keys(pattern: str = "*", limit: int = Query(default=100, le=1000)):
-    """List Redis keys matching pattern (requires API key)"""
+    """
+    List Redis keys matching pattern (requires API key).
+    
+    WARNING: This endpoint uses SCAN which can be expensive for large keyspaces.
+    Always use specific patterns (e.g., 'user:*') instead of '*' when possible.
+    The limit parameter controls how many keys are returned, but the scan may
+    examine many more keys internally. For production use with millions of keys,
+    consider using more specific patterns or querying smaller key namespaces.
+    
+    Args:
+        pattern: Redis key pattern (default: "*")
+        limit: Maximum number of keys to return (default: 100, max: 1000)
+    """
     redis_client = get_redis_client()
     if not redis_client:
         raise HTTPException(status_code=503, detail="Redis not available")

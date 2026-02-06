@@ -12,7 +12,22 @@ router = APIRouter(prefix="/api/mongodb", tags=["MongoDB"])
 
 @router.post("/query", dependencies=[Depends(get_api_key)])
 async def query_mongodb(query: MongoQuery):
-    """Query MongoDB collections (requires API key)"""
+    """
+    Query MongoDB collections (requires API key).
+    
+    WARNING: This endpoint allows arbitrary filter queries. While MongoDB's
+    query language is safe from injection when using the official driver,
+    unrestricted queries can enable expensive operations (e.g., full collection
+    scans with complex filters) that may cause performance issues or denial of
+    service. Consider:
+    - Adding query complexity limits for production use
+    - Restricting certain operators ($where, $expr)
+    - Requiring authentication for complex queries
+    - Monitoring query execution times
+    
+    Args:
+        query: MongoQuery object containing database, collection, filter, and options
+    """
     mongo_client = get_mongo_client()
     if not mongo_client:
         raise HTTPException(status_code=503, detail="MongoDB not available")

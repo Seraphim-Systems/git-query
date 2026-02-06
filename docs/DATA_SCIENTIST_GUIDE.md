@@ -15,32 +15,36 @@ This guide explains how data scientists can query databases and set up data inge
 
 ### Accessing the API
 
-The database API is accessible at: `https://${SERVER_NAME}/api/`
+The database API is accessible at: `https://db.example.com/api/`
+
+Replace `db.example.com` with your actual server name.
 
 Interactive API documentation is available at:
-- Swagger UI: `https://${SERVER_NAME}/docs`
-- ReDoc: `https://${SERVER_NAME}/redoc`
+- Swagger UI: `https://db.example.com/docs`
+- ReDoc: `https://db.example.com/redoc`
 
 ### Health Check
 
 ```bash
-curl https://${SERVER_NAME}/health
+curl https://db.example.com/health
 ```
 
 ## API Endpoints
 
 ### MongoDB
 
-#### Query Data (No Authentication Required)
+#### Query Data (Authentication Required)
 ```bash
 POST /api/mongodb/query
 ```
 
 Example:
 ```bash
-curl -X POST https://${SERVER_NAME}/api/mongodb/query \
+curl -X POST https://db.example.com/api/mongodb/query \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_API_KEY" \
   -d '{
+    "database": "gitquery",
     "collection": "users",
     "filter": {"username": "johndoe"},
     "limit": 10
@@ -54,10 +58,11 @@ POST /api/mongodb/insert
 
 Example:
 ```bash
-curl -X POST https://${SERVER_NAME}/api/mongodb/insert \
+curl -X POST https://db.example.com/api/mongodb/insert \
   -H "Content-Type: application/json" \
   -H "X-API-Key: YOUR_API_KEY" \
   -d '{
+    "database": "gitquery",
     "collection": "users",
     "documents": [
       {"username": "alice", "email": "alice@example.com"},
@@ -66,16 +71,28 @@ curl -X POST https://${SERVER_NAME}/api/mongodb/insert \
   }'
 ```
 
-#### List Collections
+#### List Collections (Authentication Required)
 ```bash
 GET /api/mongodb/collections?database=gitquery
 ```
 
+Example:
+```bash
+curl -X GET "https://db.example.com/api/mongodb/collections?database=gitquery" \
+  -H "X-API-Key: YOUR_API_KEY"
+```
+
 ### Redis
 
-#### Get Key
+#### Get Key (Authentication Required)
 ```bash
 GET /api/redis/get/{key}
+```
+
+Example:
+```bash
+curl -X GET "https://db.example.com/api/redis/get/user:123:session" \
+  -H "X-API-Key: YOUR_API_KEY"
 ```
 
 #### Set Key (Authentication Required)
@@ -85,7 +102,7 @@ POST /api/redis/set
 
 Example:
 ```bash
-curl -X POST https://${SERVER_NAME}/api/redis/set \
+curl -X POST https://db.example.com/api/redis/set \
   -H "Content-Type: application/json" \
   -H "X-API-Key: YOUR_API_KEY" \
   -d '{
@@ -95,22 +112,29 @@ curl -X POST https://${SERVER_NAME}/api/redis/set \
   }'
 ```
 
-#### List Keys
+#### List Keys (Authentication Required)
 ```bash
 GET /api/redis/keys?pattern=user:*&limit=100
 ```
 
+Example:
+```bash
+curl -X GET "https://db.example.com/api/redis/keys?pattern=user:*&limit=100" \
+  -H "X-API-Key: YOUR_API_KEY"
+```
+
 ### Qdrant (Vector Database)
 
-#### Search Vectors
+#### Search Vectors (Authentication Required)
 ```bash
 POST /api/qdrant/search
 ```
 
 Example:
 ```bash
-curl -X POST https://${SERVER_NAME}/api/qdrant/search \
+curl -X POST https://db.example.com/api/qdrant/search \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_API_KEY" \
   -d '{
     "collection": "repository_embeddings",
     "vector": [0.1, 0.2, ...],  # 768-dimensional vector
@@ -126,7 +150,7 @@ POST /api/qdrant/insert
 
 Example:
 ```bash
-curl -X POST https://${SERVER_NAME}/api/qdrant/insert \
+curl -X POST https://db.example.com/api/qdrant/insert \
   -H "Content-Type: application/json" \
   -H "X-API-Key: YOUR_API_KEY" \
   -d '{
@@ -141,9 +165,15 @@ curl -X POST https://${SERVER_NAME}/api/qdrant/insert \
   }'
 ```
 
-#### List Collections
+#### List Collections (Authentication Required)
 ```bash
 GET /api/qdrant/collections
+```
+
+Example:
+```bash
+curl -X GET "https://db.example.com/api/qdrant/collections" \
+  -H "X-API-Key: YOUR_API_KEY"
 ```
 
 ### Batch Operations
@@ -179,7 +209,7 @@ curl -X POST https://${SERVER_NAME}/api/batch/insert \
 
 ## Authentication
 
-Most read operations are public. Write operations require an API key.
+**All API operations require an API key for authentication.** This includes both read and write operations.
 
 ### Getting an API Key
 
@@ -192,6 +222,12 @@ Include the API key in the `X-API-Key` header:
 ```bash
 curl -H "X-API-Key: YOUR_API_KEY" ...
 ```
+
+### Security Notes
+
+- Keep your API key confidential and never commit it to version control
+- Rotate your API key periodically
+- Use environment variables to store API keys in your applications
 
 ## Database Access
 
@@ -609,11 +645,11 @@ def ingest_data(data):
 ## Support
 
 For questions or issues:
-- API Documentation: `https://${SERVER_NAME}/docs`
+- API Documentation: `https://db.example.com/docs`
 - GitHub Issues: [Project Repository](https://github.com/Seraphim-Systems/git-query)
 - Email: support@example.com
 
 ## API Reference
 
 For complete API reference and interactive testing, visit the Swagger UI at:
-`https://${SERVER_NAME}/docs`
+`https://db.example.com/docs`

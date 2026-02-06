@@ -1,23 +1,17 @@
 FROM nginx:alpine
 
-# Install curl for healthchecks and envsubst for environment variable substitution
-RUN apk add --no-cache curl gettext
+# Install curl for healthchecks
+RUN apk add --no-cache curl
 
 # Copy nginx configuration template
 COPY web/nginx-db.conf.template /etc/nginx/templates/default.conf.template
 
-# Copy health check script
-COPY infrastructure/docker/scripts/nginx-entrypoint.sh /docker-entrypoint.d/40-env-subst.sh
-RUN chmod +x /docker-entrypoint.d/40-env-subst.sh
-
 # Create directories for data ingestion
 RUN mkdir -p /var/www/data-ingestion
 
-# Copy static files (if any)
+# Create web directory and copy static files if they exist
 RUN mkdir -p /usr/share/nginx/html
-COPY web/*.html /usr/share/nginx/html/ 2>/dev/null || echo "No HTML files found"
-COPY web/*.js /usr/share/nginx/html/ 2>/dev/null || echo "No JS files found"
-COPY web/*.css /usr/share/nginx/html/ 2>/dev/null || echo "No CSS files found"
+COPY web/ /usr/share/nginx/html/ 2>/dev/null || true
 
 EXPOSE 80
 
