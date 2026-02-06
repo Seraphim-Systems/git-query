@@ -3,7 +3,7 @@ Database Query API - Provides HTTP endpoints for querying databases
 Designed for data scientists to query and ingest data into the databases
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import FastAPI
 from .services.db_clients import (
     startup_db_clients,
@@ -42,7 +42,7 @@ async def health_check():
     """Health check endpoint"""
     status = {
         "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "databases": {
             "mongodb": get_mongo_client() is not None,
             "redis": get_redis_client() is not None,
