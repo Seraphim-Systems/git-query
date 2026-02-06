@@ -4,9 +4,10 @@ FROM nginx:alpine
 COPY web/nginx-db.conf.template /etc/nginx/templates/default.conf.template
 
 # Create web directory and copy web application files if they exist
+# Using || true to allow build to succeed if web files are not present (optional for DB-only deployment)
 RUN mkdir -p /usr/share/nginx/html
 
-# Copy web files explicitly - use shell to skip missing files
+# Copy web files - will silently skip if files don't exist
 COPY web/ /usr/share/nginx/html/ 2>/dev/null || true
 
 # Create a default index.html if none exists

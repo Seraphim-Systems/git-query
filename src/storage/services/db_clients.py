@@ -96,7 +96,8 @@ async def shutdown_db_clients():
             
     if qdrant_client:
         try:
-            # Qdrant client may not have a close method in older versions
+            # Note: Close method availability depends on qdrant-client version
+            # Check if close method exists before calling
             if hasattr(qdrant_client, 'close'):
                 qdrant_client.close()
                 logger.info("Qdrant client closed")

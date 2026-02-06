@@ -10,6 +10,7 @@ COPY web/nginx-db.conf.template /etc/nginx/templates/default.conf.template
 RUN mkdir -p /var/www/data-ingestion
 
 # Create web directory and copy static files if they exist
+# Using || true to allow build to succeed if web files are not present (optional deployment)
 RUN mkdir -p /usr/share/nginx/html
 COPY web/ /usr/share/nginx/html/ 2>/dev/null || true
 
