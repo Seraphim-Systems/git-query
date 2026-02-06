@@ -3,11 +3,11 @@ FROM nginx:alpine
 # Copy nginx configuration template
 COPY web/nginx-db.conf.template /etc/nginx/templates/default.conf.template
 
-# Copy web application files (optional - can be empty for DB-only deployment)
+# Create web directory and copy web application files if they exist
 RUN mkdir -p /usr/share/nginx/html
-COPY web/*.html /usr/share/nginx/html/ 2>/dev/null || echo "No HTML files to copy"
-COPY web/*.js /usr/share/nginx/html/ 2>/dev/null || echo "No JS files to copy"
-COPY web/*.css /usr/share/nginx/html/ 2>/dev/null || echo "No CSS files to copy"
+
+# Copy web files explicitly - use shell to skip missing files
+COPY web/ /usr/share/nginx/html/ 2>/dev/null || true
 
 # Create a default index.html if none exists
 RUN if [ ! -f /usr/share/nginx/html/index.html ]; then \

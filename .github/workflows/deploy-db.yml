@@ -98,8 +98,17 @@ jobs:
               SERVICES="$SERVICES redis"
             fi
             
-            # Start selected database services and web container
-            docker-compose -f infrastructure/docker/docker-compose.db.yml up -d $SERVICES nginx
+            # Always include db-query-api and nginx when deploying databases
+            # The API and nginx services require at least one database to be useful
+            if [ -n "$SERVICES" ]; then
+              SERVICES="$SERVICES db-query-api nginx"
+            else
+              echo "No databases selected for deployment. Exiting."
+              exit 0
+            fi
+            
+            # Start selected services
+            docker-compose -f infrastructure/docker/docker-compose.db.yml up -d $SERVICES
             
             # Wait for services to be healthy
             sleep 10

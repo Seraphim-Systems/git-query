@@ -3,16 +3,18 @@ Database client management and initialization
 """
 
 import os
+import logging
 from typing import Optional
 from pymongo import MongoClient
 import redis
 from qdrant_client import QdrantClient
 
-# Configuration
-MONGODB_URL = os.getenv(
-    "MONGODB_URL", "mongodb://admin:mongopass@localhost:27017/gitquery?authSource=admin"
-)
-REDIS_URL = os.getenv("REDIS_URL", "redis://:redispass@localhost:6379")
+# Configure logging
+logger = logging.getLogger(__name__)
+
+# Configuration - no default credentials for security
+MONGODB_URL = os.getenv("MONGODB_URL")
+REDIS_URL = os.getenv("REDIS_URL")
 QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
@@ -26,48 +28,80 @@ qdrant_client: Optional[QdrantClient] = None
 async def startup_db_clients():
     """Initialize database clients on startup"""
     global mongo_client, redis_client, qdrant_client
+    
+    # Validate that required connection strings are provided
+    if not MONGODB_URL:
+        logger.error("MONGODB_URL environment variable is not set")
+        raise RuntimeError("MONGODB_URL must be set to connect to MongoDB")
+    
+    if not REDIS_URL:
+        logger.error("REDIS_URL environment variable is not set")
+        raise RuntimeError("REDIS_URL must be set to connect to Redis")
 
+    # Connect to MongoDB
     try:
-        client = MongoClient(MONGODB_URL)
+        client = MongoClient(MONGODB_URL, serverSelectionTimeoutMS=5000)
         # Test connection
         client.admin.command("ping")
         mongo_client = client
-        print("✓ MongoDB connected")
+        logger.info("✓ MongoDB connected successfully")
     except Exception as e:
         mongo_client = None
-        print(f"✗ MongoDB connection failed: {e}")
+        logger.error(f"✗ MongoDB connection failed: {e}")
+        raise RuntimeError(f"Failed to connect to MongoDB: {e}")
 
+    # Connect to Redis
     try:
-        client = redis.from_url(REDIS_URL, decode_responses=True)
+        client = redis.from_url(REDIS_URL, decode_responses=True, socket_timeout=5)
         client.ping()
         redis_client = client
-        print("✓ Redis connected")
+        logger.info("✓ Redis connected successfully")
     except Exception as e:
         redis_client = None
-        print(f"✗ Redis connection failed: {e}")
+        logger.error(f"✗ Redis connection failed: {e}")
+        raise RuntimeError(f"Failed to connect to Redis: {e}")
 
+    # Connect to Qdrant (optional)
     try:
         client = QdrantClient(
-            host=QDRANT_HOST, port=QDRANT_PORT, api_key=QDRANT_API_KEY
+            host=QDRANT_HOST, port=QDRANT_PORT, api_key=QDRANT_API_KEY, timeout=5
         )
         client.get_collections()
         qdrant_client = client
-        print("✓ Qdrant connected")
+        logger.info("✓ Qdrant connected successfully")
     except Exception as e:
         qdrant_client = None
-        print(f"✗ Qdrant connection failed: {e}")
+        logger.warning(f"✗ Qdrant connection failed (optional service): {e}")
 
 
 async def shutdown_db_clients():
     """Close database connections on shutdown"""
     global mongo_client, redis_client, qdrant_client
+    
+    logger.info("Shutting down database clients...")
 
     if mongo_client:
-        mongo_client.close()
+        try:
+            mongo_client.close()
+            logger.info("MongoDB client closed")
+        except Exception as e:
+            logger.error(f"Error closing MongoDB client: {e}")
+            
     if redis_client:
-        redis_client.close()
+        try:
+            redis_client.close()
+            logger.info("Redis client closed")
+        except Exception as e:
+            logger.error(f"Error closing Redis client: {e}")
+            
     if qdrant_client:
-        qdrant_client.close()
+        try:
+            # Qdrant client may not have a close method in older versions
+            if hasattr(qdrant_client, 'close'):
+                qdrant_client.close()
+                logger.info("Qdrant client closed")
+        except Exception as e:
+            logger.error(f"Error closing Qdrant client: {e}")
 
 
 def get_mongo_client() -> Optional[MongoClient]:
