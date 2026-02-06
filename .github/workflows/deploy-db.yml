@@ -1,5 +1,13 @@
 name: Deploy Databases to Hetzner
 
+# This workflow deploys database services to Hetzner server
+# Triggered by: Manual workflow dispatch with options to select which databases to deploy
+# Deploys: Selected database services from infrastructure/docker/docker-compose.db.yml
+#   - MongoDB, Cosmos DB, Qdrant, Redis (based on inputs)
+#   - db-query-api (always deployed if any database is selected)
+#   - nginx (always deployed if any database is selected)
+# Note: This is different from deploy-prod.yml which deploys the entire application stack
+
 on:
   workflow_dispatch:
     inputs:
