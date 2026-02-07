@@ -32,12 +32,17 @@ jobs:
           ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << ENDSSH
           set -e
           
-          if [ ! -d "\$HOME/git-query" ]; then
-            echo "Cloning repository..."
-            git clone https://github.com/Seraphim-Systems/git-query.git \$HOME/git-query
+          if [ ! -d "/home/${{ secrets.HETZNER_USER }}/git-query" ]; then
+            echo "Directory does not exist. Cloning repository..."
+            git clone https://github.com/Seraphim-Systems/git-query.git /home/${{ secrets.HETZNER_USER }}/git-query
+          else
+            echo "Directory exists. Skipping clone."
           fi
           
-          cd \$HOME/git-query
+          echo "DEBUG: Changing to /home/${{ secrets.HETZNER_USER }}/git-query"
+          cd /home/${{ secrets.HETZNER_USER }}/git-query
+          
+          echo "DEBUG: Now in \$PWD"
           git fetch origin
           git checkout ${{ github.ref_name }}
           git pull origin ${{ github.ref_name }}
