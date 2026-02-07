@@ -89,7 +89,11 @@ jobs:
           SERVER_NAME=${{ secrets.SERVER_NAME }}
           EOF
           
+          # Copy .env to docker directory where compose is run
+          cp .env infrastructure/docker/.env
+          
           echo "✅ Environment configured"
+          cat .env
           ENDSSH
 
   deploy:
@@ -117,13 +121,28 @@ jobs:
           
           if [ "${{ github.event.inputs.services }}" == "all" ]; then
             echo "🚀 Deploying all infrastructure services..."
-            docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d --build --force-recreate
+            
+            # Start databases first
+            echo "📦 Starting databases..."
+            docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d --build mongodb redis qdrant cosmos-db
+            
+            # Wait for health checks
+            echo "⏳ Waiting for databases to be healthy..."
+            sleep 30
+            
+            # Check database health
+            docker ps --filter "name=git-query" --format "table {{.Names}}\t{{.Status}}"
+            
+            # Start dependent services
+            echo "🚀 Starting API and init services..."
+            docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d --build qdrant-init db-query-api nginx
           else
             echo "🚀 Deploying ${{ github.event.inputs.services }}..."
-            docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d --build --force-recreate ${{ github.event.inputs.services }}
+            docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d --build ${{ github.event.inputs.services }}
             
             if [ "${{ github.event.inputs.services }}" == "qdrant" ]; then
-              docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d --build qdrant-init
+              sleep 15
+              docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d qdrant-init
             fi
           fi
           
