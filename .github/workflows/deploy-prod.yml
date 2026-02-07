@@ -43,8 +43,6 @@ jobs:
           target: "/home/${{ secrets.HETZNER_USER }}/git-query"
           strip_components: 0
           rm: true
-          # Exclude unnecessary files
-          excludes: ".git,node_modules,__pycache__,.pytest_cache,*.pyc,.DS_Store"
 
       - name: Deploy to production server
         uses: appleboy/ssh-action@v1.0.0
