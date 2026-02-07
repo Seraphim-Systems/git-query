@@ -16,12 +16,10 @@ on:
         default: 'all'
 
 jobs:
-  deploy:
+  setup:
+    name: Setup Repository
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
@@ -29,91 +27,124 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.HETZNER_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Deploy Infrastructure
-        env:
-          MONGO_USER: ${{ secrets.MONGO_USER }}
-          MONGO_PASSWORD: ${{ secrets.MONGO_PASSWORD }}
-          MONGO_DB: ${{ secrets.MONGO_DB }}
-          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
-          COSMOS_PARTITION_COUNT: ${{ secrets.COSMOS_PARTITION_COUNT }}
-          QDRANT_LOG_LEVEL: ${{ secrets.QDRANT_LOG_LEVEL }}
-          BRANCH_NAME: ${{ github.ref_name }}
-          HETZNER_USER: ${{ secrets.HETZNER_USER }}
+      - name: Clone or Update Repository
         run: |
-          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} "bash -s" << 'ENDSSH'
+          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << 'ENDSSH'
           set -e
           
-          # Clone repository if it doesn't exist, otherwise pull latest
-          if [ ! -d "/home/${HETZNER_USER}/git-query" ]; then
+          if [ ! -d "$HOME/git-query" ]; then
             echo "Cloning repository..."
-            git clone https://github.com/Seraphim-Systems/git-query.git /home/${HETZNER_USER}/git-query
+            git clone https://github.com/Seraphim-Systems/git-query.git $HOME/git-query
           fi
           
-          cd /home/${HETZNER_USER}/git-query
-          
-          # Pull latest code from the branch that triggered this workflow
+          cd $HOME/git-query
           git fetch origin
-          git checkout ${BRANCH_NAME}
-          git pull origin ${BRANCH_NAME}
+          git checkout ${{ github.ref_name }}
+          git pull origin ${{ github.ref_name }}
           
-          # Create .env file if it doesn't exist
-          if [ ! -f .env ]; then
-            echo "Creating .env file..."
-            cat > .env << EOF
-          MONGO_USER=${MONGO_USER}
-          MONGO_PASSWORD=${MONGO_PASSWORD}
-          MONGO_DB=${MONGO_DB}
-          REDIS_PASSWORD=${REDIS_PASSWORD}
-          COSMOS_PARTITION_COUNT=${COSMOS_PARTITION_COUNT}
-          QDRANT_LOG_LEVEL=${QDRANT_LOG_LEVEL}
+          echo "✅ Repository ready"
+          ENDSSH
+
+  configure:
+    name: Configure Environment
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.HETZNER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Create Environment File
+        run: |
+          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << 'ENDSSH'
+          set -e
+          
+          cd $HOME/git-query
+          
+          cat > .env << EOF
+          MONGO_USER=${{ secrets.MONGO_USER }}
+          MONGO_PASSWORD=${{ secrets.MONGO_PASSWORD }}
+          MONGO_DB=${{ secrets.MONGO_DB }}
+          REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
+          COSMOS_PARTITION_COUNT=${{ secrets.COSMOS_PARTITION_COUNT }}
+          QDRANT_LOG_LEVEL=${{ secrets.QDRANT_LOG_LEVEL }}
           EOF
-          fi
           
-          # Navigate to docker directory
-          cd infrastructure/docker
+          echo "✅ Environment configured"
+          ENDSSH
+
+  deploy:
+    name: Deploy Services
+    runs-on: ubuntu-latest
+    needs: configure
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.HETZNER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy Infrastructure Services
+        run: |
+          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << 'ENDSSH'
+          set -e
           
-          # Deploy based on input
+          cd $HOME/git-query/infrastructure/docker
+          
           if [ "${{ github.event.inputs.services }}" == "all" ]; then
-            echo "Deploying all infrastructure services..."
+            echo "🚀 Deploying all infrastructure services..."
             docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d
           else
-            echo "Deploying ${{ github.event.inputs.services }}..."
+            echo "🚀 Deploying ${{ github.event.inputs.services }}..."
             docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d ${{ github.event.inputs.services }}
             
-            # If deploying qdrant, also deploy qdrant-init
             if [ "${{ github.event.inputs.services }}" == "qdrant" ]; then
               docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d qdrant-init
             fi
           fi
           
-          # Show running containers
-          echo "Running containers:"
+          echo ""
+          echo "📦 Running containers:"
           docker ps --filter "name=git-query"
-          
           ENDSSH
 
-      - name: Verify Deployment
-        env:
-          HETZNER_USER: ${{ secrets.HETZNER_USER }}
+  verify:
+    name: Verify Deployment
+    runs-on: ubuntu-latest
+    needs: deploy
+    steps:
+      - name: Setup SSH
         run: |
-          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} "bash -s" << 'ENDSSH'
+          mkdir -p ~/.ssh
+          echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.HETZNER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Health Check Services
+        run: |
+          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << 'ENDSSH'
           set -e
           
-          cd /home/${HETZNER_USER}/git-query/infrastructure/docker
+          cd $HOME/git-query/infrastructure/docker
           
-          # Check service health
-          echo "Checking service health..."
+          echo "🔍 Checking service health..."
           
           if [ "${{ github.event.inputs.services }}" == "all" ] || [ "${{ github.event.inputs.services }}" == "mongodb" ]; then
-            docker exec git-query-mongodb mongosh --quiet --eval "db.adminCommand('ping')" || echo "MongoDB health check failed"
+            docker exec git-query-mongodb mongosh --quiet --eval "db.adminCommand('ping')" && echo "✅ MongoDB healthy" || echo "❌ MongoDB failed"
           fi
           
           if [ "${{ github.event.inputs.services }}" == "all" ] || [ "${{ github.event.inputs.services }}" == "redis" ]; then
-            docker exec git-query-redis redis-cli ping || echo "Redis health check failed"
+            docker exec git-query-redis redis-cli ping && echo "✅ Redis healthy" || echo "❌ Redis failed"
           fi
           
           if [ "${{ github.event.inputs.services }}" == "all" ] || [ "${{ github.event.inputs.services }}" == "qdrant" ]; then
-            docker exec git-query-qdrant curl -f http://localhost:6333/health || echo "Qdrant health check failed"
+            docker exec git-query-qdrant curl -f http://localhost:6333/health && echo "✅ Qdrant healthy" || echo "❌ Qdrant failed"
           fi
           
+          echo ""
+          echo "✅ Deployment verification complete"
           ENDSSH
