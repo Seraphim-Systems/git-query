@@ -3,135 +3,172 @@ name: Deploy Data Pipelines
 on:
   workflow_dispatch:
     inputs:
-      environment:
-        description: 'Deployment environment'
-        required: true
-        type: choice
-        options:
-          - dev
-          - prod
-        default: 'dev'
       services:
-        description: 'Services to deploy'
+        description: 'Which services to deploy'
         required: true
         type: choice
         options:
-          - All Pipeline Services
-          - Scraper Only
-          - Processing Only
-        default: 'All Pipeline Services'
+          - all
+          - scraper
+          - processing
+        default: 'all'
 
 jobs:
-  deploy:
+  setup:
+    name: Setup Repository
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Verify Docker Compose version
+      - name: Setup SSH
         run: |
-          docker compose version
-          echo "Docker Compose v2 is available"
+          mkdir -p ~/.ssh
+          echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.HETZNER_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Create deployment .env file
+      - name: Clone or Update Repository
         run: |
-          cat > .env.deploy <<EOF
-          LOG_LEVEL=INFO
+          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << ENDSSH
+          set -e
+          
+          REPO_PATH="/home/${{ secrets.HETZNER_USER }}/git-query"
+          
+          # Check if directory exists and is a valid git repo
+          if [ -d "\$REPO_PATH" ]; then
+            if [ -d "\$REPO_PATH/.git" ]; then
+              echo "✅ Valid git repository found"
+              cd "\$REPO_PATH"
+              git fetch origin
+              git checkout ${{ github.ref_name }}
+              git pull origin ${{ github.ref_name }}
+            else
+              echo "⚠️  Directory exists but is not a git repository. Removing and re-cloning..."
+              rm -rf "\$REPO_PATH"
+              git clone https://github.com/Seraphim-Systems/git-query.git "\$REPO_PATH"
+              cd "\$REPO_PATH"
+              git checkout ${{ github.ref_name }}
+            fi
+          else
+            echo "📦 Cloning repository..."
+            git clone https://github.com/Seraphim-Systems/git-query.git "\$REPO_PATH"
+            cd "\$REPO_PATH"
+            git checkout ${{ github.ref_name }}
+          fi
+          
+          echo "✅ Repository ready at \$REPO_PATH"
+          ENDSSH
+
+  configure:
+    name: Configure Environment
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.HETZNER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Create Environment File
+        run: |
+          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << ENDSSH
+          set -e
+          
+          cd /home/${{ secrets.HETZNER_USER }}/git-query
+          
+          cat > .env << EOF
           MONGO_USER=${{ secrets.MONGO_USER }}
           MONGO_PASSWORD=${{ secrets.MONGO_PASSWORD }}
-          QDRANT_API_KEY=${{ secrets.QDRANT_API_KEY }}
+          MONGO_DB=${{ secrets.MONGO_DB }}
           REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
-          SCRAPE_INTERVAL=${SCRAPE_INTERVAL:-3600}
-          MAX_CONCURRENT_JOBS=${MAX_CONCURRENT_JOBS:-5}
-          BATCH_SIZE=${BATCH_SIZE:-100}
+          DATA_INGESTION_API_KEY=${{ secrets.DATA_INGESTION_API_KEY }}
+          SCRAPE_INTERVAL=3600
+          MAX_CONCURRENT_JOBS=5
+          BATCH_SIZE=100
           EOF
+          
+          echo "✅ Environment configured"
+          ENDSSH
 
-      - name: Copy files to Hetzner server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.HETZNER_HOST }}
-          username: ${{ secrets.HETZNER_USER }}
-          key: ${{ secrets.HETZNER_SSH_KEY }}
-          source: "infrastructure/docker/docker-compose.base.yml,infrastructure/docker/docker-compose.pipelines.yml,infrastructure/docker/Dockerfile.scraper,infrastructure/docker/Dockerfile.processing,src/scraper,src/processing,src/shared,.env.deploy"
-          target: "/home/${{ secrets.HETZNER_USER }}/git-query"
-          strip_components: 0
+  deploy:
+    name: Deploy Services
+    runs-on: ubuntu-latest
+    needs: configure
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.HETZNER_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Deploy Data Pipelines on Hetzner
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.HETZNER_HOST }}
-          username: ${{ secrets.HETZNER_USER }}
-          key: ${{ secrets.HETZNER_SSH_KEY }}
-          script: |
-            cd /home/${{ secrets.HETZNER_USER }}/git-query
-            mv .env.deploy .env
-            
-            # Create base networks if they don't exist
-            docker-compose -f infrastructure/docker/docker-compose.base.yml up --no-start
-            
-            # Check database dependencies
-            echo "Checking database dependencies..."
-            if ! docker ps | grep -q "git-query-mongodb"; then
-              echo "ERROR: MongoDB is not running. Please deploy databases first."
-              exit 1
-            fi
-            if ! docker ps | grep -q "git-query-redis"; then
-              echo "ERROR: Redis is not running. Please deploy databases first."
-              exit 1
-            fi
-            if ! docker ps | grep -q "git-query-qdrant"; then
-              echo "ERROR: Qdrant is not running. Please deploy databases first."
-              exit 1
-            fi
-            
-            # Determine which services to deploy
-            SERVICES=""
-            if [ "${{ inputs.services }}" == "All Pipeline Services" ]; then
-              SERVICES="scraper processing"
-            elif [ "${{ inputs.services }}" == "Scraper Only" ]; then
-              SERVICES="scraper"
-            elif [ "${{ inputs.services }}" == "Processing Only" ]; then
-              SERVICES="processing"
-            fi
-            
-            echo "Deploying services: $SERVICES"
-            
-            # Deploy pipelines
-            docker-compose -f infrastructure/docker/docker-compose.base.yml \
-              -f infrastructure/docker/docker-compose.pipelines.yml \
-              up -d --build $SERVICES
-            
-            # Wait for services
-            sleep 10
-            
-            # Show status
-            docker-compose -f infrastructure/docker/docker-compose.base.yml \
-              -f infrastructure/docker/docker-compose.pipelines.yml \
-              ps
+      - name: Check Database Dependencies
+        run: |
+          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << ENDSSH
+          set -e
+          
+          echo "🔍 Checking database dependencies..."
+          if ! docker ps | grep -q "git-query-mongodb"; then
+            echo "❌ MongoDB is not running. Please deploy infrastructure first."
+            exit 1
+          fi
+          if ! docker ps | grep -q "git-query-redis"; then
+              echo "❌ Redis is not running. Please deploy infrastructure first."
+            exit 1
+          fi
+          
+          echo "✅ Database dependencies verified"
+          ENDSSH
 
-      - name: Verify deployment
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.HETZNER_HOST }}
-          username: ${{ secrets.HETZNER_USER }}
-          key: ${{ secrets.HETZNER_SSH_KEY }}
-          script: |
-            cd /home/${{ secrets.HETZNER_USER }}/git-query
-            
-            # Check deployed services
-            if [ "${{ inputs.services }}" == "All Pipeline Services" ]; then
-              docker ps | grep git-query-scraper
-              docker ps | grep git-query-processing
-            elif [ "${{ inputs.services }}" == "Scraper Only" ]; then
-              docker ps | grep git-query-scraper
-            elif [ "${{ inputs.services }}" == "Processing Only" ]; then
-              docker ps | grep git-query-processing
-            fi
-            
-            echo "Data Pipelines deployment successful!"
+      - name: Deploy Pipeline Services
+        run: |
+          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << ENDSSH
+          set -e
+          
+          cd /home/${{ secrets.HETZNER_USER }}/git-query/infrastructure/docker
+          
+          if [ "${{ github.event.inputs.services }}" == "all" ]; then
+            echo "🚀 Deploying all pipeline services..."
+            docker-compose -f docker-compose.base.yml -f docker-compose.pipelines.yml up -d
+          else
+            echo "🚀 Deploying ${{ github.event.inputs.services }}..."
+            docker-compose -f docker-compose.base.yml -f docker-compose.pipelines.yml up -d ${{ github.event.inputs.services }}
+          fi
+          
+          echo ""
+          echo "📦 Running containers:"
+          docker ps --filter "name=git-query"
+          ENDSSH
 
-      - name: Clean up local secrets
-        if: always()
-        run: rm -f .env.deploy
+  verify:
+    name: Verify Deployment
+    runs-on: ubuntu-latest
+    needs: deploy
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.HETZNER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Health Check Services
+        run: |
+          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << ENDSSH
+          set -e
+          
+          cd /home/${{ secrets.HETZNER_USER }}/git-query/infrastructure/docker
+          
+          echo "🔍 Checking service health..."
+          
+          if [ "${{ github.event.inputs.services }}" == "all" ] || [ "${{ github.event.inputs.services }}" == "scraper" ]; then
+            docker logs git-query-scraper --tail 20 && echo "✅ Scraper running" || echo "❌ Scraper failed"
+          fi
+          
+          if [ "${{ github.event.inputs.services }}" == "all" ] || [ "${{ github.event.inputs.services }}" == "processing" ]; then
+            docker logs git-query-processing --tail 20 && echo "✅ Processing running" || echo "❌ Processing failed"
+          fi
+          
+          echo ""
+          echo "✅ Deployment verification complete"
+          ENDSSH

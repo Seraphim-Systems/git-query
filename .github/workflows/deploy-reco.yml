@@ -2,109 +2,153 @@ name: Deploy Recommendation Engine
 
 on:
   workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Deployment environment'
-        required: true
-        type: choice
-        options:
-          - dev
-          - prod
-        default: 'dev'
 
 jobs:
-  deploy:
+  setup:
+    name: Setup Repository
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Verify Docker Compose version
+      - name: Setup SSH
         run: |
-          docker compose version
-          echo "Docker Compose v2 is available"
+          mkdir -p ~/.ssh
+          echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.HETZNER_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Create deployment .env file
+      - name: Clone or Update Repository
         run: |
-          cat > .env.deploy <<EOF
-          LOG_LEVEL=INFO
+          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << ENDSSH
+          set -e
+          
+          REPO_PATH="/home/${{ secrets.HETZNER_USER }}/git-query"
+          
+          # Check if directory exists and is a valid git repo
+          if [ -d "\$REPO_PATH" ]; then
+            if [ -d "\$REPO_PATH/.git" ]; then
+              echo "✅ Valid git repository found"
+              cd "\$REPO_PATH"
+              git fetch origin
+              git checkout ${{ github.ref_name }}
+              git pull origin ${{ github.ref_name }}
+            else
+              echo "⚠️  Directory exists but is not a git repository. Removing and re-cloning..."
+              rm -rf "\$REPO_PATH"
+              git clone https://github.com/Seraphim-Systems/git-query.git "\$REPO_PATH"
+              cd "\$REPO_PATH"
+              git checkout ${{ github.ref_name }}
+            fi
+          else
+            echo "📦 Cloning repository..."
+            git clone https://github.com/Seraphim-Systems/git-query.git "\$REPO_PATH"
+            cd "\$REPO_PATH"
+            git checkout ${{ github.ref_name }}
+          fi
+          
+          echo "✅ Repository ready at \$REPO_PATH"
+          ENDSSH
+
+  configure:
+    name: Configure Environment
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.HETZNER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Create Environment File
+        run: |
+          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << ENDSSH
+          set -e
+          
+          cd /home/${{ secrets.HETZNER_USER }}/git-query
+          
+          cat > .env << EOF
           MONGO_USER=${{ secrets.MONGO_USER }}
           MONGO_PASSWORD=${{ secrets.MONGO_PASSWORD }}
-          QDRANT_API_KEY=${{ secrets.QDRANT_API_KEY }}
+          MONGO_DB=${{ secrets.MONGO_DB }}
           REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
-          INFERENCE_BATCH_SIZE=${INFERENCE_BATCH_SIZE:-32}
+          DATA_INGESTION_API_KEY=${{ secrets.DATA_INGESTION_API_KEY }}
+          INFERENCE_BATCH_SIZE=32
           EOF
+          
+          echo "✅ Environment configured"
+          ENDSSH
 
-      - name: Copy files to Hetzner server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.HETZNER_HOST }}
-          username: ${{ secrets.HETZNER_USER }}
-          key: ${{ secrets.HETZNER_SSH_KEY }}
-          source: "infrastructure/docker/docker-compose.base.yml,infrastructure/docker/docker-compose.reco.yml,infrastructure/docker/Dockerfile.recommender,src/recommender,src/shared,.env.deploy"
-          target: "/home/${{ secrets.HETZNER_USER }}/git-query"
-          strip_components: 0
+  deploy:
+    name: Deploy Recommendation Engine
+    runs-on: ubuntu-latest
+    needs: configure
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.HETZNER_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Deploy Recommender on Hetzner
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.HETZNER_HOST }}
-          username: ${{ secrets.HETZNER_USER }}
-          key: ${{ secrets.HETZNER_SSH_KEY }}
-          script: |
-            cd /home/${{ secrets.HETZNER_USER }}/git-query
-            mv .env.deploy .env
-            
-            # Create base networks if they don't exist
-            docker-compose -f infrastructure/docker/docker-compose.base.yml up --no-start
-            
-            # Check database dependencies
-            echo "Checking database dependencies..."
-            if ! docker ps | grep -q "git-query-mongodb"; then
-              echo "ERROR: MongoDB is not running. Please deploy databases first."
-              exit 1
-            fi
-            if ! docker ps | grep -q "git-query-redis"; then
-              echo "ERROR: Redis is not running. Please deploy databases first."
-              exit 1
-            fi
-            if ! docker ps | grep -q "git-query-qdrant"; then
-              echo "ERROR: Qdrant is not running. Please deploy databases first."
-              exit 1
-            fi
-            
-            echo "Deploying Recommendation Engine..."
-            
-            # Deploy recommender
-            docker-compose -f infrastructure/docker/docker-compose.base.yml \
-              -f infrastructure/docker/docker-compose.reco.yml \
-              up -d --build
-            
-            # Wait for service and health check
-            sleep 15
-            
-            # Show status
-            docker-compose -f infrastructure/docker/docker-compose.base.yml \
-              -f infrastructure/docker/docker-compose.reco.yml \
-              ps
+      - name: Check Database Dependencies
+        run: |
+          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << ENDSSH
+          set -e
+          
+          echo "🔍 Checking database dependencies..."
+          if ! docker ps | grep -q "git-query-mongodb"; then
+            echo "❌ MongoDB is not running. Please deploy infrastructure first."
+            exit 1
+          fi
+          if ! docker ps | grep -q "git-query-redis"; then
+              echo "❌ Redis is not running. Please deploy infrastructure first."
+            exit 1
+          fi
+          if ! docker ps | grep -q "git-query-qdrant"; then
+            echo "❌ Qdrant is not running. Please deploy infrastructure first."
+            exit 1
+          fi
+          
+          echo "✅ Database dependencies verified"
+          ENDSSH
 
-      - name: Verify deployment
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.HETZNER_HOST }}
-          username: ${{ secrets.HETZNER_USER }}
-          key: ${{ secrets.HETZNER_SSH_KEY }}
-          script: |
-            cd /home/${{ secrets.HETZNER_USER }}/git-query
-            docker ps | grep git-query-recommender
-            
-            # Test health endpoint
-            docker exec git-query-recommender curl -f http://localhost:8095/health || echo "Health check not ready yet"
-            
-            echo "Recommendation Engine deployment successful!"
+      - name: Deploy Recommender
+        run: |
+          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << ENDSSH
+          set -e
+          
+          cd /home/${{ secrets.HETZNER_USER }}/git-query/infrastructure/docker
+          
+          echo "🚀 Deploying Recommendation Engine..."
+          docker-compose -f docker-compose.base.yml -f docker-compose.reco.yml up -d
+          
+          echo ""
+          echo "📦 Running containers:"
+          docker ps --filter "name=git-query"
+          ENDSSH
 
-      - name: Clean up local secrets
-        if: always()
-        run: rm -f .env.deploy
+  verify:
+    name: Verify Deployment
+    runs-on: ubuntu-latest
+    needs: deploy
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.HETZNER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Health Check Recommender
+        run: |
+          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << ENDSSH
+          set -e
+          
+          cd /home/${{ secrets.HETZNER_USER }}/git-query/infrastructure/docker
+          
+          echo "🔍 Checking Recommendation Engine health..."
+          docker logs git-query-recommender --tail 20 && echo "✅ Recommender running" || echo "❌ Recommender failed"
+          
+          echo ""
+          echo "✅ Deployment verification complete"
+          ENDSSH
