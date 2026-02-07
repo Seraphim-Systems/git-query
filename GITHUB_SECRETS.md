@@ -178,11 +178,10 @@ Before running workflows, ensure your Hetzner server has:
    curl -fsSL https://get.docker.com | sh
    ```
 
-2. **Git repository cloned to `/opt/git-query`**
+2. **Git repository cloned to `~/git-query`**
    ```bash
-   sudo mkdir -p /opt/git-query
-   sudo chown $USER:$USER /opt/git-query
-   git clone https://github.com/Seraphim-Systems/git-query.git /opt/git-query
+   mkdir -p ~/git-query
+   git clone https://github.com/Seraphim-Systems/git-query.git ~/git-query
    ```
 
 3. **SSH key authorized**
@@ -212,4 +211,4 @@ Before running workflows, ensure your Hetzner server has:
 ### Database connection fails
 - Check `MONGO_USER` and `MONGO_PASSWORD` match infrastructure deployment
 - Verify database services are running: `docker ps | grep git-query`
-- Check `.env` file exists on server in `/opt/git-query`
+- Check `.env` file exists on server in `~/git-query`

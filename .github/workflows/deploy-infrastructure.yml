@@ -41,7 +41,7 @@ jobs:
           ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << 'ENDSSH'
           set -e
           
-          cd /opt/git-query
+          cd /home/${{ secrets.HETZNER_USER }}/git-query
           
           # Pull latest code
           git fetch origin
@@ -89,7 +89,7 @@ jobs:
           ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << 'ENDSSH'
           set -e
           
-          cd /opt/git-query/infrastructure/docker
+          cd /home/${{ secrets.HETZNER_USER }}/git-query/infrastructure/docker
           
           # Check service health
           echo "Checking service health..."
