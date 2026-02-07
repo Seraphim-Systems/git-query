@@ -25,10 +25,13 @@ services:
     environment:
       - LOG_LEVEL=DEBUG
 
-  chatbot-client:
-    environment:
-      - LOG_LEVEL=DEBUG
-
   nginx:
     ports:
       - "80:80"
+
+  db-query-api:
+    ports:
+      - "8080:8080"
+    environment:
+      # Use host env if set, otherwise fall back to a local dev key
+      - DATA_INGESTION_API_KEY=${DATA_INGESTION_API_KEY:-dev-local-key}

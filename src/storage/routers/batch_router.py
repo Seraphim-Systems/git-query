@@ -4,9 +4,9 @@ Batch operation endpoints
 
 from fastapi import APIRouter, Depends
 from qdrant_client.models import PointStruct
-from ..models.batch_models import BatchInsert
-from ..services.db_clients import get_mongo_client, get_redis_client, get_qdrant_client
-from ..auth import get_api_key
+from models.batch_models import BatchInsert
+from services.db_clients import get_mongo_client, get_redis_client, get_qdrant_client
+from auth import get_api_key
 
 router = APIRouter(prefix="/api/batch", tags=["Batch Operations"])
 
@@ -15,21 +15,21 @@ router = APIRouter(prefix="/api/batch", tags=["Batch Operations"])
 async def batch_insert(batch: BatchInsert):
     """
     Batch insert data into multiple databases (requires API key).
-    
+
     WARNING: This operation does NOT use transactions. If one database operation
     succeeds and another fails, you will have partial data across systems, which
-    can lead to data inconsistency issues. 
-    
+    can lead to data inconsistency issues.
+
     While implementing distributed transactions across MongoDB, Qdrant, and Redis
     is complex, you should be aware of this behavior:
     - Check the 'errors' array in the response for any failures
     - Implement retry logic for failed operations in your application
     - Consider implementing a rollback mechanism for MongoDB/Qdrant if needed
     - Design your data model to handle eventual consistency
-    
+
     Args:
         batch: BatchInsert object containing data for MongoDB, Qdrant, and/or Redis
-        
+
     Returns:
         Results object with successful operations and any errors that occurred
     """
