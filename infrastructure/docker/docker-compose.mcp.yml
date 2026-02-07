@@ -1,0 +1,43 @@
+version: '3.8'
+
+# MCP (Model Context Protocol) Servers
+# Usage: docker-compose -f docker-compose.base.yml -f docker-compose.mcp.yml up
+
+services:
+  mcp-server:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.mcp
+    container_name: git-query-mcp
+    environment:
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=8090
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - MONGODB_URL=mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-mongopass}@mongodb:27017/gitquery?authSource=admin
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-redispass}@redis:6379
+    depends_on:
+      - mongodb
+      - qdrant
+      - redis
+    networks:
+      - db-network
+      - web-network
+    restart: unless-stopped
+    expose:
+      - "8090"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  db-network:
+    external: true
+    name: git-query-db-network
+  web-network:
+    external: true
+    name: git-query-web-network

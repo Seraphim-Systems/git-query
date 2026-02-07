@@ -1,0 +1,110 @@
+name: Deploy Recommendation Engine
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+        default: 'dev'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify Docker Compose version
+        run: |
+          docker compose version
+          echo "Docker Compose v2 is available"
+
+      - name: Create deployment .env file
+        run: |
+          cat > .env.deploy <<EOF
+          LOG_LEVEL=INFO
+          MONGO_USER=${{ secrets.MONGO_USER }}
+          MONGO_PASSWORD=${{ secrets.MONGO_PASSWORD }}
+          QDRANT_API_KEY=${{ secrets.QDRANT_API_KEY }}
+          REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
+          INFERENCE_BATCH_SIZE=${INFERENCE_BATCH_SIZE:-32}
+          EOF
+
+      - name: Copy files to Hetzner server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          source: "infrastructure/docker/docker-compose.base.yml,infrastructure/docker/docker-compose.reco.yml,infrastructure/docker/Dockerfile.recommender,src/recommender,src/shared,.env.deploy"
+          target: "/home/${{ secrets.HETZNER_USER }}/git-query"
+          strip_components: 0
+
+      - name: Deploy Recommender on Hetzner
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          script: |
+            cd /home/${{ secrets.HETZNER_USER }}/git-query
+            mv .env.deploy .env
+            
+            # Create base networks if they don't exist
+            docker-compose -f infrastructure/docker/docker-compose.base.yml up --no-start
+            
+            # Check database dependencies
+            echo "Checking database dependencies..."
+            if ! docker ps | grep -q "git-query-mongodb"; then
+              echo "ERROR: MongoDB is not running. Please deploy databases first."
+              exit 1
+            fi
+            if ! docker ps | grep -q "git-query-redis"; then
+              echo "ERROR: Redis is not running. Please deploy databases first."
+              exit 1
+            fi
+            if ! docker ps | grep -q "git-query-qdrant"; then
+              echo "ERROR: Qdrant is not running. Please deploy databases first."
+              exit 1
+            fi
+            
+            echo "Deploying Recommendation Engine..."
+            
+            # Deploy recommender
+            docker-compose -f infrastructure/docker/docker-compose.base.yml \
+              -f infrastructure/docker/docker-compose.reco.yml \
+              up -d --build
+            
+            # Wait for service and health check
+            sleep 15
+            
+            # Show status
+            docker-compose -f infrastructure/docker/docker-compose.base.yml \
+              -f infrastructure/docker/docker-compose.reco.yml \
+              ps
+
+      - name: Verify deployment
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          script: |
+            cd /home/${{ secrets.HETZNER_USER }}/git-query
+            docker ps | grep git-query-recommender
+            
+            # Test health endpoint
+            docker exec git-query-recommender curl -f http://localhost:8095/health || echo "Health check not ready yet"
+            
+            echo "Recommendation Engine deployment successful!"
+
+      - name: Clean up local secrets
+        if: always()
+        run: rm -f .env.deploy

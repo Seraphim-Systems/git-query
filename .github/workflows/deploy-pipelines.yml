@@ -1,0 +1,137 @@
+name: Deploy Data Pipelines
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+        default: 'dev'
+      services:
+        description: 'Services to deploy'
+        required: true
+        type: choice
+        options:
+          - All Pipeline Services
+          - Scraper Only
+          - Processing Only
+        default: 'All Pipeline Services'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify Docker Compose version
+        run: |
+          docker compose version
+          echo "Docker Compose v2 is available"
+
+      - name: Create deployment .env file
+        run: |
+          cat > .env.deploy <<EOF
+          LOG_LEVEL=INFO
+          MONGO_USER=${{ secrets.MONGO_USER }}
+          MONGO_PASSWORD=${{ secrets.MONGO_PASSWORD }}
+          QDRANT_API_KEY=${{ secrets.QDRANT_API_KEY }}
+          REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
+          SCRAPE_INTERVAL=${SCRAPE_INTERVAL:-3600}
+          MAX_CONCURRENT_JOBS=${MAX_CONCURRENT_JOBS:-5}
+          BATCH_SIZE=${BATCH_SIZE:-100}
+          EOF
+
+      - name: Copy files to Hetzner server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          source: "infrastructure/docker/docker-compose.base.yml,infrastructure/docker/docker-compose.pipelines.yml,infrastructure/docker/Dockerfile.scraper,infrastructure/docker/Dockerfile.processing,src/scraper,src/processing,src/shared,.env.deploy"
+          target: "/home/${{ secrets.HETZNER_USER }}/git-query"
+          strip_components: 0
+
+      - name: Deploy Data Pipelines on Hetzner
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          script: |
+            cd /home/${{ secrets.HETZNER_USER }}/git-query
+            mv .env.deploy .env
+            
+            # Create base networks if they don't exist
+            docker-compose -f infrastructure/docker/docker-compose.base.yml up --no-start
+            
+            # Check database dependencies
+            echo "Checking database dependencies..."
+            if ! docker ps | grep -q "git-query-mongodb"; then
+              echo "ERROR: MongoDB is not running. Please deploy databases first."
+              exit 1
+            fi
+            if ! docker ps | grep -q "git-query-redis"; then
+              echo "ERROR: Redis is not running. Please deploy databases first."
+              exit 1
+            fi
+            if ! docker ps | grep -q "git-query-qdrant"; then
+              echo "ERROR: Qdrant is not running. Please deploy databases first."
+              exit 1
+            fi
+            
+            # Determine which services to deploy
+            SERVICES=""
+            if [ "${{ inputs.services }}" == "All Pipeline Services" ]; then
+              SERVICES="scraper processing"
+            elif [ "${{ inputs.services }}" == "Scraper Only" ]; then
+              SERVICES="scraper"
+            elif [ "${{ inputs.services }}" == "Processing Only" ]; then
+              SERVICES="processing"
+            fi
+            
+            echo "Deploying services: $SERVICES"
+            
+            # Deploy pipelines
+            docker-compose -f infrastructure/docker/docker-compose.base.yml \
+              -f infrastructure/docker/docker-compose.pipelines.yml \
+              up -d --build $SERVICES
+            
+            # Wait for services
+            sleep 10
+            
+            # Show status
+            docker-compose -f infrastructure/docker/docker-compose.base.yml \
+              -f infrastructure/docker/docker-compose.pipelines.yml \
+              ps
+
+      - name: Verify deployment
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          script: |
+            cd /home/${{ secrets.HETZNER_USER }}/git-query
+            
+            # Check deployed services
+            if [ "${{ inputs.services }}" == "All Pipeline Services" ]; then
+              docker ps | grep git-query-scraper
+              docker ps | grep git-query-processing
+            elif [ "${{ inputs.services }}" == "Scraper Only" ]; then
+              docker ps | grep git-query-scraper
+            elif [ "${{ inputs.services }}" == "Processing Only" ]; then
+              docker ps | grep git-query-processing
+            fi
+            
+            echo "Data Pipelines deployment successful!"
+
+      - name: Clean up local secrets
+        if: always()
+        run: rm -f .env.deploy

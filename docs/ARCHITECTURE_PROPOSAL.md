@@ -545,11 +545,20 @@ volumes:
 
 ### 8.1 Starting Services
 ```bash
-# Start all services (except training)
-docker compose -f infrastructure/docker/docker-compose.yml up -d
+# Start infrastructure (databases, db-api, nginx)
+docker compose -f infrastructure/docker/docker-compose.base.yml -f infrastructure/docker/docker-compose.db.yml up -d
+
+# Start pipelines
+docker compose -f infrastructure/docker/docker-compose.base.yml -f infrastructure/docker/docker-compose.pipelines.yml up -d
+
+# Start MCP servers
+docker compose -f infrastructure/docker/docker-compose.base.yml -f infrastructure/docker/docker-compose.mcp.yml up -d
+
+# Start recommendation engine
+docker compose -f infrastructure/docker/docker-compose.base.yml -f infrastructure/docker/docker-compose.reco.yml up -d
 
 # Trigger training manually
-docker compose -f infrastructure/docker/docker-compose.yml --profile training run training-service
+docker compose -f infrastructure/docker/docker-compose.base.yml -f infrastructure/docker/docker-compose.training.yml up -d
 ```
 
 ### 8.2 Monitoring

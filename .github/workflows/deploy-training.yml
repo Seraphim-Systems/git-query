@@ -1,0 +1,147 @@
+name: Run ML Training
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Training environment'
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+        default: 'dev'
+      epochs:
+        description: 'Number of training epochs'
+        required: false
+        default: '10'
+      batch_size:
+        description: 'Training batch size'
+        required: false
+        default: '64'
+      learning_rate:
+        description: 'Learning rate'
+        required: false
+        default: '0.001'
+  schedule:
+    # Run training weekly on Sundays at 2 AM
+    - cron: '0 2 * * 0'
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120  # 2 hours for training
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify Docker Compose version
+        run: |
+          docker compose version
+          echo "Docker Compose v2 is available"
+
+      - name: Create training .env file
+        run: |
+          cat > .env.training <<EOF
+          LOG_LEVEL=INFO
+          MONGO_USER=${{ secrets.MONGO_USER }}
+          MONGO_PASSWORD=${{ secrets.MONGO_PASSWORD }}
+          QDRANT_API_KEY=${{ secrets.QDRANT_API_KEY }}
+          TRAINING_BATCH_SIZE=${{ inputs.batch_size || '64' }}
+          EPOCHS=${{ inputs.epochs || '10' }}
+          LEARNING_RATE=${{ inputs.learning_rate || '0.001' }}
+          EOF
+
+      - name: Copy files to Hetzner server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          source: "infrastructure/docker/docker-compose.base.yml,infrastructure/docker/docker-compose.training.yml,infrastructure/docker/Dockerfile.training,src/recommender/training,src/shared,.env.training"
+          target: "/home/${{ secrets.HETZNER_USER }}/git-query"
+          strip_components: 0
+
+      - name: Run ML Training on Hetzner
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          command_timeout: 120m
+          script: |
+            cd /home/${{ secrets.HETZNER_USER }}/git-query
+            mv .env.training .env
+            
+            # Create base networks if they don't exist
+            docker-compose -f infrastructure/docker/docker-compose.base.yml up --no-start
+            
+            # Check database dependencies
+            echo "Checking database dependencies..."
+            if ! docker ps | grep -q "git-query-mongodb"; then
+              echo "ERROR: MongoDB is not running. Please deploy databases first."
+              exit 1
+            fi
+            if ! docker ps | grep -q "git-query-qdrant"; then
+              echo "ERROR: Qdrant is not running. Please deploy databases first."
+              exit 1
+            fi
+            
+            echo "Starting ML Training..."
+            echo "Parameters: Epochs=${{ inputs.epochs || '10' }}, Batch Size=${{ inputs.batch_size || '64' }}, LR=${{ inputs.learning_rate || '0.001' }}"
+            
+            # Remove old training container if exists
+            docker-compose -f infrastructure/docker/docker-compose.base.yml \
+              -f infrastructure/docker/docker-compose.training.yml \
+              down
+            
+            # Start training (will run to completion)
+            docker-compose -f infrastructure/docker/docker-compose.base.yml \
+              -f infrastructure/docker/docker-compose.training.yml \
+              up --build
+            
+            # Check exit code
+            EXIT_CODE=$(docker inspect git-query-training --format='{{.State.ExitCode}}')
+            
+            if [ "$EXIT_CODE" -eq 0 ]; then
+              echo "Training completed successfully!"
+            else
+              echo "Training failed with exit code: $EXIT_CODE"
+              docker logs git-query-training --tail 100
+              exit 1
+            fi
+
+      - name: Verify training results
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          script: |
+            cd /home/${{ secrets.HETZNER_USER }}/git-query
+            
+            echo "Checking training outputs..."
+            docker run --rm \
+              -v git-query-training-models:/models \
+              -v git-query-training-logs:/logs \
+              alpine sh -c "ls -lh /models && ls -lh /logs"
+            
+            echo "Training job completed!"
+            echo "To deploy the new model, run the deploy-reco workflow"
+
+      - name: Clean up local secrets
+        if: always()
+        run: rm -f .env.training
+
+      - name: Notify on failure
+        if: failure()
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          script: |
+            cd /home/${{ secrets.HETZNER_USER }}/git-query
+            echo "Training failed! Logs:"
+            docker logs git-query-training --tail 200
