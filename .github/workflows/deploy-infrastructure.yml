@@ -111,15 +111,19 @@ jobs:
           
           cd /home/${{ secrets.HETZNER_USER }}/git-query/infrastructure/docker
           
+          # Clean up any corrupted containers first
+          echo "🧹 Cleaning up existing containers..."
+          docker-compose -f docker-compose.base.yml -f docker-compose.db.yml down --remove-orphans || true
+          
           if [ "${{ github.event.inputs.services }}" == "all" ]; then
             echo "🚀 Deploying all infrastructure services..."
-            docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d
+            docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d --build --force-recreate
           else
             echo "🚀 Deploying ${{ github.event.inputs.services }}..."
-            docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d ${{ github.event.inputs.services }}
+            docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d --build --force-recreate ${{ github.event.inputs.services }}
             
             if [ "${{ github.event.inputs.services }}" == "qdrant" ]; then
-              docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d qdrant-init
+              docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d --build qdrant-init
             fi
           fi
           
@@ -158,7 +162,7 @@ jobs:
           fi
           
           if [ "${{ github.event.inputs.services }}" == "all" ] || [ "${{ github.event.inputs.services }}" == "qdrant" ]; then
-            docker exec git-query-qdrant curl -f http://localhost:6333/health && echo "✅ Qdrant healthy" || echo "❌ Qdrant failed"
+            docker exec git-query-qdrant wget --no-verbose --tries=1 --spider http://localhost:6333/health && echo "✅ Qdrant healthy" || echo "❌ Qdrant failed"
           fi
           
           echo ""
