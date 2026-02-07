@@ -31,7 +31,7 @@ jobs:
         run: |
           ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << ENDSSH
           set -e
-          
+
           if [ ! -d "/home/${{ secrets.HETZNER_USER }}/git-query" ]; then
             echo "Directory does not exist. Cloning repository..."
             git clone https://github.com/Seraphim-Systems/git-query.git /home/${{ secrets.HETZNER_USER }}/git-query
@@ -67,7 +67,7 @@ jobs:
           ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << ENDSSH
           set -e
           
-          cd \$HOME/git-query
+          cd /home/${{ secrets.HETZNER_USER }}/git-query
           
           cat > .env << EOF
           MONGO_USER=${{ secrets.MONGO_USER }}
@@ -98,7 +98,7 @@ jobs:
           ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << ENDSSH
           set -e
           
-          cd \$HOME/git-query/infrastructure/docker
+          cd /home/${{ secrets.HETZNER_USER }}/git-query/infrastructure/docker
           
           if [ "${{ github.event.inputs.services }}" == "all" ]; then
             echo "🚀 Deploying all infrastructure services..."
@@ -134,7 +134,7 @@ jobs:
           ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << ENDSSH
           set -e
           
-          cd \$HOME/git-query/infrastructure/docker
+          cd /home/${{ secrets.HETZNER_USER }}/git-query/infrastructure/docker
           
           echo "🔍 Checking service health..."
           
