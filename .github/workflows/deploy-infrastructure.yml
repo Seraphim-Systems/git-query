@@ -126,9 +126,29 @@ jobs:
             echo "📦 Starting databases..."
             docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d --build mongodb redis qdrant cosmos-db
             
-            # Wait for health checks
+            # Wait for health checks with timeout
             echo "⏳ Waiting for databases to be healthy..."
-            sleep 30
+            TIMEOUT=120
+            ELAPSED=0
+            while [ \$ELAPSED -lt \$TIMEOUT ]; do
+              QDRANT_HEALTH=\$(docker inspect --format='{{.State.Health.Status}}' git-query-qdrant 2>/dev/null || echo "none")
+              MONGO_HEALTH=\$(docker inspect --format='{{.State.Health.Status}}' git-query-mongodb 2>/dev/null || echo "none")
+              REDIS_HEALTH=\$(docker inspect --format='{{.State.Health.Status}}' git-query-redis 2>/dev/null || echo "none")
+              
+              echo "[\$ELAPSED s] Qdrant: \$QDRANT_HEALTH | MongoDB: \$MONGO_HEALTH | Redis: \$REDIS_HEALTH"
+              
+              if [ "\$QDRANT_HEALTH" = "healthy" ] && [ "\$MONGO_HEALTH" = "healthy" ] && [ "\$REDIS_HEALTH" = "healthy" ]; then
+                echo "✅ All databases are healthy!"
+                break
+              fi
+              
+              sleep 5
+              ELAPSED=\$((ELAPSED + 5))
+            done
+            
+            if [ \$ELAPSED -ge \$TIMEOUT ]; then
+              echo "⚠️  Timeout waiting for databases. Proceeding anyway..."
+            fi
             
             # Check database health
             docker ps --filter "name=git-query" --format "table {{.Names}}\t{{.Status}}"
