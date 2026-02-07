@@ -53,6 +53,11 @@ jobs:
           username: ${{ secrets.HETZNER_USER }}
           key: ${{ secrets.HETZNER_SSH_KEY }}
           script: |
+            # Clone repository if it doesn't exist
+            if [ ! -d "/home/${{ secrets.HETZNER_USER }}/git-query" ]; then
+              git clone https://github.com/Seraphim-Systems/git-query.git /home/${{ secrets.HETZNER_USER }}/git-query
+            fi
+            
             cd /home/${{ secrets.HETZNER_USER }}/git-query
             
             # Move environment file
