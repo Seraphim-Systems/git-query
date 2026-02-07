@@ -41,6 +41,12 @@ jobs:
           ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << 'ENDSSH'
           set -e
           
+          # Clone repository if it doesn't exist, otherwise pull latest
+          if [ ! -d "/home/${{ secrets.HETZNER_USER }}/git-query" ]; then
+            echo "Cloning repository..."
+            git clone https://github.com/Seraphim-Systems/git-query.git /home/${{ secrets.HETZNER_USER }}/git-query
+          fi
+          
           cd /home/${{ secrets.HETZNER_USER }}/git-query
           
           # Pull latest code
