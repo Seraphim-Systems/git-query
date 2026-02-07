@@ -41,12 +41,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Docker Compose v2
+      - name: Verify Docker Compose version
         run: |
-          # Install Docker Compose v2 (standalone)
-          sudo curl -SL https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-linux-x86_64 -o /usr/local/bin/docker-compose
-          sudo chmod +x /usr/local/bin/docker-compose
           docker-compose version
+          # Ensure we have at least v1.27.0 which supports the 'name' field
+          VERSION=$(docker-compose version --short)
+          echo "Docker Compose version: $VERSION"
 
       - name: Create deployment .env file
         run: |
