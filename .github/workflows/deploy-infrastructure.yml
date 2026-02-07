@@ -85,6 +85,10 @@ jobs:
           REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
           COSMOS_PARTITION_COUNT=${{ secrets.COSMOS_PARTITION_COUNT }}
           QDRANT_LOG_LEVEL=${{ secrets.QDRANT_LOG_LEVEL }}
+          SECRET_KEY=${{ secrets.SECRET_KEY }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          API_SECRET=${{ secrets.API_SECRET }}
+          QDRANT_API_KEY=${{ secrets.QDRANT_API_KEY }}
           DATA_INGESTION_API_KEY=${{ secrets.DATA_INGESTION_API_KEY }}
           SERVER_NAME=${{ secrets.SERVER_NAME }}
           EOF
