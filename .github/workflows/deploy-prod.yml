@@ -31,6 +31,11 @@ jobs:
           OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
           API_SECRET=${{ secrets.API_SECRET }}
           SERVER_NAME=${{ secrets.SERVER_NAME }}
+          # Optional/required service keys
+          DATA_INGESTION_API_KEY=${{ secrets.DATA_INGESTION_API_KEY }}
+          QDRANT_API_KEY=${{ secrets.QDRANT_API_KEY }}
+          COSMOS_PARTITION_COUNT=${{ secrets.COSMOS_PARTITION_COUNT }}
+          QDRANT_LOG_LEVEL=${{ secrets.QDRANT_LOG_LEVEL }}
           EOF
 
       - name: Copy files to production server
