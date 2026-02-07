@@ -23,4 +23,4 @@ COPY src/storage /app
 EXPOSE 8080
 
 # Run the API
-CMD ["uvicorn", "db_query_api:app", "--host", "0.0.0.0", "--port", "8080", "--log-level", "info"]
+CMD ["python", "-m", "uvicorn", "db_query_api:app", "--host", "0.0.0.0", "--port", "8080", "--log-level", "info"]
