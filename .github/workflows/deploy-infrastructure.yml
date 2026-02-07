@@ -49,10 +49,10 @@ jobs:
           
           cd /home/${{ secrets.HETZNER_USER }}/git-query
           
-          # Pull latest code
+          # Pull latest code from the branch that triggered this workflow
           git fetch origin
-          git checkout dev
-          git pull origin dev
+          git checkout ${{ github.ref_name }}
+          git pull origin ${{ github.ref_name }}
           
           # Create .env file if it doesn't exist
           if [ ! -f .env ]; then
