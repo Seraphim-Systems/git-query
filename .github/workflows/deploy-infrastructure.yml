@@ -29,15 +29,15 @@ jobs:
 
       - name: Clone or Update Repository
         run: |
-          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << 'ENDSSH'
+          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << ENDSSH
           set -e
           
-          if [ ! -d "$HOME/git-query" ]; then
+          if [ ! -d "\$HOME/git-query" ]; then
             echo "Cloning repository..."
-            git clone https://github.com/Seraphim-Systems/git-query.git $HOME/git-query
+            git clone https://github.com/Seraphim-Systems/git-query.git \$HOME/git-query
           fi
           
-          cd $HOME/git-query
+          cd \$HOME/git-query
           git fetch origin
           git checkout ${{ github.ref_name }}
           git pull origin ${{ github.ref_name }}
@@ -59,10 +59,10 @@ jobs:
 
       - name: Create Environment File
         run: |
-          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << 'ENDSSH'
+          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << ENDSSH
           set -e
           
-          cd $HOME/git-query
+          cd \$HOME/git-query
           
           cat > .env << EOF
           MONGO_USER=${{ secrets.MONGO_USER }}
@@ -90,10 +90,10 @@ jobs:
 
       - name: Deploy Infrastructure Services
         run: |
-          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << 'ENDSSH'
+          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << ENDSSH
           set -e
           
-          cd $HOME/git-query/infrastructure/docker
+          cd \$HOME/git-query/infrastructure/docker
           
           if [ "${{ github.event.inputs.services }}" == "all" ]; then
             echo "🚀 Deploying all infrastructure services..."
@@ -126,10 +126,10 @@ jobs:
 
       - name: Health Check Services
         run: |
-          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << 'ENDSSH'
+          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << ENDSSH
           set -e
           
-          cd $HOME/git-query/infrastructure/docker
+          cd \$HOME/git-query/infrastructure/docker
           
           echo "🔍 Checking service health..."
           
