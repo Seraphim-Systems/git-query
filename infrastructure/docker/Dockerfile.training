@@ -1,0 +1,25 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies for ML training
+RUN apt-get update && apt-get install -y \
+  build-essential \
+  && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY src/recommender/training/requirements.txt requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy training code
+COPY src/recommender/training /app/training
+COPY src/shared /app/shared
+
+# Create directories
+RUN mkdir -p /app/models /app/training_data /app/logs
+
+# Set Python path
+ENV PYTHONPATH=/app
+
+# Run training job
+CMD ["python", "-m", "training"]

@@ -1,0 +1,26 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+  git \
+  curl \
+  && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY src/scraper/requirements.txt requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy scraper code
+COPY src/scraper /app/scraper
+COPY src/shared /app/shared
+
+# Create data directory
+RUN mkdir -p /app/data
+
+# Set Python path
+ENV PYTHONPATH=/app
+
+# Run scraper
+CMD ["python", "-m", "scraper"]

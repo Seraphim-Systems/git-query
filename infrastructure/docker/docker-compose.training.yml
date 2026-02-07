@@ -1,0 +1,44 @@
+version: '3.8'
+
+# ML Model Training (Batch Jobs)
+# Usage: docker-compose -f docker-compose.base.yml -f docker-compose.training.yml up
+
+services:
+  training:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.training
+    container_name: git-query-training
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - MODEL_OUTPUT_PATH=/app/models
+      - MONGODB_URL=mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-mongopass}@mongodb:27017/gitquery?authSource=admin
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
+      - TRAINING_BATCH_SIZE=${TRAINING_BATCH_SIZE:-64}
+      - EPOCHS=${EPOCHS:-10}
+      - LEARNING_RATE=${LEARNING_RATE:-0.001}
+    depends_on:
+      - mongodb
+      - qdrant
+    networks:
+      - db-network
+    restart: 'no'  # Don't auto-restart, this is a batch job
+    volumes:
+      - training-models:/app/models
+      - training-data:/app/training_data
+      - training-logs:/app/logs
+
+volumes:
+  training-models:
+    name: git-query-training-models
+  training-data:
+    name: git-query-training-data
+  training-logs:
+    name: git-query-training-logs
+
+networks:
+  db-network:
+    external: true
+    name: git-query-db-network

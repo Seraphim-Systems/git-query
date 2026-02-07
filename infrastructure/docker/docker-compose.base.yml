@@ -1,0 +1,41 @@
+version: '3.8'
+
+# Base compose file - defines shared networks and volumes
+# Does not deploy any containers - use with individual service compose files
+# Usage: docker-compose -f docker-compose.base.yml -f docker-compose.mongodb.yml up
+
+services: {}
+
+volumes:
+  mongodb-data:
+    name: git-query-mongodb-data
+  mongodb-config:
+    name: git-query-mongodb-config
+  cosmos-data:
+    name: git-query-cosmos-data
+  qdrant-storage:
+    name: git-query-qdrant-storage
+  qdrant-snapshots:
+    name: git-query-qdrant-snapshots
+  redis-data:
+    name: git-query-redis-data
+  scraper-data:
+    name: git-query-scraper-data
+  processing-data:
+    name: git-query-processing-data
+  recommender-models:
+    name: git-query-recommender-models
+  training-models:
+    name: git-query-training-models
+  training-data:
+    name: git-query-training-data
+  training-logs:
+    name: git-query-training-logs
+
+networks:
+  db-network:
+    name: git-query-db-network
+    driver: bridge
+  web-network:
+    name: git-query-web-network
+    driver: bridge

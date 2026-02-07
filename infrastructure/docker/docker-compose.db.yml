@@ -1,4 +1,4 @@
-name: git-query-databases
+version: '3.8'
 
 services:
   # Database Services
@@ -50,7 +50,6 @@ services:
     container_name: git-query-qdrant
     environment:
       QDRANT__SERVICE__GRPC_PORT: 6334
-      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:-}
       QDRANT__LOG_LEVEL: ${QDRANT_LOG_LEVEL:-INFO}
     volumes:
       - qdrant-storage:/qdrant/storage
@@ -78,7 +77,6 @@ services:
     environment:
       QDRANT_HOST: qdrant
       QDRANT_PORT: 6333
-      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
     networks:
       - db-network
     restart: 'no'
