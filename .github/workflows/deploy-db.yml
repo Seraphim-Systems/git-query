@@ -43,10 +43,8 @@ jobs:
 
       - name: Verify Docker Compose version
         run: |
-          docker-compose version
-          # Ensure we have at least v1.27.0 which supports the 'name' field
-          VERSION=$(docker-compose version --short)
-          echo "Docker Compose version: $VERSION"
+          docker compose version
+          echo "Docker Compose v2 is available"
 
       - name: Create deployment .env file
         run: |
