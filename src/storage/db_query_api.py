@@ -5,14 +5,14 @@ Designed for data scientists to query and ingest data into the databases
 
 from datetime import datetime, timezone
 from fastapi import FastAPI
-from .services.db_clients import (
+from services.db_clients import (
     startup_db_clients,
     shutdown_db_clients,
     get_mongo_client,
     get_redis_client,
     get_qdrant_client,
 )
-from .routers import mongodb_router, redis_router, qdrant_router, batch_router
+from routers import mongodb_router, redis_router, qdrant_router, batch_router
 
 # Initialize FastAPI app
 app = FastAPI(

@@ -4,9 +4,9 @@ Qdrant API endpoints
 
 from fastapi import APIRouter, HTTPException, Depends
 from qdrant_client.models import PointStruct
-from ..models.qdrant_models import QdrantQuery, QdrantInsert
-from ..services.db_clients import get_qdrant_client
-from ..auth import get_api_key
+from models.qdrant_models import QdrantQuery, QdrantInsert
+from services.db_clients import get_qdrant_client
+from auth import get_api_key
 
 router = APIRouter(prefix="/api/qdrant", tags=["Qdrant"])
 

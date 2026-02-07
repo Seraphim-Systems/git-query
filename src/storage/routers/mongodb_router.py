@@ -3,9 +3,9 @@ MongoDB API endpoints
 """
 
 from fastapi import APIRouter, HTTPException, Depends
-from ..models.mongodb_models import MongoQuery, MongoInsert
-from ..services.db_clients import get_mongo_client
-from ..auth import get_api_key
+from models.mongodb_models import MongoQuery, MongoInsert
+from services.db_clients import get_mongo_client
+from auth import get_api_key
 
 router = APIRouter(prefix="/api/mongodb", tags=["MongoDB"])
 
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/mongodb", tags=["MongoDB"])
 async def query_mongodb(query: MongoQuery):
     """
     Query MongoDB collections (requires API key).
-    
+
     WARNING: This endpoint allows arbitrary filter queries. While MongoDB's
     query language is safe from injection when using the official driver,
     unrestricted queries can enable expensive operations (e.g., full collection
@@ -24,7 +24,7 @@ async def query_mongodb(query: MongoQuery):
     - Restricting certain operators ($where, $expr)
     - Requiring authentication for complex queries
     - Monitoring query execution times
-    
+
     Args:
         query: MongoQuery object containing database, collection, filter, and options
     """
