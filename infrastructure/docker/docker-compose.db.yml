@@ -130,8 +130,8 @@ services:
     environment:
       - SERVER_NAME=${SERVER_NAME:-_}
       - DATA_INGESTION_API_KEY=${DATA_INGESTION_API_KEY}
-    ports:
-      - "${NGINX_PORT:-80}:80"
+    expose:
+      - "80"
     depends_on:
       - db-query-api
     networks:
