@@ -18,6 +18,7 @@ REDIS_URL = os.getenv("REDIS_URL")
 QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
+QDRANT_USE_TLS = os.getenv("QDRANT_USE_TLS", "false").lower() in ("1", "true", "yes")
 
 # Global database clients
 mongo_client: Optional[MongoClient] = None
@@ -28,12 +29,12 @@ qdrant_client: Optional[QdrantClient] = None
 async def startup_db_clients():
     """Initialize database clients on startup"""
     global mongo_client, redis_client, qdrant_client
-    
+
     # Validate that required connection strings are provided
     if not MONGODB_URL:
         logger.error("MONGODB_URL environment variable is not set")
         raise RuntimeError("MONGODB_URL must be set to connect to MongoDB")
-    
+
     if not REDIS_URL:
         logger.error("REDIS_URL environment variable is not set")
         raise RuntimeError("REDIS_URL must be set to connect to Redis")
@@ -63,9 +64,9 @@ async def startup_db_clients():
 
     # Connect to Qdrant (optional)
     try:
-        client = QdrantClient(
-            host=QDRANT_HOST, port=QDRANT_PORT, api_key=QDRANT_API_KEY, timeout=5
-        )
+        scheme = "https" if QDRANT_USE_TLS else "http"
+        url = f"{scheme}://{QDRANT_HOST}:{QDRANT_PORT}"
+        client = QdrantClient(url=url, api_key=QDRANT_API_KEY or None, timeout=5)
         client.get_collections()
         qdrant_client = client
         logger.info("✓ Qdrant connected successfully")
@@ -77,7 +78,7 @@ async def startup_db_clients():
 async def shutdown_db_clients():
     """Close database connections on shutdown"""
     global mongo_client, redis_client, qdrant_client
-    
+
     logger.info("Shutting down database clients...")
 
     if mongo_client:
@@ -86,19 +87,19 @@ async def shutdown_db_clients():
             logger.info("MongoDB client closed")
         except Exception as e:
             logger.error(f"Error closing MongoDB client: {e}")
-            
+
     if redis_client:
         try:
             redis_client.close()
             logger.info("Redis client closed")
         except Exception as e:
             logger.error(f"Error closing Redis client: {e}")
-            
+
     if qdrant_client:
         try:
             # Note: Close method availability depends on qdrant-client version
             # Check if close method exists before calling
-            if hasattr(qdrant_client, 'close'):
+            if hasattr(qdrant_client, "close"):
                 qdrant_client.close()
                 logger.info("Qdrant client closed")
         except Exception as e:
