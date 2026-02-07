@@ -61,12 +61,6 @@ services:
     expose:
       - "6333"
       - "6334"
-    healthcheck:
-      test: ["CMD-SHELL", "timeout 2 sh -c '</dev/tcp/localhost/6333' || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
 
   qdrant-init:
     build:
@@ -74,8 +68,7 @@ services:
       dockerfile: infrastructure/docker/Dockerfile.qdrant-init
     container_name: git-query-qdrant-init
     depends_on:
-      qdrant:
-        condition: service_healthy
+      - qdrant
     environment:
       QDRANT_HOST: qdrant
       QDRANT_PORT: 6333
@@ -118,12 +111,9 @@ services:
       - REDIS_URL=redis://:${REDIS_PASSWORD:-redispass}@redis:6379
       - DATA_INGESTION_API_KEY=${DATA_INGESTION_API_KEY}
     depends_on:
-      mongodb:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      qdrant:
-        condition: service_healthy
+      - mongodb
+      - redis
+      - qdrant
     networks:
       - db-network
       - web-network
