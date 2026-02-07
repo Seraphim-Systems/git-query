@@ -85,6 +85,8 @@ jobs:
           REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
           COSMOS_PARTITION_COUNT=${{ secrets.COSMOS_PARTITION_COUNT }}
           QDRANT_LOG_LEVEL=${{ secrets.QDRANT_LOG_LEVEL }}
+          DATA_INGESTION_API_KEY=${{ secrets.DATA_INGESTION_API_KEY }}
+          SERVER_NAME=${{ secrets.SERVER_NAME }}
           EOF
           
           echo "✅ Environment configured"
