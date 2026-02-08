@@ -141,43 +141,50 @@ For full stack deployment:
 
 ## Environment Variables
 
-Create a `.env` file with:
+Create a `.env` file with the new secret naming convention:
 
 ```bash
-# MongoDB
-MONGO_USER=admin
-MONGO_PASSWORD=<password>
-MONGO_DB=gitquery
+# Database Credentials
+DB_MONGODB_USER=admin
+DB_MONGODB_PASSWORD=<password>
+DB_MONGODB_DATABASE=gitquery
+DB_REDIS_PASSWORD=<password>
+DB_COSMOS_PARTITION_COUNT=10
+DB_QDRANT_API_KEY=<api-key>
 
-# Cosmos DB
-COSMOS_PARTITION_COUNT=10
+# API Keys (per-service authentication)
+APIKEY_MONGODB=<mongodb-api-key>
+APIKEY_REDIS=<redis-api-key>
+APIKEY_QDRANT=<qdrant-api-key>
+APIKEY_MCP=<mcp-api-key>
 
-# Qdrant
-QDRANT_API_KEY=<api-key>
-QDRANT_LOG_LEVEL=INFO
+# Application Secrets
+APP_JWT_SECRET=<jwt-secret>
+APP_SESSION_SECRET=<session-secret>
+APP_OPENAI_API_KEY=<openai-key>
 
-# Redis
-REDIS_PASSWORD=<password>
+# Service Configuration
+SVC_NGINX_SERVER_NAME=<your-domain>
+SVC_QDRANT_LOG_LEVEL=INFO
+SVC_LOG_LEVEL=INFO
 
-# DB API
-LOG_LEVEL=INFO
-DATA_INGESTION_API_KEY=<api-key>
-
-# Nginx
-NGINX_PORT=80
-SERVER_NAME=<your-domain>
-
-# Pipelines
+# Pipelines (optional)
 SCRAPE_INTERVAL=3600
 MAX_CONCURRENT_JOBS=5
 BATCH_SIZE=100
 
-# ML/Recommender
+# ML/Recommender (optional)
 INFERENCE_BATCH_SIZE=32
 TRAINING_BATCH_SIZE=64
 EPOCHS=10
 LEARNING_RATE=0.001
 ```
+
+**Note:** The new naming convention follows the pattern `<CATEGORY>_<SERVICE>_<PURPOSE>` for better organization:
+- `DB_*` - Database credentials
+- `APIKEY_*` - API keys for service endpoints
+- `APP_*` - Application-level secrets
+- `SVC_*` - Service configuration
 
 ## Legacy Files
 

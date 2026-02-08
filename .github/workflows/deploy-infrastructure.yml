@@ -23,16 +23,16 @@ jobs:
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.HETZNER_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts
 
       - name: Clone or Update Repository
         run: |
-          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << ENDSSH
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
           set -e
           
-          REPO_PATH="/home/${{ secrets.HETZNER_USER }}/git-query"
+          REPO_PATH="/home/${{ secrets.INFRA_HETZNER_USER }}/git-query"
           
           # Check if directory exists and is a valid git repo
           if [ -d "\$REPO_PATH" ]; then
@@ -67,30 +67,32 @@ jobs:
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.HETZNER_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts
 
       - name: Create Environment File
         run: |
-          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << ENDSSH
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
           set -e
           
-          cd /home/${{ secrets.HETZNER_USER }}/git-query
+          cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query
           
           cat > .env << EOF
-          MONGO_USER=${{ secrets.MONGO_USER }}
-          MONGO_PASSWORD=${{ secrets.MONGO_PASSWORD }}
-          MONGO_DB=${{ secrets.MONGO_DB }}
-          REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
-          COSMOS_PARTITION_COUNT=${{ secrets.COSMOS_PARTITION_COUNT }}
-          QDRANT_LOG_LEVEL=${{ secrets.QDRANT_LOG_LEVEL }}
-          SECRET_KEY=${{ secrets.SECRET_KEY }}
-          JWT_SECRET=${{ secrets.JWT_SECRET }}
-          API_SECRET=${{ secrets.API_SECRET }}
-          QDRANT_API_KEY=${{ secrets.QDRANT_API_KEY }}
-          DATA_INGESTION_API_KEY=${{ secrets.DATA_INGESTION_API_KEY }}
-          SERVER_NAME=${{ secrets.SERVER_NAME }}
+          DB_MONGODB_USER=${{ secrets.DB_MONGODB_USER }}
+          DB_MONGODB_PASSWORD=${{ secrets.DB_MONGODB_PASSWORD }}
+          DB_MONGODB_DATABASE=${{ secrets.DB_MONGODB_DATABASE }}
+          DB_REDIS_PASSWORD=${{ secrets.DB_REDIS_PASSWORD }}
+          DB_COSMOS_PARTITION_COUNT=${{ secrets.DB_COSMOS_PARTITION_COUNT }}
+          SVC_QDRANT_LOG_LEVEL=${{ secrets.SVC_QDRANT_LOG_LEVEL }}
+          APP_SESSION_SECRET=${{ secrets.APP_SESSION_SECRET }}
+          APP_JWT_SECRET=${{ secrets.APP_JWT_SECRET }}
+          DB_QDRANT_API_KEY=${{ secrets.DB_QDRANT_API_KEY }}
+          APIKEY_MONGODB=${{ secrets.APIKEY_MONGODB }}
+          APIKEY_REDIS=${{ secrets.APIKEY_REDIS }}
+          APIKEY_QDRANT=${{ secrets.APIKEY_QDRANT }}
+          SVC_NGINX_SERVER_NAME=${{ secrets.SVC_NGINX_SERVER_NAME }}
+          SVC_LOG_LEVEL=${{ secrets.SVC_LOG_LEVEL }}
           EOF
           
           # Copy .env to docker directory where compose is run
@@ -108,16 +110,16 @@ jobs:
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.HETZNER_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts
 
       - name: Deploy Infrastructure Services
         run: |
-          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << ENDSSH
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
           set -e
           
-          cd /home/${{ secrets.HETZNER_USER }}/git-query/infrastructure/docker
+          cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query/infrastructure/docker
           
           # Clean up any corrupted containers and remove volumes so DBs are recreated
           echo "🧹 Cleaning up existing containers and volumes..."
@@ -163,16 +165,16 @@ jobs:
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.HETZNER_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts
 
       - name: Health Check Services
         run: |
-          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << ENDSSH
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
           set -e
           
-          cd /home/${{ secrets.HETZNER_USER }}/git-query/infrastructure/docker
+          cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query/infrastructure/docker
           
           echo "🔍 Checking service health..."
           

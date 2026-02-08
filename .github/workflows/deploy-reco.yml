@@ -11,16 +11,16 @@ jobs:
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.HETZNER_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts
 
       - name: Clone or Update Repository
         run: |
-          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << ENDSSH
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
           set -e
           
-          REPO_PATH="/home/${{ secrets.HETZNER_USER }}/git-query"
+          REPO_PATH="/home/${{ secrets.INFRA_HETZNER_USER }}/git-query"
           
           # Check if directory exists and is a valid git repo
           if [ -d "\$REPO_PATH" ]; then
@@ -55,23 +55,27 @@ jobs:
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.HETZNER_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts
 
       - name: Create Environment File
         run: |
-          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << ENDSSH
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
           set -e
           
-          cd /home/${{ secrets.HETZNER_USER }}/git-query
+          cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query
           
           cat > .env << EOF
-          MONGO_USER=${{ secrets.MONGO_USER }}
-          MONGO_PASSWORD=${{ secrets.MONGO_PASSWORD }}
-          MONGO_DB=${{ secrets.MONGO_DB }}
-          REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
-          DATA_INGESTION_API_KEY=${{ secrets.DATA_INGESTION_API_KEY }}
+          DB_MONGODB_USER=${{ secrets.DB_MONGODB_USER }}
+          DB_MONGODB_PASSWORD=${{ secrets.DB_MONGODB_PASSWORD }}
+          DB_MONGODB_DATABASE=${{ secrets.DB_MONGODB_DATABASE }}
+          DB_REDIS_PASSWORD=${{ secrets.DB_REDIS_PASSWORD }}
+          DB_QDRANT_API_KEY=${{ secrets.DB_QDRANT_API_KEY }}
+          APIKEY_MONGODB=${{ secrets.APIKEY_MONGODB }}
+          APIKEY_REDIS=${{ secrets.APIKEY_REDIS }}
+          APIKEY_QDRANT=${{ secrets.APIKEY_QDRANT }}
+          SVC_LOG_LEVEL=${{ secrets.SVC_LOG_LEVEL }}
           INFERENCE_BATCH_SIZE=32
           EOF
           
@@ -86,13 +90,13 @@ jobs:
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.HETZNER_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts
 
       - name: Check Database Dependencies
         run: |
-          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << ENDSSH
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
           set -e
           
           echo "🔍 Checking database dependencies..."
@@ -114,10 +118,10 @@ jobs:
 
       - name: Deploy Recommender
         run: |
-          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << ENDSSH
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
           set -e
           
-          cd /home/${{ secrets.HETZNER_USER }}/git-query/infrastructure/docker
+          cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query/infrastructure/docker
           
           echo "🚀 Deploying Recommendation Engine..."
           docker-compose -f docker-compose.base.yml -f docker-compose.reco.yml up -d
@@ -135,16 +139,16 @@ jobs:
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.HETZNER_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts
 
       - name: Health Check Recommender
         run: |
-          ssh ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }} << ENDSSH
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
           set -e
           
-          cd /home/${{ secrets.HETZNER_USER }}/git-query/infrastructure/docker
+          cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query/infrastructure/docker
           
           echo "🔍 Checking Recommendation Engine health..."
           docker logs git-query-recommender --tail 20 && echo "✅ Recommender running" || echo "❌ Recommender failed"

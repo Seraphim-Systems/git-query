@@ -12,13 +12,13 @@ services:
     environment:
       - RECOMMENDER_HOST=0.0.0.0
       - RECOMMENDER_PORT=8095
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_LEVEL=${SVC_LOG_LEVEL:-INFO}
       - MODEL_PATH=/app/models
-      - MONGODB_URL=mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-mongopass}@mongodb:27017/gitquery?authSource=admin
+      - MONGODB_URL=mongodb://${DB_MONGODB_USER:-admin}:${DB_MONGODB_PASSWORD:-mongopass}@mongodb:27017/gitquery?authSource=admin
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
-      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
-      - REDIS_URL=redis://:${REDIS_PASSWORD:-redispass}@redis:6379
+      - QDRANT_API_KEY=${DB_QDRANT_API_KEY:-}
+      - REDIS_URL=redis://:${DB_REDIS_PASSWORD:-redispass}@redis:6379
       - INFERENCE_BATCH_SIZE=${INFERENCE_BATCH_SIZE:-32}
     depends_on:
       - mongodb
