@@ -35,11 +35,11 @@ app.add_middleware(
 app.add_event_handler("startup", startup_db_clients)
 app.add_event_handler("shutdown", shutdown_db_clients)
 
-# Include routers
-app.include_router(mongodb_router.router)
-app.include_router(redis_router.router)
-app.include_router(qdrant_router.router)
-app.include_router(batch_router.router)
+# Include routers with /api/v1 prefix
+app.include_router(mongodb_router.router, prefix="/api/v1")
+app.include_router(redis_router.router, prefix="/api/v1")
+app.include_router(qdrant_router.router, prefix="/api/v1")
+app.include_router(batch_router.router, prefix="/api/v1")
 
 
 # ============================================================================
@@ -49,7 +49,7 @@ app.include_router(batch_router.router)
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
+    """Health check endpoint - root level for load balancers"""
     status = {
         "status": "healthy",
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -62,17 +62,63 @@ async def health_check():
     return status
 
 
+@app.get("/api/v1/health")
+async def health_check_v1():
+    """Health check endpoint - API v1"""
+    status = {
+        "status": "healthy",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "databases": {
+            "mongodb": get_mongo_client() is not None,
+            "redis": get_redis_client() is not None,
+            "qdrant": get_qdrant_client() is not None,
+        },
+    }
+    return status
+
+
+@app.get("/api/v1/health/databases")
+async def health_check_databases():
+    """Detailed database health check"""
+    mongo_client = get_mongo_client()
+    redis_client = get_redis_client()
+    qdrant_client = get_qdrant_client()
+
+    databases = {
+        "mongodb": {
+            "connected": mongo_client is not None,
+            "status": "healthy" if mongo_client else "unavailable",
+        },
+        "redis": {
+            "connected": redis_client is not None,
+            "status": "healthy" if redis_client else "unavailable",
+        },
+        "qdrant": {
+            "connected": qdrant_client is not None,
+            "status": "healthy" if qdrant_client else "unavailable",
+        },
+    }
+
+    all_healthy = all(db["connected"] for db in databases.values())
+
+    return {
+        "status": "healthy" if all_healthy else "degraded",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "databases": databases,
+    }
+
+
 # ============================================================================
 # Documentation Endpoint
 # ============================================================================
 
 
-@app.get("/api/docs/examples")
+@app.get("/api/v1/docs/examples")
 async def get_examples():
     """Get example queries and usage patterns"""
     return {
         "mongodb_query": {
-            "endpoint": "POST /api/mongodb/query",
+            "endpoint": "POST /api/v1/mongodb/query",
             "auth": "X-API-Key header required",
             "example": {
                 "collection": "users",
@@ -81,7 +127,7 @@ async def get_examples():
             },
         },
         "mongodb_insert": {
-            "endpoint": "POST /api/mongodb/insert",
+            "endpoint": "POST /api/v1/mongodb/insert",
             "auth": "X-API-Key header required",
             "example": {
                 "collection": "users",
@@ -92,7 +138,7 @@ async def get_examples():
             },
         },
         "qdrant_search": {
-            "endpoint": "POST /api/qdrant/search",
+            "endpoint": "POST /api/v1/qdrant/search",
             "auth": "X-API-Key header required",
             "example": {
                 "collection": "repository_embeddings",
@@ -101,7 +147,7 @@ async def get_examples():
             },
         },
         "qdrant_insert": {
-            "endpoint": "POST /api/qdrant/insert",
+            "endpoint": "POST /api/v1/qdrant/insert",
             "auth": "X-API-Key header required",
             "example": {
                 "collection": "repository_embeddings",
@@ -112,6 +158,20 @@ async def get_examples():
                         "payload": {"repo_name": "example/repo"},
                     }
                 ],
+            },
+        },
+        "batch_insert": {
+            "endpoint": "POST /api/v1/batch/insert",
+            "auth": "X-API-Key header required",
+            "example": {
+                "mongodb_data": [
+                    {
+                        "database": "gitquery",
+                        "collection": "repos",
+                        "documents": [{"name": "test"}],
+                    }
+                ],
+                "redis_data": [{"key": "cache:test", "value": "data", "ttl": 3600}],
             },
         },
     }

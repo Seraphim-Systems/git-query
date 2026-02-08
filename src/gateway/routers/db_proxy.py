@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/db", tags=["database"])
 
-# Internal service URLs
-DB_QUERY_API_URL = "http://db-query-api:8000"
+# Internal service URLs - db-query-api routes are under /api/v1
+DB_QUERY_API_URL = "http://db-query-api:8080/api/v1"
 
 
 # ============================================================================
