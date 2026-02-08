@@ -21,47 +21,51 @@ jobs:
       - name: Create .env file from secrets
         run: |
           cat > .env.prod <<EOF
-          # Secrets
-          MONGO_USER=${{ secrets.MONGO_USER }}
-          MONGO_PASSWORD=${{ secrets.MONGO_PASSWORD }}
-          MONGO_DB=gitquery
-          REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
-          SECRET_KEY=${{ secrets.SECRET_KEY }}
-          JWT_SECRET=${{ secrets.JWT_SECRET }}
-          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-          API_SECRET=${{ secrets.API_SECRET }}
-          SERVER_NAME=${{ secrets.SERVER_NAME }}
-          # Optional/required service keys
-          DATA_INGESTION_API_KEY=${{ secrets.DATA_INGESTION_API_KEY }}
-          QDRANT_API_KEY=${{ secrets.QDRANT_API_KEY }}
-          COSMOS_PARTITION_COUNT=${{ secrets.COSMOS_PARTITION_COUNT }}
-          QDRANT_LOG_LEVEL=${{ secrets.QDRANT_LOG_LEVEL }}
+          # Database Credentials
+          DB_MONGODB_USER=${{ secrets.DB_MONGODB_USER }}
+          DB_MONGODB_PASSWORD=${{ secrets.DB_MONGODB_PASSWORD }}
+          DB_MONGODB_DATABASE=${{ secrets.DB_MONGODB_DATABASE }}
+          DB_REDIS_PASSWORD=${{ secrets.DB_REDIS_PASSWORD }}
+          DB_COSMOS_PARTITION_COUNT=${{ secrets.DB_COSMOS_PARTITION_COUNT }}
+          DB_QDRANT_API_KEY=${{ secrets.DB_QDRANT_API_KEY }}
+          # Application Secrets
+          APP_SESSION_SECRET=${{ secrets.APP_SESSION_SECRET }}
+          APP_JWT_SECRET=${{ secrets.APP_JWT_SECRET }}
+          APP_OPENAI_API_KEY=${{ secrets.APP_OPENAI_API_KEY }}
+          # API Keys
+          APIKEY_MONGODB=${{ secrets.APIKEY_MONGODB }}
+          APIKEY_REDIS=${{ secrets.APIKEY_REDIS }}
+          APIKEY_QDRANT=${{ secrets.APIKEY_QDRANT }}
+          # Service Configuration
+          SVC_NGINX_SERVER_NAME=${{ secrets.SVC_NGINX_SERVER_NAME }}
+          SVC_QDRANT_LOG_LEVEL=${{ secrets.SVC_QDRANT_LOG_LEVEL }}
+          SVC_LOG_LEVEL=${{ secrets.SVC_LOG_LEVEL }}
           EOF
 
       - name: Copy files to production server
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: ${{ secrets.HETZNER_HOST }}
-          username: ${{ secrets.HETZNER_USER }}
-          key: ${{ secrets.HETZNER_SSH_KEY }}
+          host: ${{ secrets.INFRA_HETZNER_HOST }}
+          username: ${{ secrets.INFRA_HETZNER_USER }}
+          key: ${{ secrets.INFRA_HETZNER_SSH_KEY }}
           source: ".,.env.prod"
-          target: "/home/${{ secrets.HETZNER_USER }}/git-query"
+          target: "/home/${{ secrets.INFRA_HETZNER_USER }}/git-query"
           strip_components: 0
           rm: true
 
       - name: Deploy to production server
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: ${{ secrets.HETZNER_HOST }}
-          username: ${{ secrets.HETZNER_USER }}
-          key: ${{ secrets.HETZNER_SSH_KEY }}
+          host: ${{ secrets.INFRA_HETZNER_HOST }}
+          username: ${{ secrets.INFRA_HETZNER_USER }}
+          key: ${{ secrets.INFRA_HETZNER_SSH_KEY }}
           script: |
             # Clone repository if it doesn't exist
-            if [ ! -d "/home/${{ secrets.HETZNER_USER }}/git-query" ]; then
-              git clone https://github.com/Seraphim-Systems/git-query.git /home/${{ secrets.HETZNER_USER }}/git-query
+            if [ ! -d "/home/${{ secrets.INFRA_HETZNER_USER }}/git-query" ]; then
+              git clone https://github.com/Seraphim-Systems/git-query.git /home/${{ secrets.INFRA_HETZNER_USER }}/git-query
             fi
             
-            cd /home/${{ secrets.HETZNER_USER }}/git-query
+            cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query
             
             # Move environment file
             mv .env.prod .env
@@ -84,11 +88,11 @@ jobs:
       - name: Verify deployment
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: ${{ secrets.HETZNER_HOST }}
-          username: ${{ secrets.HETZNER_USER }}
-          key: ${{ secrets.HETZNER_SSH_KEY }}
+          host: ${{ secrets.INFRA_HETZNER_HOST }}
+          username: ${{ secrets.INFRA_HETZNER_USER }}
+          key: ${{ secrets.INFRA_HETZNER_SSH_KEY }}
           script: |
-            cd /home/${{ secrets.HETZNER_USER }}/git-query
+            cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query
             echo "Checking service health..."
             docker-compose -f infrastructure/docker/docker-compose.base.yml -f infrastructure/docker/docker-compose.db.yml ps
             

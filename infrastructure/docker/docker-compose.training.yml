@@ -10,12 +10,12 @@ services:
       dockerfile: infrastructure/docker/Dockerfile.training
     container_name: git-query-training
     environment:
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_LEVEL=${SVC_LOG_LEVEL:-INFO}
       - MODEL_OUTPUT_PATH=/app/models
-      - MONGODB_URL=mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-mongopass}@mongodb:27017/gitquery?authSource=admin
+      - MONGODB_URL=mongodb://${DB_MONGODB_USER:-admin}:${DB_MONGODB_PASSWORD:-mongopass}@mongodb:27017/gitquery?authSource=admin
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
-      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
+      - QDRANT_API_KEY=${DB_QDRANT_API_KEY:-}
       - TRAINING_BATCH_SIZE=${TRAINING_BATCH_SIZE:-64}
       - EPOCHS=${EPOCHS:-10}
       - LEARNING_RATE=${LEARNING_RATE:-0.001}

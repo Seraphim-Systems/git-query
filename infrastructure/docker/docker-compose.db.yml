@@ -6,9 +6,9 @@ services:
     image: mongo:7.0
     container_name: git-query-mongodb
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-admin}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-mongopass}
-      MONGO_INITDB_DATABASE: ${MONGO_DB:-gitquery}
+      MONGO_INITDB_ROOT_USERNAME: ${DB_MONGODB_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${DB_MONGODB_PASSWORD:-mongopass}
+      MONGO_INITDB_DATABASE: ${DB_MONGODB_DATABASE:-gitquery}
     volumes:
       - mongodb-data:/data/db
       - mongodb-config:/data/configdb
@@ -30,7 +30,7 @@ services:
     image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:latest
     container_name: git-query-cosmos-db
     environment:
-      AZURE_COSMOS_EMULATOR_PARTITION_COUNT: ${COSMOS_PARTITION_COUNT:-10}
+      AZURE_COSMOS_EMULATOR_PARTITION_COUNT: ${DB_COSMOS_PARTITION_COUNT:-10}
       AZURE_COSMOS_EMULATOR_ENABLE_DATA_PERSISTENCE: 'true'
       AZURE_COSMOS_EMULATOR_IP_ADDRESS_OVERRIDE: 0.0.0.0
     volumes:
@@ -51,7 +51,7 @@ services:
     container_name: git-query-qdrant
     environment:
       QDRANT__SERVICE__GRPC_PORT: 6334
-      QDRANT__LOG_LEVEL: ${QDRANT_LOG_LEVEL:-INFO}
+      QDRANT__LOG_LEVEL: ${SVC_QDRANT_LOG_LEVEL:-INFO}
     volumes:
       - qdrant-storage:/qdrant/storage
       - qdrant-snapshots:/qdrant/snapshots
@@ -79,7 +79,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: git-query-redis
-    command: redis-server --requirepass ${REDIS_PASSWORD:-redispass}
+    command: redis-server --requirepass ${DB_REDIS_PASSWORD:-redispass}
     volumes:
       - redis-data:/data
     networks:
@@ -102,14 +102,16 @@ services:
     environment:
       - API_HOST=0.0.0.0
       - API_PORT=8080
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - MONGODB_URL=mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-mongopass}@mongodb:27017/gitquery?authSource=admin
+      - LOG_LEVEL=${SVC_LOG_LEVEL:-INFO}
+      - MONGODB_URL=mongodb://${DB_MONGODB_USER:-admin}:${DB_MONGODB_PASSWORD:-mongopass}@mongodb:27017/gitquery?authSource=admin
       - COSMOS_DB_URL=https://cosmos-db:8081
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
-      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
-      - REDIS_URL=redis://:${REDIS_PASSWORD:-redispass}@redis:6379
-      - DATA_INGESTION_API_KEY=${DATA_INGESTION_API_KEY}
+      - QDRANT_API_KEY=${DB_QDRANT_API_KEY:-}
+      - REDIS_URL=redis://:${DB_REDIS_PASSWORD:-redispass}@redis:6379
+      - MONGODB_API_KEY=${APIKEY_MONGODB}
+      - REDIS_API_KEY=${APIKEY_REDIS}
+      - QDRANT_API_KEY_AUTH=${APIKEY_QDRANT}
     depends_on:
       - mongodb
       - redis
@@ -128,8 +130,10 @@ services:
       dockerfile: infrastructure/docker/Dockerfile.web-db
     container_name: git-query-nginx
     environment:
-      - SERVER_NAME=${SERVER_NAME:-_}
-      - DATA_INGESTION_API_KEY=${DATA_INGESTION_API_KEY}
+      - SERVER_NAME=${SVC_NGINX_SERVER_NAME:-_}
+      - MONGODB_API_KEY=${APIKEY_MONGODB}
+      - REDIS_API_KEY=${APIKEY_REDIS}
+      - QDRANT_API_KEY=${APIKEY_QDRANT}
     expose:
       - "80"
     depends_on:

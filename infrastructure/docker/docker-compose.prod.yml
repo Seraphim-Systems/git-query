@@ -4,25 +4,25 @@ name: git-query
 services:
   mongodb:
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
-      MONGO_INITDB_DATABASE: ${MONGO_DB}
+      MONGO_INITDB_ROOT_USERNAME: ${DB_MONGODB_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${DB_MONGODB_PASSWORD}
+      MONGO_INITDB_DATABASE: ${DB_MONGODB_DATABASE}
     restart: always
 
   cosmos-db:
     environment:
-      AZURE_COSMOS_EMULATOR_PARTITION_COUNT: ${COSMOS_PARTITION_COUNT:-20}
+      AZURE_COSMOS_EMULATOR_PARTITION_COUNT: ${DB_COSMOS_PARTITION_COUNT:-20}
       AZURE_COSMOS_EMULATOR_ENABLE_DATA_PERSISTENCE: 'true'
     restart: always
 
   qdrant:
     environment:
-      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY}
+      QDRANT__SERVICE__API_KEY: ${DB_QDRANT_API_KEY}
       QDRANT__LOG_LEVEL: WARN
     restart: always
 
   redis:
-    command: redis-server --requirepass ${REDIS_PASSWORD}
+    command: redis-server --requirepass ${DB_REDIS_PASSWORD}
     restart: always
 
   nginx:
@@ -36,16 +36,16 @@ services:
   mcp-server:
     environment:
       - LOG_LEVEL=INFO
-      - MONGODB_URL=mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongodb:27017/gitquery?authSource=admin
-      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - MONGODB_URL=mongodb://${DB_MONGODB_USER}:${DB_MONGODB_PASSWORD}@mongodb:27017/gitquery?authSource=admin
+      - REDIS_URL=redis://:${DB_REDIS_PASSWORD}@redis:6379
+      - OPENAI_API_KEY=${APP_OPENAI_API_KEY}
     restart: always
 
   chatbot-client:
     environment:
       - LOG_LEVEL=INFO
-      - MONGODB_URL=mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongodb:27017/gitquery?authSource=admin
-      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - MONGODB_URL=mongodb://${DB_MONGODB_USER}:${DB_MONGODB_PASSWORD}@mongodb:27017/gitquery?authSource=admin
+      - REDIS_URL=redis://:${DB_REDIS_PASSWORD}@redis:6379
+      - OPENAI_API_KEY=${APP_OPENAI_API_KEY}
       - MODEL_NAME=${CHATBOT_MODEL_NAME:-gpt-4}
     restart: always

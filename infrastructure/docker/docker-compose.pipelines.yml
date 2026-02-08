@@ -10,9 +10,9 @@ services:
       dockerfile: infrastructure/docker/Dockerfile.scraper
     container_name: git-query-scraper
     environment:
-      - MONGODB_URL=mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-mongopass}@mongodb:27017/gitquery?authSource=admin
-      - REDIS_URL=redis://:${REDIS_PASSWORD:-redispass}@redis:6379
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - MONGODB_URL=mongodb://${DB_MONGODB_USER:-admin}:${DB_MONGODB_PASSWORD:-mongopass}@mongodb:27017/gitquery?authSource=admin
+      - REDIS_URL=redis://:${DB_REDIS_PASSWORD:-redispass}@redis:6379
+      - LOG_LEVEL=${SVC_LOG_LEVEL:-INFO}
       - SCRAPE_INTERVAL=${SCRAPE_INTERVAL:-3600}
       - MAX_CONCURRENT_JOBS=${MAX_CONCURRENT_JOBS:-5}
     depends_on:
@@ -30,12 +30,12 @@ services:
       dockerfile: infrastructure/docker/Dockerfile.processing
     container_name: git-query-processing
     environment:
-      - MONGODB_URL=mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-mongopass}@mongodb:27017/gitquery?authSource=admin
+      - MONGODB_URL=mongodb://${DB_MONGODB_USER:-admin}:${DB_MONGODB_PASSWORD:-mongopass}@mongodb:27017/gitquery?authSource=admin
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
-      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
-      - REDIS_URL=redis://:${REDIS_PASSWORD:-redispass}@redis:6379
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - QDRANT_API_KEY=${DB_QDRANT_API_KEY:-}
+      - REDIS_URL=redis://:${DB_REDIS_PASSWORD:-redispass}@redis:6379
+      - LOG_LEVEL=${SVC_LOG_LEVEL:-INFO}
       - BATCH_SIZE=${BATCH_SIZE:-100}
     depends_on:
       - mongodb
