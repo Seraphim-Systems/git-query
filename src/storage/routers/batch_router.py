@@ -8,7 +8,7 @@ from models.batch_models import BatchInsert
 from services.db_clients import get_mongo_client, get_redis_client, get_qdrant_client
 from auth import get_api_key
 
-router = APIRouter(prefix="/api/batch", tags=["Batch Operations"])
+router = APIRouter(prefix="/batch", tags=["Batch Operations"])
 
 
 @router.post("/insert", dependencies=[Depends(get_api_key)])
