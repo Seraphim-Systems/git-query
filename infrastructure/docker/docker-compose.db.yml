@@ -136,6 +136,7 @@ services:
       - db-query-api
     networks:
       - web-network
+      - proxy
     restart: unless-stopped
 
 volumes:
@@ -159,3 +160,6 @@ networks:
   web-network:
     name: git-query-web-network
     driver: bridge
+  proxy:
+    external: true
+    name: proxy
