@@ -13,7 +13,8 @@ from src.gateway.services.session_manager import SessionManager
 from src.gateway.services.user_service import UserService
 from src.gateway.middleware.session import SessionMiddleware
 from src.gateway.middleware.rate_limit import RateLimitMiddleware
-from src.gateway.routers import auth, chat, recommendations, user
+from src.gateway.middleware.api_key import APIKeyMiddleware
+from src.gateway.routers import auth, chat, recommendations, user, health_v1, db_proxy
 
 # Configure logging
 logging.basicConfig(
@@ -69,6 +70,7 @@ app.add_middleware(
 )
 
 # Add custom middleware
+app.add_middleware(APIKeyMiddleware)  # API key auth for /api/v1/db/*
 app.add_middleware(SessionMiddleware)
 app.add_middleware(
     RateLimitMiddleware,
@@ -86,6 +88,8 @@ async def global_exception_handler(_request: Request, exc: Exception):
 
 
 # Include routers
+app.include_router(health_v1.router)  # /api/v1/health
+app.include_router(db_proxy.router)  # /api/v1/db/*
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(chat.router, prefix="/chat", tags=["Chat"])
 app.include_router(
