@@ -4,6 +4,16 @@ Complete reference for all API endpoints in git-query.
 
 ## Base URLs
 
+Current Port Allocation:
+
+db-query-api: 8080
+mcp-server: 8090
+mongodb: 27017
+redis: 6379
+qdrant: 6333, 6334
+cosmos-db: 8081
+nginx: 80
+
 - **Root:** `/` - Serves static web application
 - **API:** `/api/v1/` - Versioned API endpoints
 - **Health:** `/api/v1/health` - System health checks (public)
