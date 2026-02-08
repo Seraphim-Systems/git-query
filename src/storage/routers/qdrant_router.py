@@ -2,13 +2,14 @@
 Qdrant API endpoints
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Body
+from typing import Dict, Any, List
 from qdrant_client.models import PointStruct
 from models.qdrant_models import QdrantQuery, QdrantInsert
 from services.db_clients import get_qdrant_client
 from auth import get_api_key
 
-router = APIRouter(prefix="/api/qdrant", tags=["Qdrant"])
+router = APIRouter(prefix="/qdrant", tags=["Qdrant"])
 
 
 @router.post("/search", dependencies=[Depends(get_api_key)])
@@ -85,3 +86,99 @@ async def list_qdrant_collections():
         raise HTTPException(
             status_code=500, detail=f"Failed to list collections: {str(e)}"
         )
+
+
+@router.post("/{collection}/search", dependencies=[Depends(get_api_key)])
+async def search_collection(
+    collection: str,
+    query: Dict[str, Any] = Body(
+        ...,
+        example={
+            "vector": [0.1, 0.2, 0.3],
+            "limit": 10,
+            "filter": {},
+            "with_payload": True,
+        },
+    ),
+):
+    """Search for similar vectors in a Qdrant collection"""
+    qdrant_client = get_qdrant_client()
+    if not qdrant_client:
+        raise HTTPException(status_code=503, detail="Qdrant not available")
+
+    try:
+        vector = query.get("vector")
+        limit = query.get("limit", 10)
+        score_threshold = query.get("score_threshold")
+
+        results = qdrant_client.search(
+            collection_name=collection,
+            query_vector=vector,
+            limit=limit,
+            score_threshold=score_threshold,
+        )
+
+        return {
+            "collection": collection,
+            "count": len(results),
+            "results": [
+                {"id": result.id, "score": result.score, "payload": result.payload}
+                for result in results
+            ],
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+
+
+@router.post("/{collection}/bulk", dependencies=[Depends(get_api_key)])
+async def bulk_upsert_vectors(
+    collection: str,
+    payload: Dict[str, Any] = Body(
+        ...,
+        example={
+            "points": [
+                {"id": "1", "vector": [0.1, 0.2], "payload": {"name": "item1"}},
+                {"id": "2", "vector": [0.3, 0.4], "payload": {"name": "item2"}},
+            ],
+            "wait": True,
+        },
+    ),
+):
+    """
+    Bulk upsert points into a Qdrant collection.
+
+    Optimized for loading large vector datasets. Uses upsert so it's idempotent.
+
+    Args:
+        collection: Collection name
+        payload: {
+            "points": [{"id": "1", "vector": [...], "payload": {...}}],
+            "wait": True  # Wait for operation to complete
+        }
+    """
+    qdrant_client = get_qdrant_client()
+    if not qdrant_client:
+        raise HTTPException(status_code=503, detail="Qdrant not available")
+
+    try:
+        points_data = payload.get("points", [])
+        wait = payload.get("wait", True)
+
+        points = [
+            PointStruct(
+                id=point.get("id"),
+                vector=point["vector"],
+                payload=point.get("payload", {}),
+            )
+            for point in points_data
+        ]
+
+        qdrant_client.upsert(collection_name=collection, points=points, wait=wait)
+
+        return {
+            "collection": collection,
+            "upserted": len(points),
+            "status": "completed",
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Bulk upsert failed: {str(e)}")

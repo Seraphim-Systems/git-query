@@ -5,6 +5,7 @@ Designed for data scientists to query and ingest data into the databases
 
 from datetime import datetime, timezone
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from services.db_clients import (
     startup_db_clients,
     shutdown_db_clients,
@@ -19,6 +20,15 @@ app = FastAPI(
     title="Git-Query Database API",
     description="API for querying and ingesting data into databases",
     version="1.0.0",
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Register startup and shutdown events

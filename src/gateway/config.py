@@ -29,6 +29,12 @@ class GatewaySettings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expiration: int = 86400  # 24 hours
 
+    # API Keys (per-service authentication)
+    mongodb_api_key: str = "mongodb-dev-key-change-in-prod"
+    redis_api_key: str = "redis-dev-key-change-in-prod"
+    qdrant_api_key: str = "qdrant-dev-key-change-in-prod"
+    mcp_api_key: str = "mcp-dev-key-change-in-prod"
+
     # CORS
     allowed_origins: str = "*"
 
