@@ -21,10 +21,11 @@ services:
       - "27017"
     healthcheck:
       test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
+      # Reduce frequency to lower connection churn during local development
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   cosmos-db:
     image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:latest
@@ -89,10 +90,11 @@ services:
       - "6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+      # Poll less frequently to reduce short-lived connections
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
   # Database Query API
   db-query-api:
     build:
