@@ -40,6 +40,12 @@ python-dotenv>=1.0.0
 # CLI & Terminal UI
 rich==13.7.0
 
+# Kaggle datasets
+kagglehub>=0.2.9
+
+# Streaming JSON for large datasets
+ijson>=3.2.3
+
 # Machine Learning & Embeddings
 sentence-transformers>=2.2.2
 torch>=2.0.0
