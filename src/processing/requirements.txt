@@ -39,3 +39,7 @@ python-dotenv>=1.0.0
 
 # CLI & Terminal UI
 rich==13.7.0
+
+# Machine Learning & Embeddings
+sentence-transformers>=2.2.2
+torch>=2.0.0

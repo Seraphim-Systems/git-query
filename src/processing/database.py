@@ -25,7 +25,7 @@ class DatabaseHelper:
             await db.repositories.create_index("full_name")
             await db.repositories.create_index("language")
             await db.repositories.create_index([("stars", -1)])
-            await db.repositories.create_index([("search_text", "text")])
+            await db.repositories.create_index([("search_text", "text")], language_override="none")
             
             logger.info("✓ Database indexes created")
         except Exception as e:

@@ -35,6 +35,5 @@ class ProcessingSettings(BaseSettings):
     
     class Config:
         env_file = ".env"
-        env_prefix = "PROCESSING_"
 
 settings = ProcessingSettings()
