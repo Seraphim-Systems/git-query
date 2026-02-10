@@ -58,6 +58,21 @@ class DataProcessor:
         )
         logger.info("✓ Qdrant connected")
         
+        # Ensure database collections and indexes exist
+        from processing.database import DatabaseHelper
+        
+        # Create MongoDB indexes
+        await DatabaseHelper.ensure_indexes(self.db)
+        logger.info("✓ MongoDB indexes verified")
+        
+        # Create Qdrant collection
+        DatabaseHelper.ensure_qdrant_collection(
+            self.qdrant_client,
+            settings.vector_collection,
+            vector_size=384  # all-MiniLM-L6-v2 embedding size
+        )
+        logger.info("✓ Qdrant collection verified")
+        
         # Initialize pipeline components
         self.ingestion = DataIngestion(self.db)
         self.transformer = DataTransformer()
