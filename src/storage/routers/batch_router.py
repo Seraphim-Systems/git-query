@@ -5,7 +5,7 @@ Batch operation endpoints
 from fastapi import APIRouter, Depends
 from qdrant_client.models import PointStruct
 from db.models import BatchInsert
-from services.db_clients import get_mongo_client, get_redis_client, get_qdrant_client
+from db.clients import get_mongo_client, get_redis_client, get_qdrant_client
 from auth import get_api_key
 
 router = APIRouter(prefix="/batch", tags=["Batch Operations"])
