@@ -4,7 +4,7 @@ MongoDB API endpoints
 
 from fastapi import APIRouter, HTTPException, Depends, Body
 from typing import Dict, Any, List
-from models.mongodb_models import MongoQuery, MongoInsert
+from db.models import MongoQuery, MongoInsert
 from services.db_clients import get_mongo_client
 from auth import get_api_key
 from pymongo import UpdateOne

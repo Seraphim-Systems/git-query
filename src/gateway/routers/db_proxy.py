@@ -45,6 +45,20 @@ async def list_mongodb_collections(request: Request):
         return response.json()
 
 
+
+@router.get("/cosmos/collections")
+async def list_cosmos_collections(request: Request):
+    """
+    **GET /api/v1/db/cosmos/collections**
+
+    List all Cosmos DB collections.
+    """
+    async with httpx.AsyncClient() as client:
+        response = await client.get(f"{DB_QUERY_API_URL}/cosmos/collections")
+        response.raise_for_status()
+        return response.json()
+
+
 @router.post("/mongodb/{collection}/query")
 async def query_mongodb_collection(
     collection: str,
@@ -88,6 +102,29 @@ async def query_mongodb_collection(
     async with httpx.AsyncClient() as client:
         response = await client.post(
             f"{DB_QUERY_API_URL}/mongodb/{collection}/query", json=query
+        )
+        response.raise_for_status()
+        return response.json()
+
+
+
+@router.post("/cosmos/{collection}/query")
+async def query_cosmos_collection(
+    collection: str,
+    request: Request,
+    query: Dict[str, Any] = Body(
+        ...,
+        example={
+            "filter": {"stars": {"$gt": 100}},
+            "projection": {"name": 1, "stars": 1},
+            "limit": 10,
+            "skip": 0,
+        },
+    ),
+):
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            f"{DB_QUERY_API_URL}/cosmos/{collection}/query", json=query
         )
         response.raise_for_status()
         return response.json()
@@ -140,6 +177,31 @@ async def bulk_insert_mongodb(
     ) as client:  # 5 min timeout for large batches
         response = await client.post(
             f"{DB_QUERY_API_URL}/mongodb/{collection}/bulk", json=payload
+        )
+        response.raise_for_status()
+        return response.json()
+
+
+
+@router.post("/cosmos/{collection}/bulk")
+async def bulk_insert_cosmos(
+    collection: str,
+    request: Request,
+    payload: Dict[str, Any] = Body(
+        ...,
+        example={
+            "documents": [
+                {"_id": "1", "name": "repo1", "stars": 100},
+                {"_id": "2", "name": "repo2", "stars": 200},
+            ],
+            "ordered": False,
+            "upsert": True,
+        },
+    ),
+):
+    async with httpx.AsyncClient(timeout=300.0) as client:
+        response = await client.post(
+            f"{DB_QUERY_API_URL}/cosmos/{collection}/bulk", json=payload
         )
         response.raise_for_status()
         return response.json()

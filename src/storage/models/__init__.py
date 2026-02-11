@@ -1,10 +1,17 @@
-"""
-Pydantic models for database API
+"""Compatibility shim: re-export models from `src.db.models`.
+
+Models have been centralized under `src/db/models`. This module keeps the
+historical `src.storage.models` import path working by re-exporting the
+classes from the canonical location.
 """
 
-from .mongodb_models import MongoQuery, MongoInsert
-from .qdrant_models import QdrantQuery, QdrantInsert
-from .batch_models import BatchInsert
+from db.models import (
+    MongoQuery,
+    MongoInsert,
+    QdrantQuery,
+    QdrantInsert,
+    BatchInsert,
+)
 
 __all__ = [
     "MongoQuery",
