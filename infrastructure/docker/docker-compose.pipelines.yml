@@ -55,5 +55,4 @@ volumes:
 
 networks:
   db-network:
-    external: true
     name: git-query-db-network
