@@ -4,7 +4,7 @@ FROM python:3.11-slim
 RUN pip install --no-cache-dir qdrant-client==1.7.0
 
 # Copy initialization script
-COPY src/storage/qdrant/qdrant-init.py /qdrant-init.py
+COPY src/db/inits/qdrant-init.py /qdrant-init.py
 
 # Run initialization
 CMD ["python", "/qdrant-init.py"]
