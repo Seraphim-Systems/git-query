@@ -1,4 +1,4 @@
-version: '3.8'
+
 
 # MCP (Model Context Protocol) Servers
 # Usage: docker-compose -f docker-compose.base.yml -f docker-compose.mcp.yml up

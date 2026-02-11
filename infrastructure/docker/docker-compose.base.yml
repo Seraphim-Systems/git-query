@@ -1,4 +1,4 @@
-version: '3.8'
+
 
 # Base compose file - defines shared networks and volumes
 # Does not deploy any containers - use with individual service compose files
