@@ -6,7 +6,7 @@ Designed for data scientists to query and ingest data into the databases
 from datetime import datetime, timezone
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from services.db_clients import (
+from db.clients import (
     startup_db_clients,
     shutdown_db_clients,
     get_mongo_client,
@@ -14,7 +14,7 @@ from services.db_clients import (
     get_qdrant_client,
     get_cosmos_client,
 )
-from routers import (
+from storage.routers import (
     mongodb_router,
     redis_router,
     qdrant_router,
