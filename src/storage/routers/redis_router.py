@@ -4,7 +4,7 @@ Redis API endpoints
 
 from typing import Optional, Dict, Any, List
 from fastapi import APIRouter, HTTPException, Depends, Body, Query
-from services.db_clients import get_redis_client
+from db.clients import get_redis_client
 from auth import get_api_key
 
 router = APIRouter(prefix="/redis", tags=["Redis"])
