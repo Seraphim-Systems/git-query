@@ -1,10 +1,12 @@
+
 FROM python:3.11-slim
 
-WORKDIR /app
+# Set working directory to /app/src for correct module resolution
+WORKDIR /app/src
 
 # Install dependencies
 COPY src/storage/requirements.txt /app/requirements-storage.txt
-RUN pip install --no-cache-dir -r requirements-storage.txt
+RUN pip install --no-cache-dir -r /app/requirements-storage.txt
 
 # Install additional dependencies for API
 RUN pip install --no-cache-dir \
@@ -16,13 +18,14 @@ RUN pip install --no-cache-dir \
   python-multipart==0.0.6 \
   pandas==2.1.4
 
-# Copy entire storage directory structure for proper imports
-COPY src/storage /app
+# Copy the entire src directory for all modules
+COPY src /app/src
 
 # Expose port
 EXPOSE 8080
 
-# Set PYTHONPATH to include /app and /app/../db for module resolution
-ENV PYTHONPATH="/app:/app/../db"
+# Set PYTHONPATH to /app/src for module resolution
+ENV PYTHONPATH="/app/src"
+
 # Run the API
 CMD ["python", "-m", "uvicorn", "db_query_api:app", "--host", "0.0.0.0", "--port", "8080", "--log-level", "info"]
