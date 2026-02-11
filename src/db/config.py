@@ -3,6 +3,7 @@ from typing import Optional
 from dataclasses import dataclass
 
 
+
 @dataclass
 class DatabaseConfig:
     mongodb_url: str
@@ -12,11 +13,11 @@ class DatabaseConfig:
     mongodb_password: str
     mongodb_db: str
     cosmos_db_url: str
-    cosmos_db_key: Optional[str] = None
-    cosmos_db_name: str = "gitquery_cosmos"
     qdrant_url: str
     qdrant_host: str
     qdrant_port: int
+    cosmos_db_key: Optional[str] = None
+    cosmos_db_name: str = "gitquery_cosmos"
     qdrant_api_key: Optional[str] = None
 
     @classmethod
