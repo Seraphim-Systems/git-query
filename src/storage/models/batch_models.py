@@ -1,14 +1,5 @@
-"""
-Batch operation Pydantic models
-"""
+"""Compatibility shim: re-export Batch models from `src.db.models`."""
 
-from typing import Any, Dict, List, Optional
-from pydantic import BaseModel
-from .mongodb_models import MongoInsert
-from .qdrant_models import QdrantInsert
+from db.models import BatchInsert
 
-
-class BatchInsert(BaseModel):
-    mongodb_data: Optional[List[MongoInsert]] = None
-    qdrant_data: Optional[List[QdrantInsert]] = None
-    redis_data: Optional[List[Dict[str, Any]]] = None
+__all__ = ["BatchInsert"]

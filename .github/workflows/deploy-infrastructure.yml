@@ -91,6 +91,8 @@ jobs:
           APIKEY_MONGODB=${{ secrets.APIKEY_MONGODB }}
           APIKEY_REDIS=${{ secrets.APIKEY_REDIS }}
           APIKEY_QDRANT=${{ secrets.APIKEY_QDRANT }}
+          # Cosmos DB configuration: accept APIKEY_COSMODB or COSMOS_DB_KEY
+          APIKEY_COSMODB=${{ secrets.APIKEY_COSMODB }}
           SVC_NGINX_SERVER_NAME=${{ secrets.SVC_NGINX_SERVER_NAME }}
           SVC_LOG_LEVEL=${{ secrets.SVC_LOG_LEVEL }}
           EOF

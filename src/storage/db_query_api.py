@@ -12,8 +12,15 @@ from services.db_clients import (
     get_mongo_client,
     get_redis_client,
     get_qdrant_client,
+    get_cosmos_client,
 )
-from routers import mongodb_router, redis_router, qdrant_router, batch_router
+from routers import (
+    mongodb_router,
+    redis_router,
+    qdrant_router,
+    batch_router,
+    cosmos_router,
+)
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -40,6 +47,7 @@ app.include_router(mongodb_router.router, prefix="/api/v1")
 app.include_router(redis_router.router, prefix="/api/v1")
 app.include_router(qdrant_router.router, prefix="/api/v1")
 app.include_router(batch_router.router, prefix="/api/v1")
+app.include_router(cosmos_router.router, prefix="/api/v1")
 
 
 # ============================================================================
@@ -55,6 +63,7 @@ async def health_check():
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "databases": {
             "mongodb": get_mongo_client() is not None,
+            "cosmos": get_cosmos_client() is not None,
             "redis": get_redis_client() is not None,
             "qdrant": get_qdrant_client() is not None,
         },
@@ -81,6 +90,7 @@ async def health_check_v1():
 async def health_check_databases():
     """Detailed database health check"""
     mongo_client = get_mongo_client()
+    cosmos_client = get_cosmos_client()
     redis_client = get_redis_client()
     qdrant_client = get_qdrant_client()
 
@@ -88,6 +98,10 @@ async def health_check_databases():
         "mongodb": {
             "connected": mongo_client is not None,
             "status": "healthy" if mongo_client else "unavailable",
+        },
+        "cosmos": {
+            "connected": cosmos_client is not None,
+            "status": "healthy" if cosmos_client else "unavailable",
         },
         "redis": {
             "connected": redis_client is not None,

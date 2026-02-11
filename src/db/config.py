@@ -26,6 +26,17 @@ class DatabaseConfig:
         mu = os.getenv("MONGO_USER", "admin")
         mpw = os.getenv("MONGO_PASSWORD")
         md = os.getenv("MONGO_DB", "gitquery")
+
+        # Cosmos: allow full URL or construct from host/port and accept APIKEY_COSMODB as key
+        cosmos_url = os.getenv("COSMOS_DB_URL")
+        if not cosmos_url:
+            ch = os.getenv("COSMOS_DB_HOST", "cosmos")
+            cp = os.getenv("COSMOS_DB_PORT", "10255")
+            # Use Mongo-compatible scheme by default
+            cosmos_url = f"mongodb://{ch}:{cp}"
+
+        cosmos_key = os.getenv("COSMOS_DB_KEY") or os.getenv("APIKEY_COSMODB")
+
         return cls(
             mongodb_url=os.getenv(
                 "MONGODB_URL", f"mongodb://{mu}:{mpw}@{mh}:{mp}/{md}?authSource=admin"
@@ -35,8 +46,8 @@ class DatabaseConfig:
             mongodb_user=mu,
             mongodb_password=mpw,
             mongodb_db=md,
-            cosmos_db_url=os.getenv("COSMOS_DB_URL", "https://localhost:8081"),
-            cosmos_db_key=os.getenv("COSMOS_DB_KEY"),
+            cosmos_db_url=cosmos_url,
+            cosmos_db_key=cosmos_key,
             cosmos_db_name=os.getenv("COSMOS_DB_NAME", "gitquery_cosmos"),
             qdrant_url=os.getenv(
                 "QDRANT_URL",
