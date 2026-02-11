@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Depends, Body
 from typing import Dict, Any, List
 from db.models import MongoQuery, MongoInsert
 from db.clients import get_mongo_client
-from auth import get_api_key
+from storage.auth import get_api_key
 from pymongo import UpdateOne
 
 router = APIRouter(prefix="/mongodb", tags=["MongoDB"])

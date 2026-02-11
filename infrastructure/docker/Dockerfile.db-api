@@ -1,8 +1,7 @@
 
 FROM python:3.11-slim
 
-# Set working directory to /app/src for correct module resolution
-WORKDIR /app/src
+WORKDIR /app
 
 # Install dependencies
 COPY src/storage/requirements.txt /app/requirements-storage.txt

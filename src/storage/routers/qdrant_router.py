@@ -7,7 +7,7 @@ from typing import Dict, Any, List
 from qdrant_client.models import PointStruct
 from db.models import QdrantQuery, QdrantInsert
 from db.clients import get_qdrant_client
-from auth import get_api_key
+from storage.auth import get_api_key
 
 router = APIRouter(prefix="/qdrant", tags=["Qdrant"])
 
