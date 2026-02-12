@@ -4,6 +4,7 @@ import time
 from collections import defaultdict
 from fastapi import Request, HTTPException, status
 from starlette.middleware.base import BaseHTTPMiddleware
+from src.gateway.middleware.shared import PUBLIC_PATHS
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -25,6 +26,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         """Process request and check rate limit."""
+
+        # Skip rate limiting for public endpoints (health, docs, etc.)
+        if any(request.url.path.startswith(path) for path in PUBLIC_PATHS):
+            return await call_next(request)
 
         # Get client identifier (IP or user_id if authenticated)
         client_id = request.client.host if request.client else "unknown"

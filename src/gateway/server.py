@@ -140,7 +140,27 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     else:
         logger.info(msg)
 
-    content = {"detail": exc.detail if exc.detail else "Not Found"}
+    # Provide clearer, structured responses for common cases
+    if exc.status_code == 404:
+        content = {
+            "detail": "Route not found",
+            "path": request.url.path,
+        }
+    elif exc.status_code == 401:
+        content = {
+            "detail": "Not authenticated",
+            "reason": exc.detail or "Authentication required",
+        }
+    else:
+        content = {"detail": exc.detail if exc.detail else "HTTP error"}
+
+    # Preserve any headers the original exception carried (e.g., WWW-Authenticate)
+    headers = getattr(exc, "headers", None)
+    if headers:
+        return JSONResponse(
+            status_code=exc.status_code, content=content, headers=headers
+        )
+
     return JSONResponse(status_code=exc.status_code, content=content)
 
 
@@ -164,9 +184,16 @@ app.include_router(cosmos_router.router, prefix="/api/cosmos")
 
 # Health check
 @app.get("/health")
-async def health_check():
+async def health_check(request: Request):
     """Health check endpoint."""
-    return {"status": "healthy", "service": "api-gateway"}
+    # Delegate to the canonical API health handler so the top-level `/health`
+    # returns the same detailed information as `/api/health`.
+    from src.gateway.routers.health import health_check_all
+
+    # Bridge the FastAPI Request to the delegated handler which expects one.
+    # Import Request locally to avoid circular import issues during module
+    # import time (the global Request type is already available).
+    return await health_check_all(request)
 
 
 if __name__ == "__main__":
