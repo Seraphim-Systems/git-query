@@ -12,7 +12,7 @@ from pymongo import MongoClient
 import redis
 from qdrant_client import QdrantClient
 
-from db import config as db_config
+from src.db import config as db_config
 
 logger = logging.getLogger(__name__)
 
