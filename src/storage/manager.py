@@ -1,41 +1,53 @@
 """
-Database clients for Git-Query application.
-Provides unified access to all database services.
+Database manager convenience wrapper.
+
+This module exposes a thin `DatabaseManager` that delegates to the canonical
+database configuration and client singletons in `src.db.config` and
+`src.db.clients` so storage code can import a consistent API without
+duplicating environment loading.
 """
 
 from typing import Optional
 
-# Import database configuration from the canonical db package
-from src.db.config import DatabaseConfig, db_clients
+from src.db.config import db_clients
 
 
 class DatabaseManager:
-    """Central database manager for all Git-Query services."""
+    """Central database manager for all Git-Query services.
+
+    This manager intentionally avoids re-reading environment variables and
+    instead delegates to the shared `db_clients` singleton (which itself is
+    configured from shared settings). This keeps configuration in one place
+    and avoids duplication.
+    """
 
     def __init__(self):
-        """Initialize database connections."""
-        self.config = DatabaseConfig.from_env()
         self._clients = db_clients
+        self.config = getattr(db_clients, "config", None)
 
     def get_mongodb(self):
-        """Get MongoDB client."""
+        """Get MongoDB client instance (pymongo.MongoClient)."""
         return self._clients.mongodb
 
     def get_cosmos(self):
-        """Get Cosmos DB client."""
+        """Get Cosmos DB client instance (pymongo.MongoClient) or None."""
         return self._clients.cosmos
 
     def get_qdrant(self):
-        """Get Qdrant client."""
+        """Get Qdrant client instance or None."""
         return self._clients.qdrant
 
     def get_redis(self):
-        """Get Redis client."""
+        """Get Redis client from `src.db.clients.get_redis_client()`."""
         return self._clients.redis
 
     def close_all(self):
-        """Close all database connections."""
-        self._clients.close_all()
+        """Close underlying clients managed by `db_clients`."""
+        try:
+            self._clients.close_all()
+        except Exception:
+            # Some deployments may manage lifecycle separately; ignore errors.
+            pass
 
 
 # Global database manager instance
@@ -44,70 +56,39 @@ db_manager = DatabaseManager()
 
 # Convenience functions
 def get_mongodb_db(db_name: Optional[str] = None):
-    """
-    Get MongoDB database instance.
-
-    Args:
-        db_name: Database name (defaults to configured database)
-
-    Returns:
-        MongoDB database instance
-    """
     if db_name:
         return db_manager.get_mongodb()[db_name]
-    return db_manager.get_mongodb()[db_manager.config.mongodb_db]
+    if db_manager.config and getattr(db_manager.config, "mongodb_db", None):
+        return db_manager.get_mongodb()[db_manager.config.mongodb_db]
+    # Fallback: return the default database handle
+    return db_manager.get_mongodb()
 
 
 def get_cosmos_db(db_name: Optional[str] = None):
-    """
-    Get Cosmos DB database instance.
-
-    Args:
-        db_name: Database name (defaults to configured database)
-
-    Returns:
-        Cosmos DB database instance
-    """
     if db_name:
         return db_manager.get_cosmos()[db_name]
-    return db_manager.get_cosmos()[db_manager.config.cosmos_db_name]
+    if db_manager.config and getattr(db_manager.config, "cosmos_db_name", None):
+        return db_manager.get_cosmos()[db_manager.config.cosmos_db_name]
+    return db_manager.get_cosmos()
 
 
 def get_qdrant_client():
-    """
-    Get Qdrant client.
-
-    Returns:
-        Qdrant client instance
-    """
     return db_manager.get_qdrant()
 
 
 def get_redis_client():
-    """
-    Get Redis client.
-
-    Returns:
-        Redis client instance
-    """
     return db_manager.get_redis()
 
 
 def get_postgres_conn():
-    """
-    Get PostgreSQL connection from pool.
+    """Postgres support not configured in this manager.
 
-    Returns:
-        PostgreSQL connection
+    If you require Postgres, wire it into `src.db.config` and expose it from
+    the `db_clients` singleton. For now this raises to make missing usage
+    explicit.
     """
-    return db_manager.get_postgres().getconn()
+    raise NotImplementedError("Postgres is not configured in db_clients")
 
 
 def return_postgres_conn(conn):
-    """
-    Return PostgreSQL connection to pool.
-
-    Args:
-        conn: PostgreSQL connection to return
-    """
-    db_manager.get_postgres().putconn(conn)
+    raise NotImplementedError("Postgres is not configured in db_clients")

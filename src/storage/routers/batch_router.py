@@ -44,8 +44,8 @@ async def batch_insert(batch: BatchInsert):
     if batch.mongodb_data and mongo_client:
         for insert_op in batch.mongodb_data:
             try:
-                db = mongo_client[insert_op.database]
-                collection = db[insert_op.collection]
+                db = mongo_client.get_database(insert_op.database)
+                collection = db.get_collection(insert_op.collection)
                 result = collection.insert_many(insert_op.documents)
                 results["mongodb"].append(
                     {

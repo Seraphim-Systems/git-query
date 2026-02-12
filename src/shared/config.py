@@ -1,20 +1,16 @@
-"""Gateway configuration."""
-
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, Optional
 
 
-class GatewaySettings(BaseSettings):
-    """API Gateway settings."""
-
+class Settings(BaseSettings):
     # Server
     host: str = "0.0.0.0"
     port: int = 80
 
     # Redis
     redis_url: str = "redis://localhost:6379"
-    session_ttl: int = 86400  # 24 hours
-    cache_ttl: int = 3600  # 1 hour
+    session_ttl: int = 86400
+    cache_ttl: int = 3600
 
     # MongoDB
     mongodb_url: str = "mongodb://localhost:27017"
@@ -27,20 +23,20 @@ class GatewaySettings(BaseSettings):
     # Security
     jwt_secret: str = "change-me-in-production"
     jwt_algorithm: str = "HS256"
-    jwt_expiration: int = 86400  # 24 hours
+    jwt_expiration: int = 86400
 
-    # API Keys (per-service authentication)
-    mongodb_api_key: str = "mongodb-dev-key-change-in-prod"
-    redis_api_key: str = "redis-dev-key-change-in-prod"
-    qdrant_api_key: str = "qdrant-dev-key-change-in-prod"
-    mcp_api_key: str = "mcp-dev-key-change-in-prod"
+    # API Keys
+    mongodb_api_key: Optional[str] = None
+    redis_api_key: Optional[str] = None
+    qdrant_api_key: Optional[str] = None
+    mcp_api_key: Optional[str] = None
 
     # CORS
     allowed_origins: str = "*"
 
     # Rate limiting
     rate_limit_requests: int = 100
-    rate_limit_window: int = 60  # seconds
+    rate_limit_window: int = 60
 
     # Logging
     log_level: str = "INFO"
@@ -51,7 +47,7 @@ class GatewaySettings(BaseSettings):
 
     class Config:
         env_file = ".env"
-        env_prefix = "GATEWAY_"
+        env_prefix = ""
 
 
-settings = GatewaySettings()
+settings = Settings()

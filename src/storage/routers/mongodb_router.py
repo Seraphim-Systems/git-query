@@ -3,7 +3,7 @@ MongoDB API endpoints
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Body
-from typing import Dict, Any, List
+from typing import Dict, Any
 from src.db.models import MongoQuery, MongoInsert
 from src.db.clients import get_mongo_client
 from src.storage.auth import get_api_key
@@ -35,8 +35,8 @@ async def query_mongodb(query: MongoQuery):
         raise HTTPException(status_code=503, detail="MongoDB not available")
 
     try:
-        db = mongo_client[query.database]
-        collection = db[query.collection]
+        db = mongo_client.get_database(query.database)
+        collection = db.get_collection(query.collection)
 
         cursor = (
             collection.find(query.filter, query.projection)
@@ -67,8 +67,8 @@ async def insert_mongodb(insert: MongoInsert):
         raise HTTPException(status_code=503, detail="MongoDB not available")
 
     try:
-        db = mongo_client[insert.database]
-        collection = db[insert.collection]
+        db = mongo_client.get_database(insert.database)
+        collection = db.get_collection(insert.collection)
 
         result = collection.insert_many(insert.documents)
 
@@ -88,7 +88,7 @@ async def list_mongodb_collections(database: str = "gitquery"):
         raise HTTPException(status_code=503, detail="MongoDB not available")
 
     try:
-        db = mongo_client[database]
+        db = mongo_client.get_database(database)
         collections = db.list_collection_names()
         return {"database": database, "collections": collections}
     except Exception as e:
@@ -121,8 +121,8 @@ async def query_collection(
         raise HTTPException(status_code=503, detail="MongoDB not available")
 
     try:
-        db = mongo_client["gitquery"]
-        coll = db[collection]
+        db = mongo_client.get_database("gitquery")
+        coll = db.get_collection(collection)
 
         filter_query = query.get("filter", {})
         projection = query.get("projection")
@@ -178,8 +178,8 @@ async def bulk_upsert_collection(
         raise HTTPException(status_code=503, detail="MongoDB not available")
 
     try:
-        db = mongo_client["gitquery"]
-        coll = db[collection]
+        db = mongo_client.get_database("gitquery")
+        coll = db.get_collection(collection)
 
         documents = payload.get("documents", [])
         ordered = payload.get("ordered", False)

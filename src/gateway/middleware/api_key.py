@@ -3,18 +3,10 @@
 import logging
 from fastapi import Request, HTTPException, status
 from starlette.middleware.base import BaseHTTPMiddleware
+from src.gateway.middleware.shared import PUBLIC_PATHS
+from src.shared.config import settings
 
 logger = logging.getLogger(__name__)
-
-# Public endpoints that don't require authentication
-PUBLIC_PATHS = [
-    "/health",
-    "/api/health",
-    "/docs",
-    "/openapi.json",
-    "/auth/login",
-    "/auth/register",
-]
 
 
 class APIKeyMiddleware(BaseHTTPMiddleware):
@@ -74,7 +66,6 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         Validate API key for a specific service.
         Checks against environment variables or config.
         """
-        from src.gateway.config import settings
 
         # Map service names to config attributes
         service_keys = {

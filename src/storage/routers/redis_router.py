@@ -2,7 +2,7 @@
 Redis API endpoints
 """
 
-from typing import Optional, Dict, Any, List
+from typing import Dict, Any
 from fastapi import APIRouter, HTTPException, Depends, Body, Query
 from src.db.clients import get_redis_client
 from src.storage.auth import get_api_key

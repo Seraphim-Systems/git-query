@@ -2,61 +2,54 @@ import os
 from typing import Optional
 from dataclasses import dataclass
 
+from src.shared.config import settings
 
 
 @dataclass
 class DatabaseConfig:
+    """Small holder that maps shared settings into a config shape used by
+    legacy callers in the codebase.
+    """
+
     mongodb_url: str
-    mongodb_host: str
-    mongodb_port: int
-    mongodb_user: str
-    mongodb_password: str
     mongodb_db: str
-    cosmos_db_url: str
-    qdrant_url: str
-    qdrant_host: str
-    qdrant_port: int
-    cosmos_db_key: Optional[str] = None
-    cosmos_db_name: str = "gitquery_cosmos"
-    qdrant_api_key: Optional[str] = None
+    cosmos_db_url: Optional[str]
+    cosmos_db_name: str
+    qdrant_url: Optional[str]
+    qdrant_api_key: Optional[str]
 
     @classmethod
-    def from_env(cls):
-        mh = os.getenv("MONGO_HOST", "localhost")
-        mp = int(os.getenv("MONGO_PORT", "27017"))
-        mu = os.getenv("MONGO_USER", "admin")
-        mpw = os.getenv("MONGO_PASSWORD")
-        md = os.getenv("MONGO_DB", "gitquery")
+    def from_settings(cls):
+        # Prefer shared settings, otherwise fall back to env vars
+        mongodb_url = getattr(settings, "mongodb_url", None) or os.getenv(
+            "MONGODB_URL"
+        )
+        mongodb_db = getattr(settings, "mongodb_db", "gitquery")
 
-        # Cosmos: allow full URL or construct from host/port and accept APIKEY_COSMODB as key
-        cosmos_url = os.getenv("COSMOS_DB_URL")
-        if not cosmos_url:
+        cosmos_db_url = os.getenv("COSMOS_DB_URL")
+        if not cosmos_db_url:
             ch = os.getenv("COSMOS_DB_HOST", "cosmos")
             cp = os.getenv("COSMOS_DB_PORT", "10255")
-            # Use Mongo-compatible scheme by default
-            cosmos_url = f"mongodb://{ch}:{cp}"
+            cosmos_db_url = f"mongodb://{ch}:{cp}" if ch and cp else None
 
-        cosmos_key = os.getenv("COSMOS_DB_KEY") or os.getenv("APIKEY_COSMODB")
+        cosmos_db_name = os.getenv("COSMOS_DB_NAME", "gitquery_cosmos")
+
+        qdrant_url = os.getenv(
+            "QDRANT_URL",
+            f"http://{os.getenv('QDRANT_HOST', 'localhost')}:{os.getenv('QDRANT_HTTP_PORT', '6333')}",
+        )
+
+        qdrant_api_key = getattr(settings, "qdrant_api_key", None) or os.getenv(
+            "QDRANT_API_KEY"
+        )
 
         return cls(
-            mongodb_url=os.getenv(
-                "MONGODB_URL", f"mongodb://{mu}:{mpw}@{mh}:{mp}/{md}?authSource=admin"
-            ),
-            mongodb_host=mh,
-            mongodb_port=mp,
-            mongodb_user=mu,
-            mongodb_password=mpw,
-            mongodb_db=md,
-            cosmos_db_url=cosmos_url,
-            cosmos_db_key=cosmos_key,
-            cosmos_db_name=os.getenv("COSMOS_DB_NAME", "gitquery_cosmos"),
-            qdrant_url=os.getenv(
-                "QDRANT_URL",
-                f"http://{os.getenv('QDRANT_HOST', 'localhost')}:{os.getenv('QDRANT_HTTP_PORT', '6333')}",
-            ),
-            qdrant_host=os.getenv("QDRANT_HOST", "localhost"),
-            qdrant_port=int(os.getenv("QDRANT_HTTP_PORT", "6333")),
-            qdrant_api_key=os.getenv("QDRANT_API_KEY"),
+            mongodb_url=mongodb_url,
+            mongodb_db=mongodb_db,
+            cosmos_db_url=cosmos_db_url,
+            cosmos_db_name=cosmos_db_name,
+            qdrant_url=qdrant_url,
+            qdrant_api_key=qdrant_api_key,
         )
 
 
@@ -71,7 +64,7 @@ class DatabaseClients:
 
     def __init__(self):
         if not self._initialized:
-            self.config = DatabaseConfig.from_env()
+            self.config = DatabaseConfig.from_settings()
             self._mongodb_client = self._cosmos_client = self._qdrant_client = None
             self._initialized = True
 
@@ -85,12 +78,11 @@ class DatabaseClients:
 
     @property
     def cosmos(self):
-        if self._cosmos_client is None:
+        if self._cosmos_client is None and self.config.cosmos_db_url:
             from pymongo import MongoClient
 
             self._cosmos_client = MongoClient(
                 self.config.cosmos_db_url,
-                password=self.config.cosmos_db_key,
                 ssl=True,
                 tls=True,
                 tlsAllowInvalidCertificates=True,
@@ -99,13 +91,30 @@ class DatabaseClients:
 
     @property
     def qdrant(self):
-        if self._qdrant_client is None:
+        if self._qdrant_client is None and self.config.qdrant_url:
             from qdrant_client import QdrantClient
 
             self._qdrant_client = QdrantClient(
                 url=self.config.qdrant_url, api_key=self.config.qdrant_api_key
             )
         return self._qdrant_client
+
+    @property
+    def redis(self):
+        """Return the runtime Redis client if available.
+
+        The canonical Redis client is managed by `src.db.clients`. Some
+        callsites access `db_clients.redis` directly; this property delegates
+        to that module to avoid duplication and to preserve a single
+        initialization path.
+        """
+        try:
+            # import here to avoid circular import at module import time
+            from src.db.clients import get_redis_client
+
+            return get_redis_client()
+        except Exception:
+            return None
 
     def close_all(self):
         if self._mongodb_client:
@@ -114,6 +123,15 @@ class DatabaseClients:
             self._cosmos_client.close()
         if self._qdrant_client:
             self._qdrant_client.close()
+        # Attempt to close redis if present on the runtime clients
+        try:
+            from src.db.clients import get_redis_client
+
+            rc = get_redis_client()
+            if rc is not None and hasattr(rc, "close"):
+                rc.close()
+        except Exception:
+            pass
 
 
 db_clients = DatabaseClients()

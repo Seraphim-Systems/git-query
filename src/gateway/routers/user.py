@@ -1,7 +1,6 @@
 """User router."""
 
 from fastapi import APIRouter, Depends, Request
-from typing import Dict, Any
 
 from src.gateway.middleware.session import get_current_user
 from src.gateway.services.user_service import UserPreferences
