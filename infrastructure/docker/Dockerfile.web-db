@@ -3,9 +3,8 @@ FROM nginx:alpine
 # Copy nginx configuration template (required file)
 COPY web/nginx.conf /etc/nginx/templates/default.conf.template
 
-# Create default index.html
-RUN mkdir -p /usr/share/nginx/html && \
-  echo '<!DOCTYPE html><html><head><title>Git-Query Database API</title></head><body><h1>Git-Query Database API</h1><p>API is running. Visit <a href="/api/docs">/api/docs</a> for interactive documentation.</p></body></html>' > /usr/share/nginx/html/index.html
+# Do not create a default HTML index page; return JSON 404 for unknown routes
+RUN mkdir -p /usr/share/nginx/html
 
 EXPOSE 80
 

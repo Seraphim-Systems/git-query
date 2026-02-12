@@ -1,8 +1,40 @@
 """
-Database proxy router for API v1.
+Database proxy router for the gateway.
 
-Provides unified interface to interact with MongoDB, Redis, Qdrant, and MCP server.
-All endpoints require API key authentication (per-service).
+Provides a unified interface to interact with MongoDB, Redis, Qdrant, and MCP server.
+All endpoints require API key authentication (per-service) when accessed through the
+API Gateway.
+
+Request Flow
+------------
+- External clients / web frontend:
+  1. Client (browser / mobile / external service) calls the API Gateway at
+      `/api/db/{service}/...` (e.g. `/api/db/mongodb/collections`).
+  2. `APIKeyMiddleware` runs in the Gateway: public paths are allowed; DB paths
+      require a per-service API key. If the key is valid the request proceeds.
+  3. The Gateway acts as a reverse-proxy for database operations: it forwards
+      the request to the internal `db-query-api` service (e.g.
+      `http://db-query-api:8080/api/{service}/...`) and returns the response to
+      the client. This keeps database credentials and drivers inside the
+      `db-query-api` service and avoids exposing them to the public network.
+
+- Internal services (workers, backends, trusted services):
+  1. Trusted internal services running in the same network can call the
+      `db-query-api` service directly at `http://db-query-api:8080/api/{service}/...`.
+  2. Calls made directly to `db-query-api` typically bypass the Gateway. In
+      that case, authentication and authorization expectations depend on
+      deployment configuration; for example, internal network policies, mTLS,
+      or additional shared secrets may be used. The Gateway's per-service API
+      key checks do not apply to intra-cluster direct calls unless the
+      infrastructure enforces them.
+
+Notes
+-----
+- Keep database credentials and drivers inside `db-query-api` to minimize the
+  attack surface.
+- The Gateway centralizes API key validation and rate-limiting for external
+  traffic, while the `db-query-api` focuses on database client management and
+  request handling.
 """
 
 from fastapi import APIRouter, HTTPException, Request, Body
@@ -12,10 +44,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/db", tags=["database"])
+router = APIRouter(prefix="/api/db", tags=["database"])
 
-# Internal service URLs - db-query-api routes are under /api/v1
-DB_QUERY_API_URL = "http://db-query-api:8080/api/v1"
+# Internal service URLs - db-query-api routes are under /api
+DB_QUERY_API_URL = "http://db-query-api:8080/api"
 
 
 # ============================================================================
@@ -26,7 +58,7 @@ DB_QUERY_API_URL = "http://db-query-api:8080/api/v1"
 @router.get("/mongodb/collections")
 async def list_mongodb_collections(request: Request):
     """
-    **GET /api/v1/db/mongodb/collections**
+    **GET /api/db/mongodb/collections**
 
     List all MongoDB collections.
 
@@ -45,11 +77,10 @@ async def list_mongodb_collections(request: Request):
         return response.json()
 
 
-
 @router.get("/cosmos/collections")
 async def list_cosmos_collections(request: Request):
     """
-    **GET /api/v1/db/cosmos/collections**
+    **GET /api/db/cosmos/collections**
 
     List all Cosmos DB collections.
     """
@@ -74,7 +105,7 @@ async def query_mongodb_collection(
     ),
 ):
     """
-    **POST /api/v1/db/mongodb/{collection}/query**
+    **POST /api/db/mongodb/{collection}/query**
 
     Query MongoDB collection with filters, projection, and pagination.
 
@@ -105,7 +136,6 @@ async def query_mongodb_collection(
         )
         response.raise_for_status()
         return response.json()
-
 
 
 @router.post("/cosmos/{collection}/query")
@@ -147,7 +177,7 @@ async def bulk_insert_mongodb(
     ),
 ):
     """
-    **POST /api/v1/db/mongodb/{collection}/bulk**
+    **POST /api/db/mongodb/{collection}/bulk**
 
     Bulk insert or upsert documents into MongoDB collection.
     Optimized for loading large datasets.
@@ -182,7 +212,6 @@ async def bulk_insert_mongodb(
         return response.json()
 
 
-
 @router.post("/cosmos/{collection}/bulk")
 async def bulk_insert_cosmos(
     collection: str,
@@ -215,7 +244,7 @@ async def bulk_insert_cosmos(
 @router.get("/redis/{key}")
 async def get_redis_key(key: str, request: Request):
     """
-    **GET /api/v1/db/redis/{key}**
+    **GET /api/db/redis/{key}**
 
     Get value for a Redis key.
 
@@ -250,7 +279,7 @@ async def redis_batch_operations(
     ),
 ):
     """
-    **POST /api/v1/db/redis/batch**
+    **POST /api/db/redis/batch**
 
     Execute batch Redis operations (get, set, delete).
 
@@ -292,7 +321,7 @@ async def redis_batch_operations(
 @router.get("/qdrant/collections")
 async def list_qdrant_collections(request: Request):
     """
-    **GET /api/v1/db/qdrant/collections**
+    **GET /api/db/qdrant/collections**
 
     List all Qdrant collections.
 
@@ -326,7 +355,7 @@ async def search_qdrant_vectors(
     ),
 ):
     """
-    **POST /api/v1/db/qdrant/{collection}/search**
+    **POST /api/db/qdrant/{collection}/search**
 
     Search for similar vectors in Qdrant collection.
 
@@ -375,7 +404,7 @@ async def bulk_upsert_qdrant(
     ),
 ):
     """
-    **POST /api/v1/db/qdrant/{collection}/bulk**
+    **POST /api/db/qdrant/{collection}/bulk**
 
     Bulk upsert vectors into Qdrant collection.
     Optimized for loading large vector datasets.
@@ -416,7 +445,7 @@ async def bulk_upsert_qdrant(
 @router.get("/mcp/tools")
 async def list_mcp_tools(request: Request):
     """
-    **GET /api/v1/db/mcp/tools**
+    **GET /api/db/mcp/tools**
 
     List available MCP tools (including recommendation engine).
 
@@ -441,7 +470,7 @@ async def execute_mcp_tool(
     tool_name: str, request: Request, params: Dict[str, Any] = Body(...)
 ):
     """
-    **POST /api/v1/db/mcp/tools/{tool_name}**
+    **POST /api/db/mcp/tools/{tool_name}**
 
     Execute an MCP tool (e.g., recommendation engine).
 

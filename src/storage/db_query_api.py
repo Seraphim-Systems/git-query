@@ -1,11 +1,46 @@
 """
-Database Query API - Provides HTTP endpoints for querying databases
-Designed for data scientists to query and ingest data into the databases
+Database Query API - Provides HTTP endpoints for querying databases.
+
+This service owns the database clients (MongoDB, Redis, Qdrant, Cosmos, etc.)
+and exposes concise HTTP endpoints for querying and ingesting data. The app
+initializes clients on startup via `startup_db_clients` and tears them down on
+shutdown via `shutdown_db_clients`.
+
+Request Flow
+------------
+- External clients / web frontend:
+  1. External clients call the API Gateway at `/api/db/{service}/...` (for
+      example, `/api/db/mongodb/collections`).
+  2. The Gateway validates the request (API keys, rate limits, sessions) and
+      forwards a proxied HTTP request to the internal `db-query-api` service at
+      `http://db-query-api:8080/api/{service}/...`.
+  3. `db-query-api` receives the proxied request, uses its initialized DB
+      clients to perform operations, and returns the result.
+
+- Internal services (workers, batch jobs, other backend services):
+  1. Trusted internal services can call `db-query-api` directly at
+      `http://db-query-api:8080/api/{service}/...` without going through the
+      Gateway. Direct calls are subject to deployment-level network and
+      authentication controls (for example, internal-only networks, mTLS, or
+      shared secrets).
+  2. Direct calls bypass Gateway middleware (API key enforcement) unless the
+      deployment puts the Gateway in front of internal traffic as well.
+
+Security and deployment notes
+-----------------------------
+- For public-facing endpoints, the Gateway centralizes API key validation,
+  rate limiting, and session handling. The Gateway should enforce per-service
+  API keys for `/api/db/*` endpoints.
+- `db-query-api` should never expose database credentials to clients. Keep the
+  service reachable only from trusted networks (for example, Kubernetes
+  cluster-internal DNS or a private VPC).
+
 """
 
 from datetime import datetime, timezone
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from db.clients import (
     startup_db_clients,
     shutdown_db_clients,
@@ -42,12 +77,12 @@ app.add_middleware(
 app.add_event_handler("startup", startup_db_clients)
 app.add_event_handler("shutdown", shutdown_db_clients)
 
-# Include routers with /api/v1 prefix
-app.include_router(mongodb_router.router, prefix="/api/v1")
-app.include_router(redis_router.router, prefix="/api/v1")
-app.include_router(qdrant_router.router, prefix="/api/v1")
-app.include_router(batch_router.router, prefix="/api/v1")
-app.include_router(cosmos_router.router, prefix="/api/v1")
+# Include routers under /api (database routers expose their own service prefixes)
+app.include_router(mongodb_router.router, prefix="/api")
+app.include_router(redis_router.router, prefix="/api")
+app.include_router(qdrant_router.router, prefix="/api")
+app.include_router(batch_router.router, prefix="/api")
+app.include_router(cosmos_router.router, prefix="/api")
 
 
 # ============================================================================
@@ -71,9 +106,9 @@ async def health_check():
     return status
 
 
-@app.get("/api/v1/health")
-async def health_check_v1():
-    """Health check endpoint - API v1"""
+@app.get("/api/health")
+async def health_check_api():
+    """Health check endpoint - API"""
     status = {
         "status": "healthy",
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -86,7 +121,7 @@ async def health_check_v1():
     return status
 
 
-@app.get("/api/v1/health/databases")
+@app.get("/api/health/databases")
 async def health_check_databases():
     """Detailed database health check"""
     mongo_client = get_mongo_client()
@@ -127,12 +162,12 @@ async def health_check_databases():
 # ============================================================================
 
 
-@app.get("/api/v1/docs/examples")
+@app.get("/api/docs/examples")
 async def get_examples():
     """Get example queries and usage patterns"""
     return {
         "mongodb_query": {
-            "endpoint": "POST /api/v1/mongodb/query",
+            "endpoint": "POST /api/mongodb/query",
             "auth": "X-API-Key header required",
             "example": {
                 "collection": "users",
@@ -141,7 +176,7 @@ async def get_examples():
             },
         },
         "mongodb_insert": {
-            "endpoint": "POST /api/v1/mongodb/insert",
+            "endpoint": "POST /api/mongodb/insert",
             "auth": "X-API-Key header required",
             "example": {
                 "collection": "users",
@@ -152,7 +187,7 @@ async def get_examples():
             },
         },
         "qdrant_search": {
-            "endpoint": "POST /api/v1/qdrant/search",
+            "endpoint": "POST /api/qdrant/search",
             "auth": "X-API-Key header required",
             "example": {
                 "collection": "repository_embeddings",
@@ -161,7 +196,7 @@ async def get_examples():
             },
         },
         "qdrant_insert": {
-            "endpoint": "POST /api/v1/qdrant/insert",
+            "endpoint": "POST /api/qdrant/insert",
             "auth": "X-API-Key header required",
             "example": {
                 "collection": "repository_embeddings",
@@ -175,7 +210,7 @@ async def get_examples():
             },
         },
         "batch_insert": {
-            "endpoint": "POST /api/v1/batch/insert",
+            "endpoint": "POST /api/batch/insert",
             "auth": "X-API-Key header required",
             "example": {
                 "mongodb_data": [
@@ -195,3 +230,12 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8080)
+
+
+# Simple HTTP exception handler to ensure JSON response for 404s
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request, exc: StarletteHTTPException):
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail or "Not Found"})
