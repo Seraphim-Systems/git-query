@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
 import kagglehub
+import httpx
 from pymongo import ReplaceOne
 from pymongo.errors import BulkWriteError
 
@@ -28,7 +29,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.storage.db_config import get_cosmos_db  # noqa: E402
+# Avoid importing Cosmos DB config unless direct mode is used.
 
 
 def _find_json_files(root: Path) -> List[Path]:
@@ -107,6 +108,7 @@ def load_to_cosmos(
     dataset: str,
     file_path: str | None,
     collection_name: str,
+    database_name: str,
     batch_size: int,
     id_field: str | None,
     derive_fields: bool,
@@ -114,6 +116,8 @@ def load_to_cosmos(
     dry_run: bool,
     list_files: bool,
     progress_every: int,
+    gateway_url: str | None,
+    api_key: str | None,
 ) -> None:
     print(f"Downloading dataset: {dataset}", flush=True)
     dataset_dir = Path(kagglehub.dataset_download(dataset))
@@ -174,8 +178,17 @@ def load_to_cosmos(
             print("Sample document keys:", sorted(sample[0].keys()), flush=True)
         return
 
-    cosmos_db = get_cosmos_db()
-    collection = cosmos_db[collection_name]
+    use_gateway = bool(gateway_url)
+    if use_gateway:
+        base_url = gateway_url.rstrip("/")
+        bulk_url = f"{base_url}/api/v1/db/cosmos/{collection_name}/bulk"
+        headers = {"X-API-Key": api_key} if api_key else {}
+        client = httpx.Client(timeout=300.0)
+    else:
+        from src.storage.db_config import get_cosmos_db  # noqa: E402
+
+        cosmos_db = get_cosmos_db()
+        collection = cosmos_db[collection_name]
 
     total_upserted = 0
     total_modified = 0
@@ -193,6 +206,47 @@ def load_to_cosmos(
         processed += 1
 
         if len(batch) >= batch_size:
+            if use_gateway:
+                payload = {
+                    "documents": batch,
+                    "ordered": False,
+                    "upsert": True,
+                    "database": database_name,
+                }
+                response = client.post(bulk_url, json=payload, headers=headers)
+                response.raise_for_status()
+                data = response.json()
+                total_upserted += int(data.get("upserted") or 0)
+                total_modified += int(data.get("modified") or 0)
+            else:
+                ops = [ReplaceOne({"_id": d["_id"]}, d, upsert=True) for d in batch]
+                try:
+                    result = collection.bulk_write(ops, ordered=False)
+                    total_upserted += result.upserted_count
+                    total_modified += result.modified_count
+                except BulkWriteError as exc:
+                    result = exc.details
+                    total_upserted += result.get("nUpserted", 0)
+                    total_modified += result.get("nModified", 0)
+            batch.clear()
+
+        if progress_every and processed % progress_every == 0:
+            print(f"Inserted {processed} records...", flush=True)
+
+    if batch:
+        if use_gateway:
+            payload = {
+                "documents": batch,
+                "ordered": False,
+                "upsert": True,
+                "database": database_name,
+            }
+            response = client.post(bulk_url, json=payload, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+            total_upserted += int(data.get("upserted") or 0)
+            total_modified += int(data.get("modified") or 0)
+        else:
             ops = [ReplaceOne({"_id": d["_id"]}, d, upsert=True) for d in batch]
             try:
                 result = collection.bulk_write(ops, ordered=False)
@@ -202,21 +256,9 @@ def load_to_cosmos(
                 result = exc.details
                 total_upserted += result.get("nUpserted", 0)
                 total_modified += result.get("nModified", 0)
-            batch.clear()
 
-        if progress_every and processed % progress_every == 0:
-            print(f"Inserted {processed} records...", flush=True)
-
-    if batch:
-        ops = [ReplaceOne({"_id": d["_id"]}, d, upsert=True) for d in batch]
-        try:
-            result = collection.bulk_write(ops, ordered=False)
-            total_upserted += result.upserted_count
-            total_modified += result.modified_count
-        except BulkWriteError as exc:
-            result = exc.details
-            total_upserted += result.get("nUpserted", 0)
-            total_modified += result.get("nModified", 0)
+    if use_gateway:
+        client.close()
 
     print(
         f"Completed: upserted={total_upserted}, modified={total_modified}, "
@@ -235,6 +277,11 @@ def main() -> None:
         "--collection",
         default="repositories",
         help="Target Cosmos collection name",
+    )
+    parser.add_argument(
+        "--database",
+        default="gitquery",
+        help="Target Cosmos database name",
     )
     parser.add_argument("--batch-size", type=int, default=1000)
     parser.add_argument(
@@ -260,6 +307,14 @@ def main() -> None:
         default=5000,
         help="Print progress every N records (0 to disable)",
     )
+    parser.add_argument(
+        "--gateway-url",
+        help="Gateway base URL for Cosmos bulk insert (e.g., https://host)",
+    )
+    parser.add_argument(
+        "--api-key",
+        help="API key for gateway (sent as X-API-Key)",
+    )
 
     args = parser.parse_args()
 
@@ -267,6 +322,7 @@ def main() -> None:
         dataset=args.dataset,
         file_path=args.file,
         collection_name=args.collection,
+        database_name=args.database,
         batch_size=args.batch_size,
         id_field=args.id_field,
         derive_fields=not args.no_derive,
@@ -274,6 +330,8 @@ def main() -> None:
         dry_run=args.dry_run,
         list_files=args.list_files,
         progress_every=args.progress_every,
+        gateway_url=args.gateway_url,
+        api_key=args.api_key,
     )
 
 
