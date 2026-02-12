@@ -110,6 +110,11 @@ services:
       # Provide database connection URLs using the DB_* secrets defined for services
       - REDIS_URL=redis://:${DB_REDIS_PASSWORD:-redispass}@redis:6379
       - MONGODB_URL=mongodb://${DB_MONGODB_USER:-admin}:${DB_MONGODB_PASSWORD:-mongopass}@mongodb:27017/${DB_MONGODB_DATABASE:-gitquery}?authSource=admin
+      # Cosmos DB (emulator) - provide host/port and optional key so the
+      # gateway can initialize a Mongo-compatible Cosmos client at startup.
+      - COSMOS_DB_HOST=${COSMOS_DB_HOST:-cosmos-db}
+      - COSMOS_DB_PORT=${COSMOS_DB_PORT:-10255}
+      - COSMOS_DB_KEY=${COSMOS_DB_KEY:-C2y6yDjf5/R+ob0N...==}
     expose:
       - "80"
     depends_on:
