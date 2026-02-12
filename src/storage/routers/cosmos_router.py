@@ -8,9 +8,9 @@ MongoDB endpoints for compatibility.
 
 from fastapi import APIRouter, HTTPException, Depends, Body
 from typing import Dict, Any, List
-from db.models import MongoQuery, MongoInsert
-from db.clients import get_cosmos_client
-from storage.auth import get_api_key
+from src.db.models import MongoQuery, MongoInsert
+from src.db.clients import get_cosmos_client
+from src.storage.auth import get_api_key
 
 router = APIRouter(prefix="/cosmos", tags=["CosmosDB"])
 

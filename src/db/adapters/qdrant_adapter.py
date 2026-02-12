@@ -1,6 +1,6 @@
 from typing import Dict, Any, List, Optional
-from db.adapters.interfaces import VectorRepository
-from db.clients import get_qdrant_client
+from src.db.adapters.interfaces import VectorRepository
+from src.db.clients import get_qdrant_client
 
 
 class QdrantAdapter(VectorRepository):

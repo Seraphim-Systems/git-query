@@ -6,7 +6,7 @@ Quick reference for deployment workflows in `.github/workflows/`.
 
 ### 1. **deploy-infrastructure.yml**
 **What:** Core infrastructure (databases + API gateway)  
-**Deploys:** MongoDB, Redis, Qdrant, nginx, db-query-api  
+**Deploys:** MongoDB, Redis, Qdrant, gateway
 **When to use:** First deployment or infrastructure updates  
 **Secrets needed:** `INFRA_*`, `DB_*`, `APIKEY_*`, `SVC_NGINX_SERVER_NAME`  
 **Duration:** ~5-10 minutes
@@ -99,9 +99,7 @@ Quick reference for deployment workflows in `.github/workflows/`.
 
 | Service | Port | Health Check |
 |---------|------|-------------|
-| nginx | 80 | `http://server/` |
-| db-query-api | 8000 | `http://server:8000/health` |
-| gateway | 8000 | `http://server:8000/api/health` |
+| gateway | 80 | `http://server/` |
 | mcp-server | 8001 | Check logs |
 | recommender | 8002 | Check logs |
 

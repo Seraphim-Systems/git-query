@@ -45,7 +45,7 @@ async def startup_db_clients():
     startup logic isolated and easier to test. Import is done inside the
     function to avoid circular imports during module import time.
     """
-    from db.inits.init_clients import startup_db_clients as _startup
+    from src.db.inits.init_clients import startup_db_clients as _startup
 
     await _startup()
 
@@ -55,7 +55,7 @@ async def shutdown_db_clients():
 
     Import is deferred to avoid circular import issues at module import time.
     """
-    from db.inits.init_clients import shutdown_db_clients as _shutdown
+    from src.db.inits.init_clients import shutdown_db_clients as _shutdown
 
     await _shutdown()
 

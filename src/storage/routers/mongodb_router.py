@@ -4,9 +4,9 @@ MongoDB API endpoints
 
 from fastapi import APIRouter, HTTPException, Depends, Body
 from typing import Dict, Any, List
-from db.models import MongoQuery, MongoInsert
-from db.clients import get_mongo_client
-from storage.auth import get_api_key
+from src.db.models import MongoQuery, MongoInsert
+from src.db.clients import get_mongo_client
+from src.storage.auth import get_api_key
 from pymongo import UpdateOne
 
 router = APIRouter(prefix="/mongodb", tags=["MongoDB"])
