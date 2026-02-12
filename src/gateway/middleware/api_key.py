@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 # Public endpoints that don't require authentication
 PUBLIC_PATHS = [
     "/health",
-    "/api/v1/health",
+    "/api/health",
     "/docs",
     "/openapi.json",
     "/auth/login",
@@ -27,8 +27,8 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         if any(request.url.path.startswith(path) for path in PUBLIC_PATHS):
             return await call_next(request)
 
-        # All /api/v1/db/* routes require API key
-        if request.url.path.startswith("/api/v1/db/"):
+        # All /api/db/* routes require API key
+        if request.url.path.startswith("/api/db/"):
             api_key = self._extract_api_key(request)
 
             if not api_key:
@@ -38,7 +38,7 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
                     headers={"WWW-Authenticate": "Bearer"},
                 )
 
-            # Extract service from path: /api/v1/db/{service}/...
+            # Extract service from path: /api/db/{service}/...
             path_parts = request.url.path.split("/")
             if len(path_parts) >= 4 and path_parts[3]:
                 service = path_parts[3]  # mongodb, redis, qdrant, mcp

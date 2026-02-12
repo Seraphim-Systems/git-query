@@ -70,7 +70,7 @@ app.add_middleware(
 )
 
 # Add custom middleware
-app.add_middleware(APIKeyMiddleware)  # API key auth for /api/v1/db/*
+app.add_middleware(APIKeyMiddleware)  # API key auth for /api/db/*
 app.add_middleware(SessionMiddleware)
 app.add_middleware(
     RateLimitMiddleware,
@@ -87,9 +87,19 @@ async def global_exception_handler(_request: Request, exc: Exception):
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """Return simple JSON for HTTP errors (including 404)."""
+    content = {"detail": exc.detail if exc.detail else "Not Found"}
+    return JSONResponse(status_code=exc.status_code, content=content)
+
+
 # Include routers
-app.include_router(health_v1.router)  # /api/v1/health
-app.include_router(db_proxy.router)  # /api/v1/db/*
+app.include_router(health_v1.router)  # /api/health
+app.include_router(db_proxy.router)  # /api/db/*
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(chat.router, prefix="/chat", tags=["Chat"])
 app.include_router(

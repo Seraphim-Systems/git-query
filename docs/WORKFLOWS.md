@@ -101,7 +101,7 @@ Quick reference for deployment workflows in `.github/workflows/`.
 |---------|------|-------------|
 | nginx | 80 | `http://server/` |
 | db-query-api | 8000 | `http://server:8000/health` |
-| gateway | 8000 | `http://server:8000/api/v1/health` |
+| gateway | 8000 | `http://server:8000/api/health` |
 | mcp-server | 8001 | Check logs |
 | recommender | 8002 | Check logs |
 

@@ -15,20 +15,20 @@ cosmos-db: 8081
 nginx: 80
 
 - **Root:** `/` - Serves static web application
-- **API:** `/api/v1/` - Versioned API endpoints
-- **Health:** `/api/v1/health` - System health checks (public)
-- **Database:** `/api/v1/db/{service}/` - Database operations (requires API key)
+- **API:** `/api/` - API endpoints
+- **Health:** `/api/health` - System health checks (public)
+- **Database:** `/api/db/{service}/` - Database operations (requires API key)
 
 ---
 
 ## Authentication
 
 ### Public Endpoints (No Auth Required)
-- `GET /api/v1/health`
-- `GET /api/v1/health/databases`
+- `GET /api/health`
+- `GET /api/health/databases`
 
 ### Protected Endpoints (API Key Required)
-All `/api/v1/db/*` endpoints require an API key in the `Authorization` header:
+All `/api/db/*` endpoints require an API key in the `Authorization` header:
 
 ```http
 Authorization: Bearer <your-api-key>
@@ -44,7 +44,7 @@ Authorization: Bearer <your-api-key>
 
 ## Health Endpoints
 
-### GET /api/v1/health
+### GET /api/health
 Returns overall system health status.
 
 **Response:**
@@ -68,7 +68,7 @@ Returns overall system health status.
 
 ---
 
-### GET /api/v1/health/databases
+### GET /api/health/databases
 Returns database-specific health checks.
 
 **Response:**
@@ -88,9 +88,9 @@ Returns database-specific health checks.
 
 ## MongoDB Endpoints
 
-Base path: `/api/v1/db/mongodb`
+Base path: `/api/db/mongodb`
 
-### GET /api/v1/db/mongodb/collections
+### GET /api/db/mongodb/collections
 List all collections in the database.
 
 **Auth:** MongoDB API key required
@@ -105,7 +105,7 @@ List all collections in the database.
 
 ---
 
-### POST /api/v1/db/mongodb/{collection}/query
+### POST /api/db/mongodb/{collection}/query
 Query documents in a collection.
 
 **Auth:** MongoDB API key required
@@ -133,7 +133,7 @@ Query documents in a collection.
 
 ---
 
-### POST /api/v1/db/mongodb/{collection}/bulk
+### POST /api/db/mongodb/{collection}/bulk
 Bulk insert or upsert documents.
 
 **Auth:** MongoDB API key required
@@ -168,9 +168,9 @@ Bulk insert or upsert documents.
 
 ## Redis Endpoints
 
-Base path: `/api/v1/db/redis`
+Base path: `/api/db/redis`
 
-### GET /api/v1/db/redis/{key}
+### GET /api/db/redis/{key}
 Get value for a key.
 
 **Auth:** Redis API key required
@@ -186,7 +186,7 @@ Get value for a key.
 
 ---
 
-### PUT /api/v1/db/redis/{key}
+### PUT /api/db/redis/{key}
 Set value for a key with optional TTL.
 
 **Auth:** Redis API key required
@@ -209,7 +209,7 @@ Set value for a key with optional TTL.
 
 ---
 
-### POST /api/v1/db/redis/batch
+### POST /api/db/redis/batch
 Execute batch Redis operations.
 
 **Auth:** Redis API key required
@@ -245,9 +245,9 @@ Execute batch Redis operations.
 
 ## Qdrant Endpoints
 
-Base path: `/api/v1/db/qdrant`
+Base path: `/api/db/qdrant`
 
-### GET /api/v1/db/qdrant/collections
+### GET /api/db/qdrant/collections
 List all vector collections.
 
 **Auth:** Qdrant API key required
@@ -267,7 +267,7 @@ List all vector collections.
 
 ---
 
-### POST /api/v1/db/qdrant/{collection}/search
+### POST /api/db/qdrant/{collection}/search
 Search for similar vectors.
 
 **Auth:** Qdrant API key required
@@ -299,7 +299,7 @@ Search for similar vectors.
 
 ---
 
-### POST /api/v1/db/qdrant/{collection}/bulk
+### POST /api/db/qdrant/{collection}/bulk
 Bulk upsert vectors.
 
 **Auth:** Qdrant API key required
@@ -333,9 +333,9 @@ Bulk upsert vectors.
 
 ## MCP Endpoints
 
-Base path: `/api/v1/db/mcp`
+Base path: `/api/db/mcp`
 
-### GET /api/v1/db/mcp/tools
+### GET /api/db/mcp/tools
 List available MCP tools.
 
 **Auth:** MCP API key required
@@ -352,7 +352,7 @@ List available MCP tools.
 
 ---
 
-### POST /api/v1/db/mcp/tools/{tool_name}
+### POST /api/db/mcp/tools/{tool_name}
 Execute an MCP tool (recommendation engine, etc.).
 
 **Auth:** MCP API key required
@@ -407,7 +407,7 @@ Exceeded rate limit returns `429 Too Many Requests`.
 import requests
 
 API_KEY = "your-mongodb-api-key"
-BASE_URL = "https://api.gitquery.com/api/v1"
+BASE_URL = "https://api.gitquery.com/api"
 
 headers = {"Authorization": f"Bearer {API_KEY}"}
 
@@ -429,13 +429,13 @@ print(response.json())
 ### cURL
 ```bash
 # Query MongoDB
-curl -X POST "https://api.gitquery.com/api/v1/db/mongodb/repositories/query" \
+curl -X POST "https://api.gitquery.com/api/db/mongodb/repositories/query" \
   -H "Authorization: Bearer your-api-key" \
   -H "Content-Type: application/json" \
   -d '{"filter": {"stars": {"$gt": 100}}, "limit": 10}'
 
 # Bulk upsert to Qdrant
-curl -X POST "https://api.gitquery.com/api/v1/db/qdrant/embeddings/bulk" \
+curl -X POST "https://api.gitquery.com/api/db/qdrant/embeddings/bulk" \
   -H "Authorization: Bearer your-api-key" \
   -H "Content-Type: application/json" \
   -d '{"points": [{"id": "1", "vector": [0.1, 0.2], "payload": {"name": "item1"}}]}'
