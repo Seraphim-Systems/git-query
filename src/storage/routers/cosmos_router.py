@@ -6,8 +6,8 @@ Cosmos DB (using the Mongo API). They reuse the same Pydantic models as
 MongoDB endpoints for compatibility.
 """
 
+from typing import Dict, Any
 from fastapi import APIRouter, HTTPException, Depends, Body
-from typing import Dict, Any, List
 from src.db.models import MongoQuery, MongoInsert
 from src.db.clients import get_cosmos_client
 from src.storage.auth import get_api_key
@@ -23,7 +23,7 @@ async def query_cosmos(query: MongoQuery):
         raise HTTPException(status_code=503, detail="CosmosDB not available")
 
     try:
-        db = client[query.database]
+        db = client.get_database(query.database)
         collection = db[query.collection]
 
         cursor = (
@@ -53,7 +53,7 @@ async def insert_cosmos(insert: MongoInsert):
         raise HTTPException(status_code=503, detail="CosmosDB not available")
 
     try:
-        db = client[insert.database]
+        db = client.get_database(insert.database)
         collection = db[insert.collection]
 
         result = collection.insert_many(insert.documents)
@@ -74,7 +74,7 @@ async def list_cosmos_collections(database: str = "gitquery"):
         raise HTTPException(status_code=503, detail="CosmosDB not available")
 
     try:
-        db = client[database]
+        db = client.get_database(database)
         collections = db.list_collection_names()
         return {"database": database, "collections": collections}
     except Exception as e:
@@ -103,7 +103,7 @@ async def query_collection(
         raise HTTPException(status_code=503, detail="CosmosDB not available")
 
     try:
-        db = client[query.get("database", "gitquery")]
+        db = client.get_database(query.get("database", "gitquery"))
         coll = db[collection]
 
         cursor = (
@@ -133,7 +133,7 @@ async def bulk_upsert_collection(collection: str, payload: Dict[str, Any] = Body
         raise HTTPException(status_code=503, detail="CosmosDB not available")
 
     try:
-        db = client[payload.get("database", "gitquery")]
+        db = client.get_database(payload.get("database", "gitquery"))
         coll = db[collection]
 
         ordered = bool(payload.get("ordered", False))
