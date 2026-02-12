@@ -92,7 +92,16 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
-    """Return simple JSON for HTTP errors (including 404)."""
+    """Return simple JSON for HTTP errors and log details (including 404)."""
+    # Log 404s as warnings with request context; log other HTTP errors at info level
+    msg = (
+        f"HTTP {exc.status_code} on {request.method} {request.url.path} - {exc.detail}"
+    )
+    if exc.status_code == 404:
+        logger.warning(msg)
+    else:
+        logger.info(msg)
+
     content = {"detail": exc.detail if exc.detail else "Not Found"}
     return JSONResponse(status_code=exc.status_code, content=content)
 
