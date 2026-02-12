@@ -103,6 +103,8 @@ services:
       context: ../..
       dockerfile: infrastructure/docker/Dockerfile.gateway
     container_name: git-query-gateway
+    env_file:
+      - .env
     environment:
       - LOG_LEVEL=${SVC_LOG_LEVEL:-INFO}
     expose:
