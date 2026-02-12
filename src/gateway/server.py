@@ -16,6 +16,17 @@ from src.gateway.middleware.rate_limit import RateLimitMiddleware
 from src.gateway.middleware.api_key import APIKeyMiddleware
 from src.gateway.routers import auth, chat, recommendations, user, health_v1, db_proxy
 
+# Include DB routers directly in the Gateway so the Gateway serves DB endpoints
+# (replacing the separate db-query-api service). These routers originate from
+# the storage package and provide Mongo, Redis, Qdrant, Cosmos and batch routes.
+from src.storage.routers import (
+    mongodb_router,
+    redis_router,
+    qdrant_router,
+    batch_router,
+    cosmos_router,
+)
+
 # Configure logging
 logging.basicConfig(
     level=settings.log_level,
@@ -108,6 +119,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
 
 # Include routers
 app.include_router(health_v1.router)  # /api/health
+app.include_router(health_v1.db_router)  # /api/db/health
 app.include_router(db_proxy.router)  # /api/db/*
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(chat.router, prefix="/chat", tags=["Chat"])
@@ -115,6 +127,14 @@ app.include_router(
     recommendations.router, prefix="/recommend", tags=["Recommendations"]
 )
 app.include_router(user.router, prefix="/user", tags=["User"])
+
+# Mount the storage routers under `/api` so DB endpoints are served by the
+# Gateway process itself (previously provided by the db-query-api service).
+app.include_router(mongodb_router.router, prefix="/api")
+app.include_router(redis_router.router, prefix="/api")
+app.include_router(qdrant_router.router, prefix="/api")
+app.include_router(batch_router.router, prefix="/api")
+app.include_router(cosmos_router.router, prefix="/api")
 
 
 # Health check

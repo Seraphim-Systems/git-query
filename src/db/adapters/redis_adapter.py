@@ -1,7 +1,7 @@
 from typing import Any, Dict, Optional, List
 
-from db.clients import get_redis_client
-from db.adapters.interfaces import KeyValueRepository
+from src.db.clients import get_redis_client
+from src.db.adapters.interfaces import KeyValueRepository
 
 
 class RedisAdapter(KeyValueRepository):

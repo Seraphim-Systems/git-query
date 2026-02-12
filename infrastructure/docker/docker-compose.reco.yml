@@ -4,47 +4,53 @@ version: '3.8'
 # Usage: docker-compose -f docker-compose.base.yml -f docker-compose.reco.yml up
 
 services:
-  recommender:
-    build:
-      context: ../..
-      dockerfile: infrastructure/docker/Dockerfile.recommender
-    container_name: git-query-recommender
-    environment:
-      - RECOMMENDER_HOST=0.0.0.0
-      - RECOMMENDER_PORT=8095
-      - LOG_LEVEL=${SVC_LOG_LEVEL:-INFO}
-      - MODEL_PATH=/app/models
-      - MONGODB_URL=mongodb://${DB_MONGODB_USER:-admin}:${DB_MONGODB_PASSWORD:-mongopass}@mongodb:27017/gitquery?authSource=admin
-      - QDRANT_HOST=qdrant
-      - QDRANT_PORT=6333
-      - QDRANT_API_KEY=${DB_QDRANT_API_KEY:-}
-      - REDIS_URL=redis://:${DB_REDIS_PASSWORD:-redispass}@redis:6379
-      - INFERENCE_BATCH_SIZE=${INFERENCE_BATCH_SIZE:-32}
-    depends_on:
-      - mongodb
-      - qdrant
-      - redis
-    networks:
-      - db-network
-      - web-network
-    restart: unless-stopped
-    expose:
-      - "8095"
-    volumes:
-      - recommender-models:/app/models
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8095/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+  version: '3.8'
 
-volumes:
-  recommender-models:
-    name: git-query-recommender-models
+  # Recommendation Engine (Serving)
+  # Usage: docker-compose -f docker-compose.base.yml -f docker-compose.reco.yml up
 
-networks:
-  db-network:
-    name: git-query-db-network
-  web-network:
-    name: git-query-web-network
+  services:
+    recommender:
+      build:
+        context: ../..
+        dockerfile: infrastructure/docker/Dockerfile.recommender
+      container_name: git-query-recommender
+      environment:
+        - RECOMMENDER_HOST=0.0.0.0
+        - RECOMMENDER_PORT=8095
+        - LOG_LEVEL=${SVC_LOG_LEVEL:-INFO}
+        - MODEL_PATH=/app/models
+        - MONGODB_URL=mongodb://${DB_MONGODB_USER:-admin}:${DB_MONGODB_PASSWORD:-mongopass}@mongodb:27017/gitquery?authSource=admin
+        - QDRANT_HOST=qdrant
+        - QDRANT_PORT=6333
+        - QDRANT_API_KEY=${DB_QDRANT_API_KEY:-}
+        - REDIS_URL=redis://:${DB_REDIS_PASSWORD:-redispass}@redis:6379
+        - INFERENCE_BATCH_SIZE=${INFERENCE_BATCH_SIZE:-32}
+      depends_on:
+        - mongodb
+        - qdrant
+        - redis
+      networks:
+        - db-network
+        - web-network
+      restart: unless-stopped
+      expose:
+        - "8095"
+      volumes:
+        - recommender-models:/app/models
+      healthcheck:
+        test: ["CMD", "curl", "-f", "http://localhost:8095/health"]
+        interval: 10s
+        timeout: 5s
+        retries: 5
+        start_period: 30s
+
+  volumes:
+    recommender-models:
+      name: git-query-recommender-models
+
+  networks:
+    db-network:
+      name: git-query-db-network
+    web-network:
+      name: git-query-web-network

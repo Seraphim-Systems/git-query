@@ -25,15 +25,10 @@ services:
     environment:
       - LOG_LEVEL=DEBUG
 
-  nginx:
+  gateway:
     ports:
       - "80:80"
-
-  db-query-api:
-    ports:
-      - "8080:8080"
     environment:
-      # Use host env if set, otherwise fall back to a local dev key
-      - MONGODB_API_KEY=${APIKEY_MONGODB:-dev-local-key}
-      - REDIS_API_KEY=${APIKEY_REDIS:-dev-local-key}
-      - QDRANT_API_KEY_AUTH=${APIKEY_QDRANT:-dev-local-key}
+      - LOG_LEVEL=DEBUG
+  # Note: db-query-api removed in favor of running the API Gateway which now
+  # serves DB endpoints. The `gateway` service will bind host port 80 in dev.

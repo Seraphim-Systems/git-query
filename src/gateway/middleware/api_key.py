@@ -27,33 +27,36 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         if any(request.url.path.startswith(path) for path in PUBLIC_PATHS):
             return await call_next(request)
 
-        # All /api/db/* routes require API key
-        if request.url.path.startswith("/api/db/"):
-            api_key = self._extract_api_key(request)
+        # Protect database and service endpoints under /api/{service}/
+        # e.g. /api/mongodb/, /api/redis/, /api/qdrant/, /api/cosmos/, /api/mcp/
+        if request.url.path.startswith("/api/"):
+            # Extract service from path: /api/{service}/...
+            path_parts = [p for p in request.url.path.split("/") if p]
+            if len(path_parts) >= 2:
+                service = path_parts[1]
+                # Only enforce API keys for known backend services
+                protected_services = {"mongodb", "redis", "qdrant", "cosmos", "mcp"}
+                if service in protected_services:
+                    api_key = self._extract_api_key(request)
 
-            if not api_key:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="API key required. Provide via 'Authorization: Bearer <key>' header.",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
+                    if not api_key:
+                        raise HTTPException(
+                            status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="API key required. Provide via 'Authorization: Bearer <key>' header.",
+                            headers={"WWW-Authenticate": "Bearer"},
+                        )
 
-            # Extract service from path: /api/db/{service}/...
-            path_parts = request.url.path.split("/")
-            if len(path_parts) >= 4 and path_parts[3]:
-                service = path_parts[3]  # mongodb, redis, qdrant, mcp
+                    # Validate API key for this service
+                    if not self._validate_service_key(api_key, service, request.app):
+                        raise HTTPException(
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            detail=f"Invalid API key for service: {service}",
+                        )
 
-                # Validate API key for this service
-                if not self._validate_service_key(api_key, service, request.app):
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail=f"Invalid API key for service: {service}",
-                    )
-
-                # Inject service and key info into request state
-                request.state.api_key = api_key
-                request.state.service = service
-                logger.debug(f"API key validated for service: {service}")
+                    # Inject service and key info into request state
+                    request.state.api_key = api_key
+                    request.state.service = service
+                    logger.debug(f"API key validated for service: {service}")
 
         return await call_next(request)
 

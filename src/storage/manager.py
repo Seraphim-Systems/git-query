@@ -6,7 +6,7 @@ Provides unified access to all database services.
 from typing import Optional
 
 # Import database configuration from the canonical db package
-from db.config import DatabaseConfig, db_clients
+from src.db.config import DatabaseConfig, db_clients
 
 
 class DatabaseManager:

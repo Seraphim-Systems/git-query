@@ -43,7 +43,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.responses import JSONResponse
-from db.clients import (
+from src.db.clients import (
     startup_db_clients,
     shutdown_db_clients,
     get_mongo_client,
@@ -51,7 +51,7 @@ from db.clients import (
     get_qdrant_client,
     get_cosmos_client,
 )
-from storage.routers import (
+from src.storage.routers import (
     mongodb_router,
     redis_router,
     qdrant_router,

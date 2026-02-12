@@ -12,11 +12,11 @@ Request Flow
       `/api/db/{service}/...` (e.g. `/api/db/mongodb/collections`).
   2. `APIKeyMiddleware` runs in the Gateway: public paths are allowed; DB paths
       require a per-service API key. If the key is valid the request proceeds.
-  3. The Gateway acts as a reverse-proxy for database operations: it forwards
-      the request to the internal `db-query-api` service (e.g.
-      `http://db-query-api:8080/api/{service}/...`) and returns the response to
-      the client. This keeps database credentials and drivers inside the
-      `db-query-api` service and avoids exposing them to the public network.
+  3. The Gateway handles database operations. Historically these were
+      implemented by a separate `db-query-api` service; the Gateway now mounts
+      the database routers directly under `/api/{service}/...` and serves them
+      in-process. The proxy endpoints below forward requests to the internal
+      `/api/*` paths.
 
 - Internal services (workers, backends, trusted services):
   1. Trusted internal services running in the same network can call the
@@ -38,6 +38,7 @@ Notes
 """
 
 from fastapi import APIRouter, HTTPException, Request, Body
+from fastapi.responses import JSONResponse
 from typing import Any, Dict, List, Optional
 import httpx
 import logging
@@ -46,8 +47,34 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/db", tags=["database"])
 
-# Internal service URLs - db-query-api routes are under /api
-DB_QUERY_API_URL = "http://db-query-api:8080/api"
+# Internal service base URL - point to the local mounted `/api` paths.
+# When running inside Docker, ensure the Gateway process listens on port 8000
+# and container networking allows loopback connections if necessary.
+DB_QUERY_API_URL = "http://127.0.0.1:8000/api"
+
+
+def _build_forward_headers(request: Request) -> dict:
+    """Build a minimal set of headers to forward to db-query-api.
+
+    We forward the incoming Authorization or X-API-Key header if present.
+    Do not forward any other client headers to avoid leaking internal info.
+    """
+    headers = {}
+    auth = request.headers.get("authorization")
+    xkey = request.headers.get("x-api-key") or request.headers.get("X-API-Key")
+    if auth:
+        headers["Authorization"] = auth
+    elif xkey:
+        headers["X-API-Key"] = xkey
+
+    # Log presence (masked) for debugging
+    if headers:
+        for k, v in headers.items():
+            logger.debug("Forwarding header %s (len=%d)", k, len(v))
+    else:
+        logger.debug("No auth header to forward to internal DB handlers")
+
+    return headers
 
 
 # ============================================================================
@@ -71,8 +98,11 @@ async def list_mongodb_collections(request: Request):
     }
     ```
     """
+    headers = _build_forward_headers(request)
     async with httpx.AsyncClient() as client:
-        response = await client.get(f"{DB_QUERY_API_URL}/mongodb/collections")
+        response = await client.get(
+            f"{DB_QUERY_API_URL}/mongodb/collections", headers=headers
+        )
         response.raise_for_status()
         return response.json()
 
@@ -84,8 +114,11 @@ async def list_cosmos_collections(request: Request):
 
     List all Cosmos DB collections.
     """
+    headers = _build_forward_headers(request)
     async with httpx.AsyncClient() as client:
-        response = await client.get(f"{DB_QUERY_API_URL}/cosmos/collections")
+        response = await client.get(
+            f"{DB_QUERY_API_URL}/cosmos/collections", headers=headers
+        )
         response.raise_for_status()
         return response.json()
 
@@ -130,9 +163,12 @@ async def query_mongodb_collection(
     }
     ```
     """
+    headers = _build_forward_headers(request)
     async with httpx.AsyncClient() as client:
         response = await client.post(
-            f"{DB_QUERY_API_URL}/mongodb/{collection}/query", json=query
+            f"{DB_QUERY_API_URL}/mongodb/{collection}/query",
+            json=query,
+            headers=headers,
         )
         response.raise_for_status()
         return response.json()
@@ -152,9 +188,10 @@ async def query_cosmos_collection(
         },
     ),
 ):
+    headers = _build_forward_headers(request)
     async with httpx.AsyncClient() as client:
         response = await client.post(
-            f"{DB_QUERY_API_URL}/cosmos/{collection}/query", json=query
+            f"{DB_QUERY_API_URL}/cosmos/{collection}/query", json=query, headers=headers
         )
         response.raise_for_status()
         return response.json()
@@ -202,11 +239,14 @@ async def bulk_insert_mongodb(
     }
     ```
     """
+    headers = _build_forward_headers(request)
     async with httpx.AsyncClient(
         timeout=300.0
     ) as client:  # 5 min timeout for large batches
         response = await client.post(
-            f"{DB_QUERY_API_URL}/mongodb/{collection}/bulk", json=payload
+            f"{DB_QUERY_API_URL}/mongodb/{collection}/bulk",
+            json=payload,
+            headers=headers,
         )
         response.raise_for_status()
         return response.json()
@@ -228,9 +268,12 @@ async def bulk_insert_cosmos(
         },
     ),
 ):
+    headers = _build_forward_headers(request)
     async with httpx.AsyncClient(timeout=300.0) as client:
         response = await client.post(
-            f"{DB_QUERY_API_URL}/cosmos/{collection}/bulk", json=payload
+            f"{DB_QUERY_API_URL}/cosmos/{collection}/bulk",
+            json=payload,
+            headers=headers,
         )
         response.raise_for_status()
         return response.json()
@@ -259,8 +302,9 @@ async def get_redis_key(key: str, request: Request):
     }
     ```
     """
+    headers = _build_forward_headers(request)
     async with httpx.AsyncClient() as client:
-        response = await client.get(f"{DB_QUERY_API_URL}/redis/{key}")
+        response = await client.get(f"{DB_QUERY_API_URL}/redis/{key}", headers=headers)
         response.raise_for_status()
         return response.json()
 
@@ -307,8 +351,11 @@ async def redis_batch_operations(
     }
     ```
     """
+    headers = _build_forward_headers(request)
     async with httpx.AsyncClient(timeout=300.0) as client:
-        response = await client.post(f"{DB_QUERY_API_URL}/redis/batch", json=operations)
+        response = await client.post(
+            f"{DB_QUERY_API_URL}/redis/batch", json=operations, headers=headers
+        )
         response.raise_for_status()
         return response.json()
 
@@ -334,8 +381,11 @@ async def list_qdrant_collections(request: Request):
     }
     ```
     """
+    headers = _build_forward_headers(request)
     async with httpx.AsyncClient() as client:
-        response = await client.get(f"{DB_QUERY_API_URL}/qdrant/collections")
+        response = await client.get(
+            f"{DB_QUERY_API_URL}/qdrant/collections", headers=headers
+        )
         response.raise_for_status()
         return response.json()
 
@@ -380,9 +430,12 @@ async def search_qdrant_vectors(
     }
     ```
     """
+    headers = _build_forward_headers(request)
     async with httpx.AsyncClient() as client:
         response = await client.post(
-            f"{DB_QUERY_API_URL}/qdrant/{collection}/search", json=query
+            f"{DB_QUERY_API_URL}/qdrant/{collection}/search",
+            json=query,
+            headers=headers,
         )
         response.raise_for_status()
         return response.json()
@@ -429,9 +482,12 @@ async def bulk_upsert_qdrant(
     }
     ```
     """
+    headers = _build_forward_headers(request)
     async with httpx.AsyncClient(timeout=300.0) as client:
         response = await client.post(
-            f"{DB_QUERY_API_URL}/qdrant/{collection}/bulk", json=payload
+            f"{DB_QUERY_API_URL}/qdrant/{collection}/bulk",
+            json=payload,
+            headers=headers,
         )
         response.raise_for_status()
         return response.json()
@@ -461,8 +517,20 @@ async def list_mcp_tools(request: Request):
     }
     ```
     """
-    # TODO: Implement MCP server integration
-    return {"tools": [], "note": "MCP integration pending"}
+    headers = _build_forward_headers(request)
+    # Forward to internal MCP handlers (served by the Gateway or local services)
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{DB_QUERY_API_URL}/mcp/tools", headers=headers
+            )
+            response.raise_for_status()
+            return response.json()
+    except Exception:
+        return {
+            "tools": [],
+            "note": "MCP integration pending or internal MCP service unreachable",
+        }
 
 
 @router.post("/mcp/tools/{tool_name}")
@@ -484,5 +552,17 @@ async def execute_mcp_tool(
     }
     ```
     """
-    # TODO: Implement MCP server integration
-    raise HTTPException(status_code=501, detail="MCP integration pending")
+    headers = _build_forward_headers(request)
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{DB_QUERY_API_URL}/mcp/tools/{tool_name}",
+                headers=headers,
+                json=params,
+            )
+            response.raise_for_status()
+            return response.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))

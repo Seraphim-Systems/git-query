@@ -5,7 +5,7 @@ historical `src.storage.models` import path working by re-exporting the
 classes from the canonical location.
 """
 
-from db.models import (
+from src.db.models import (
     MongoQuery,
     MongoInsert,
     QdrantQuery,
