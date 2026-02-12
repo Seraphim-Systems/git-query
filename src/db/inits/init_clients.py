@@ -37,15 +37,48 @@ async def startup_db_clients():
         logger.error("MONGODB_URL is not configured")
         raise RuntimeError("MONGODB_URL must be set to connect to MongoDB")
 
-    try:
-        client = MongoClient(mongodb_url, serverSelectionTimeoutMS=5000)
-        client.admin.command("ping")
-        _assign(clients_mod, "mongo_client", client)
-        logger.info("✓ MongoDB connected successfully")
-    except Exception as e:
-        _assign(clients_mod, "mongo_client", None)
-        logger.error("✗ MongoDB connection failed: %s", e)
-        raise RuntimeError(f"Failed to connect to MongoDB: {e}")
+    # Attempt to connect with retries and exponential backoff since containers
+    # may still be starting when the gateway begins its startup sequence.
+    import time
+    import asyncio
+
+    max_wait_seconds = int(os.getenv("DB_STARTUP_TIMEOUT", "60"))
+    attempt = 0
+    start = time.time()
+    client = None
+    last_exc = None
+    while True:
+        try:
+            attempt += 1
+            # Keep individual server selection timeout small so failures are
+            # detected quickly, but allow multiple attempts up to max_wait_seconds.
+            client = MongoClient(mongodb_url, serverSelectionTimeoutMS=5000)
+            client.admin.command("ping")
+            _assign(clients_mod, "mongo_client", client)
+            logger.info("✓ MongoDB connected successfully (attempt %d)", attempt)
+            break
+        except Exception as e:
+            last_exc = e
+            _assign(clients_mod, "mongo_client", None)
+            elapsed = time.time() - start
+            if elapsed >= max_wait_seconds:
+                logger.error("✗ MongoDB connection failed after %ds: %s", elapsed, e)
+                raise RuntimeError(f"Failed to connect to MongoDB: {e}")
+            # Exponential backoff (capped)
+            backoff = min(1 * (2 ** (attempt - 1)), 8)
+            logger.warning(
+                "MongoDB not ready (attempt %d, waited %ds), retrying in %ds...: %s",
+                attempt,
+                int(elapsed),
+                backoff,
+                e,
+            )
+            # Use asyncio.sleep to yield control while waiting
+            try:
+                await asyncio.sleep(backoff)
+            except Exception:
+                # In case the event loop is shutting down, propagate last exception
+                raise RuntimeError(f"Failed to connect to MongoDB: {last_exc}")
 
     # Cosmos (Mongo API) - optional
     cosmos_url = os.getenv("COSMOS_DB_URL") or os.getenv("COSMOS_URL")
@@ -109,7 +142,7 @@ async def startup_db_clients():
     try:
         scheme = "https" if qdrant_use_tls else "http"
         url = f"{scheme}://{qdrant_host}:{qdrant_port}"
-        qc = QdrantClient(url=url, api_key=qdrant_api_key or None, timeout=5)
+        qc = QdrantClient(url=url, api_key=qdrant_api_key or None, timeout=10)
         qc.get_collections()
         _assign(clients_mod, "qdrant_client", qc)
         logger.info("✓ Qdrant connected successfully")
