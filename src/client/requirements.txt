@@ -1,8 +1,0 @@
-pydantic-ai==0.0.14
-pydantic==2.6.0
-pydantic-settings==2.1.0
-python-dotenv==1.0.0
-httpx==0.26.0
-openai==1.10.0
-rich==13.7.0
-
