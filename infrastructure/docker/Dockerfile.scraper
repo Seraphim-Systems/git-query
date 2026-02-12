@@ -8,9 +8,9 @@ RUN apt-get update && apt-get install -y \
   curl \
   && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
-COPY src/scraper/requirements.txt requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy consolidated requirements
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Copy scraper code
 COPY src/scraper /app/scraper

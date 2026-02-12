@@ -33,7 +33,7 @@ async def chat(
     """
     Chat endpoint - proxies to MCP server with user context.
     """
-    from src.gateway.config import settings
+    from src.shared.config import settings
 
     # Enrich request with user context
     payload = {

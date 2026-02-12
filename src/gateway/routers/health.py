@@ -1,7 +1,7 @@
 """
-Health check endpoints for API v1.
+Health check endpoints.
 
-Public endpoints that return the status of all services and databases.
+Provides health routes for the API and database services.
 """
 
 from datetime import datetime, timezone
@@ -20,33 +20,9 @@ db_router = APIRouter(prefix="/api/db", tags=["health"])
 
 @router.get("")
 async def health_check_all(request: Request):
-    """
-    **GET /api/health**
-
-    Returns health status of all services including gateway, databases, and MCP server.
-
-    **Response:**
-    ```json
-    {
-        "status": "healthy",
-        "timestamp": "2026-02-08T12:00:00Z",
-        "services": {
-            "gateway": true,
-            "mongodb": true,
-            "redis": true,
-            "qdrant": true,
-            "mcp_server": false
-        }
-    }
-    ```
-
-    **Status Codes:**
-    - 200: At least one service is healthy
-    - 503: All critical services are down
-    """
     try:
         services_status = {
-            "gateway": True,  # If we're here, gateway is up
+            "gateway": True,
             "mongodb": False,
             "redis": False,
             "qdrant": False,
@@ -83,12 +59,9 @@ async def health_check_all(request: Request):
             async with httpx.AsyncClient(timeout=5.0, verify=False) as client:
                 resp = await client.get("https://cosmos-db:8081/")
                 if resp.status_code in (200, 404, 401):
-                    # Emulator may respond with 404 or 401 depending on endpoint
                     services_status["cosmos"] = True
         except Exception as e:
             logger.error(f"Cosmos DB health check failed: {e}")
-
-        # TODO: Add MCP server health check if needed
 
         overall_status = "healthy" if any(services_status.values()) else "unhealthy"
         http_status = (
@@ -120,11 +93,6 @@ async def health_check_all(request: Request):
 
 @db_router.get("/health")
 async def health_check_databases(request: Request):
-    """
-    **GET /api/db/health**
-
-    Returns health status of database services only (MongoDB, Redis, Qdrant, Cosmos).
-    """
     databases = {}
 
     # MongoDB

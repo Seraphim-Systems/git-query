@@ -31,7 +31,7 @@ async def get_recommendations(
     User context is automatically injected from session.
     Preferences are used to filter/rank results.
     """
-    from src.gateway.config import settings
+    from src.shared.config import settings
 
     # Prepare request payload with user context
     payload = {

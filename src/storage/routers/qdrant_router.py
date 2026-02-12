@@ -3,7 +3,7 @@ Qdrant API endpoints
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Body
-from typing import Dict, Any, List
+from typing import Dict, Any
 from qdrant_client.models import PointStruct
 from src.db.models import QdrantQuery, QdrantInsert
 from src.db.clients import get_qdrant_client
