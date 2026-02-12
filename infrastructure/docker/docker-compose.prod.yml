@@ -1,3 +1,4 @@
+
 # Production override - optimized settings, secrets from environment
 name: git-query
 
@@ -25,8 +26,7 @@ services:
     command: redis-server --requirepass ${DB_REDIS_PASSWORD}
     restart: always
 
-  nginx:
-    # Expose nginx externally in production
+  gateway:
     ports:
       - "80:80"
     environment:
@@ -49,3 +49,4 @@ services:
       - OPENAI_API_KEY=${APP_OPENAI_API_KEY}
       - MODEL_NAME=${CHATBOT_MODEL_NAME:-gpt-4}
     restart: always
+

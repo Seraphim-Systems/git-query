@@ -12,8 +12,7 @@ The compose files are split into service categories, each independently deployab
 - **docker-compose.cosmos.yml** - Cosmos DB emulator
 - **docker-compose.qdrant.yml** - Qdrant vector database
 - **docker-compose.redis.yml** - Redis cache
-- **docker-compose.db-api.yml** - Database Query API
-- **docker-compose.nginx.yml** - Nginx reverse proxy
+- **docker-compose.gateway.yml** - API Gateway (serves API + DB routers)
 
 **Data Processing Layer:**
 - **docker-compose.pipelines.yml** - Data pipelines (scraper, processing)
@@ -33,11 +32,8 @@ docker-compose -f docker-compose.base.yml -f docker-compose.mongodb.yml up -d
 docker-compose -f docker-compose.base.yml -f docker-compose.qdrant.yml up -d
 docker-compose -f docker-compose.base.yml -f docker-compose.redis.yml up -d
 
-# Deploy DB API (after databases are ready)
-docker-compose -f docker-compose.base.yml -f docker-compose.db-api.yml up -d
-
-# Deploy nginx (after DB API is ready)
-docker-compose -f docker-compose.base.yml -f docker-compose.nginx.yml up -d
+# Deploy gateway (after databases are ready)
+docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d --build gateway
 ```
 
 ### Deploy Data Processing Services
@@ -133,10 +129,10 @@ Service dependencies by category:
 
 For full stack deployment:
 1. Deploy databases (MongoDB, Qdrant, Redis, Cosmos)
-2. Deploy DB API
+  2. Deploy Gateway (serves DB endpoints)
 3. Deploy pipelines (scraper, processing)
 4. Deploy ML services (MCP, recommender)
-5. Deploy nginx gateway
+5. Deploy gateway
 6. Run training (optional, as needed)
 
 ## Environment Variables
@@ -186,13 +182,17 @@ LEARNING_RATE=0.001
 - `APP_*` - Application-level secrets
 - `SVC_*` - Service configuration
 
-## Legacy Files
+## Archived / Removed Files
 
-The following files are kept for backward compatibility:
+The following files were previously archived; they have been restored to the active `infrastructure/docker` folder to re-enable deployments and developer workflows:
 
-- **docker-compose.dev.yml** - Development overrides (exposes ports)
-- **docker-compose.prod.yml** - Production overrides (secrets, restart policies)
-- **.github/workflows/deploy-prod.yml** - Legacy production deployment (uses docker-compose.db.yml)
+- `docker-compose.prod.yml`
+- `docker-compose.training.yml`
+- `docker-compose.reco.yml`
+- `docker-compose.pipelines.yml`
+- `Dockerfile.recommender`
+- `Dockerfile.training`
+- `Dockerfile.scraper`
 
-**Note:** docker-compose.db.yml is the active infrastructure compose file, not legacy.
-- docker-compose.base.yml + docker-compose.training.yml
+The development override `docker-compose.dev.yml` and `docker-compose.base.yml` remain active. If you wish to remove any of the above files again, delete them from `infrastructure/docker/` and update this README accordingly.
+

@@ -1,8 +1,8 @@
 """Mongo / Cosmos adapter implementing CollectionRepository."""
 
 from typing import Dict, Any, List, Optional
-from db.adapters.interfaces import CollectionRepository
-from db.config import db_clients
+from src.db.adapters.interfaces import CollectionRepository
+from src.db.config import db_clients
 
 
 class MongoAdapter(CollectionRepository):

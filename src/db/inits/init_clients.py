@@ -49,7 +49,7 @@ async def startup_db_clients():
     but performs connectivity checks where appropriate.
     """
     # Import here to avoid circular imports at module import time
-    import db.clients as clients_mod
+    import src.db.clients as clients_mod
 
     # MongoDB
     if not MONGODB_URL:
@@ -84,12 +84,14 @@ async def startup_db_clients():
         _assign(clients_mod, "cosmos_client", client)
         try:
             # mirror into any config instance if present
-            from db.config import db_clients as db_clients_cfg
+            from src.db.config import db_clients as db_clients_cfg
 
             db_clients_cfg._cosmos_client = client
         except Exception:
             logger.debug("db_config mirror unavailable")
-        logger.info(f"✓ CosmosDB (Mongo API) connected successfully ({effective_cosmos_url})")
+        logger.info(
+            f"✓ CosmosDB (Mongo API) connected successfully ({effective_cosmos_url})"
+        )
     except Exception as e:
         _assign(clients_mod, "cosmos_client", None)
         logger.warning(f"✗ CosmosDB connection failed (optional): {e}")
@@ -124,7 +126,7 @@ async def startup_db_clients():
 
 async def shutdown_db_clients():
     """Close and clear database clients assigned on `db.clients`."""
-    import db.clients as clients_mod
+    import src.db.clients as clients_mod
 
     logger.info("Shutting down database clients...")
 
@@ -143,7 +145,9 @@ async def shutdown_db_clients():
         logger.error(f"Error closing Redis client: {e}")
 
     try:
-        if getattr(clients_mod, "qdrant_client", None) and hasattr(clients_mod.qdrant_client, "close"):
+        if getattr(clients_mod, "qdrant_client", None) and hasattr(
+            clients_mod.qdrant_client, "close"
+        ):
             clients_mod.qdrant_client.close()
             logger.info("Qdrant client closed")
     except Exception as e:
@@ -158,7 +162,7 @@ async def shutdown_db_clients():
 
     # Clear mirror in db.config if present
     try:
-        from db.config import db_clients as db_clients_cfg
+        from src.db.config import db_clients as db_clients_cfg
 
         db_clients_cfg._cosmos_client = None
     except Exception:

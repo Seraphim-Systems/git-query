@@ -142,8 +142,9 @@ jobs:
             docker ps --filter "name=git-query" --format "table {{.Names}}\t{{.Status}}"
             
             # Start dependent services
-            echo "🚀 Starting API and init services..."
-            docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d --build qdrant-init db-query-api nginx
+            echo "🚀 Starting init and gateway services..."
+            # db-query-api removed; the Gateway serves DB endpoints. Start init and gateway.
+            docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d --build qdrant-init gateway
           else
             echo "🚀 Deploying ${{ github.event.inputs.services }}..."
             docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d --build ${{ github.event.inputs.services }}

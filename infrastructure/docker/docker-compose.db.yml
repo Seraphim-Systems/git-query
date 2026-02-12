@@ -95,51 +95,24 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
-  # Database Query API
-  db-query-api:
+  # Note: db-query-api removed. Database endpoints are served by the API Gateway.
+
+  # API Gateway - serves API and database routers; listens on port 80
+  gateway:
     build:
       context: ../..
-      dockerfile: infrastructure/docker/Dockerfile.db-api
-    container_name: git-query-db-api
+      dockerfile: infrastructure/docker/Dockerfile.gateway
+    container_name: git-query-gateway
     environment:
-      - API_HOST=0.0.0.0
-      - API_PORT=8080
       - LOG_LEVEL=${SVC_LOG_LEVEL:-INFO}
-      - MONGODB_URL=mongodb://${DB_MONGODB_USER:-admin}:${DB_MONGODB_PASSWORD:-mongopass}@mongodb:27017/gitquery?authSource=admin
-      - COSMOS_DB_URL=https://cosmos-db:8081
-      - QDRANT_HOST=qdrant
-      - QDRANT_PORT=6333
-      - QDRANT_API_KEY=${DB_QDRANT_API_KEY:-}
-      - REDIS_URL=redis://:${DB_REDIS_PASSWORD:-redispass}@redis:6379
-      - MONGODB_API_KEY=${APIKEY_MONGODB}
-      - REDIS_API_KEY=${APIKEY_REDIS}
-      - QDRANT_API_KEY_AUTH=${APIKEY_QDRANT}
+    expose:
+      - "80"
     depends_on:
       - mongodb
       - redis
       - qdrant
-    networks:
-      - db-network
-      - web-network
-    restart: unless-stopped
-    expose:
-      - "8080"
-
-  # Nginx proxy for database queries
-  nginx:
-    build:
-      context: ../..
-      dockerfile: infrastructure/docker/Dockerfile.web-db
-    container_name: git-query-nginx
-    environment:
-      - SERVER_NAME=${SVC_NGINX_SERVER_NAME:-_}
-      - MONGODB_API_KEY=${APIKEY_MONGODB}
-      - REDIS_API_KEY=${APIKEY_REDIS}
-      - QDRANT_API_KEY=${APIKEY_QDRANT}
-    expose:
-      - "80"
-    depends_on:
-      - db-query-api
+      - cosmos-db
+      - qdrant-init
     networks:
       - web-network
       - proxy

@@ -6,7 +6,7 @@ Complete reference for all API endpoints in git-query.
 
 Current Port Allocation:
 
-db-query-api: 8080
+gateway: 8000
 mcp-server: 8090
 mongodb: 27017
 redis: 6379
