@@ -11,13 +11,13 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/health", tags=["health"])
+router = APIRouter(prefix="/api/health", tags=["health"])
 
 
 @router.get("")
 async def health_check_all(request: Request):
     """
-    **GET /api/v1/health**
+    **GET /api/health**
 
     Returns health status of all services including gateway, databases, and MCP server.
 
@@ -99,7 +99,7 @@ async def health_check_all(request: Request):
 @router.get("/databases")
 async def health_check_databases(request: Request):
     """
-    **GET /api/v1/health/databases**
+    **GET /api/health/databases**
 
     Returns health status of database services only (MongoDB, Redis, Qdrant).
 
