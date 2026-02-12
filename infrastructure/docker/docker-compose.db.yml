@@ -107,6 +107,9 @@ services:
       - .env
     environment:
       - LOG_LEVEL=${SVC_LOG_LEVEL:-INFO}
+      # Provide database connection URLs using the DB_* secrets defined for services
+      - REDIS_URL=redis://:${DB_REDIS_PASSWORD:-redispass}@redis:6379
+      - MONGODB_URL=mongodb://${DB_MONGODB_USER:-admin}:${DB_MONGODB_PASSWORD:-mongopass}@mongodb:27017/${DB_MONGODB_DATABASE:-gitquery}?authSource=admin
     expose:
       - "80"
     depends_on:
@@ -116,6 +119,7 @@ services:
       - cosmos-db
       - qdrant-init
     networks:
+      - db-network
       - web-network
       - proxy
     restart: unless-stopped

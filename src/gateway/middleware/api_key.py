@@ -39,7 +39,7 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
                         )
 
                     # Validate API key for this service
-                    if not self._validate_service_key(api_key, service, request.app):
+                    if not self._validate_service_key(api_key, service):
                         raise HTTPException(
                             status_code=status.HTTP_403_FORBIDDEN,
                             detail=f"Invalid API key for service: {service}",
@@ -48,7 +48,7 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
                     # Inject service and key info into request state
                     request.state.api_key = api_key
                     request.state.service = service
-                    logger.debug(f"API key validated for service: {service}")
+                    logger.debug("API key validated for service: %s", service)
 
         return await call_next(request)
 
@@ -61,7 +61,7 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
                 return parts[1]
         return None
 
-    def _validate_service_key(self, api_key: str, service: str, app) -> bool:
+    def _validate_service_key(self, api_key: str, service: str) -> bool:
         """
         Validate API key for a specific service.
         Checks against environment variables or config.
@@ -78,7 +78,7 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         expected_key = service_keys.get(service)
 
         if not expected_key:
-            logger.warning(f"No API key configured for service: {service}")
+            logger.warning("No API key configured for service: %s", service)
             return False
 
         return api_key == expected_key

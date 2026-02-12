@@ -118,43 +118,56 @@ jobs:
 
       - name: Deploy Infrastructure Services
         run: |
-          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
           set -e
-          
+
           cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query/infrastructure/docker
-          
+
           # Clean up any corrupted containers and remove volumes so DBs are recreated
           echo "🧹 Cleaning up existing containers and volumes..."
           docker-compose -f docker-compose.base.yml -f docker-compose.db.yml down -v --remove-orphans || true
-          
+
+          # Compose files to use for full deployments (base + db + mcp + recommender + training)
+          COMPOSE="-f docker-compose.base.yml -f docker-compose.db.yml -f docker-compose.mcp.yml -f docker-compose.reco.yml -f docker-compose.training.yml"
+
           if [ "${{ github.event.inputs.services }}" == "all" ]; then
-            echo "🚀 Deploying all infrastructure services..."
-            
-            # Start databases first
-            echo "📦 Starting databases..."
-            docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d --build mongodb redis qdrant cosmos-db
-            
+            echo "🚀 Deploying all infrastructure services in staged order..."
+
+            # 1) Start databases first
+            echo "📦 Starting databases (mongodb, redis, qdrant, cosmos-db)..."
+            docker-compose $COMPOSE up -d --build mongodb redis qdrant cosmos-db
+
             # Wait for databases to initialize
             echo "⏳ Waiting 30 seconds for databases to initialize..."
             sleep 30
-            
-            # Check final status
-            docker ps --filter "name=git-query" --format "table {{.Names}}\t{{.Status}}"
-            
-            # Start dependent services
-            echo "🚀 Starting init and gateway services..."
-            # db-query-api removed; the Gateway serves DB endpoints. Start init and gateway.
-            docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d --build qdrant-init gateway
+
+            # Run qdrant init one-off (depends on qdrant)
+            echo "🔧 Running qdrant init (one-off)..."
+            docker-compose $COMPOSE run --rm --build qdrant-init || true
+
+            # 2) Start core backend services that depend on databases (MCP, recommender, training)
+            echo "🛠️  Starting core backend services (mcp-server, recommender, training)..."
+            docker-compose $COMPOSE up -d --build mcp-server recommender training || true
+
+            # Allow core services to reach healthy state
+            echo "⏳ Waiting 20 seconds for core services to initialize..."
+            sleep 20
+
+            # 3) Finally start the gateway (managers/fronting services)
+            echo "🚀 Starting gateway (no-deps)..."
+            docker-compose $COMPOSE up -d --build --no-deps gateway
+
           else
-            echo "🚀 Deploying ${{ github.event.inputs.services }}..."
+            echo "🚀 Deploying single service: ${{ github.event.inputs.services }}"
+            # Use db compose by default for single items; include other compose files if needed
             docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d --build ${{ github.event.inputs.services }}
-            
+
             if [ "${{ github.event.inputs.services }}" == "qdrant" ]; then
               sleep 15
-              docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d qdrant-init
+              docker-compose -f docker-compose.base.yml -f docker-compose.db.yml run --rm --build qdrant-init
             fi
           fi
-          
+
           echo ""
           echo "📦 Running containers:"
           docker ps --filter "name=git-query"
