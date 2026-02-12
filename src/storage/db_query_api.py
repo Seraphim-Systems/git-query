@@ -38,8 +38,10 @@ Security and deployment notes
 """
 
 from datetime import datetime, timezone
-from fastapi import FastAPI
+import logging
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.responses import JSONResponse
 from db.clients import (
     startup_db_clients,
@@ -56,6 +58,8 @@ from storage.routers import (
     batch_router,
     cosmos_router,
 )
+
+logger = logging.getLogger(__name__)
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -232,10 +236,31 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8080)
 
 
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """Return JSON for HTTP errors and log route-not-found details."""
+    msg = (
+        f"HTTP {exc.status_code} on {request.method} {request.url.path} - {exc.detail}"
+    )
+    if exc.status_code == 404:
+        logger.warning(msg)
+    else:
+        logger.info(msg)
+
+    return JSONResponse(
+        status_code=exc.status_code, content={"detail": exc.detail or "Not Found"}
+    )
+
+
 # Simple HTTP exception handler to ensure JSON response for 404s
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request, exc: StarletteHTTPException):
-    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail or "Not Found"})
+    return JSONResponse(
+        status_code=exc.status_code, content={"detail": exc.detail or "Not Found"}
+    )
