@@ -1,0 +1,38 @@
+```dockercompose
+# Training service compose
+# Usage: docker-compose -f docker-compose.base.yml -f docker-compose.training.yml up
+
+services:
+  training:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.training
+    container_name: git-query-training
+    environment:
+      - LOG_LEVEL=${SVC_LOG_LEVEL:-INFO}
+      - MONGODB_URL=mongodb://${DB_MONGODB_USER:-admin}:${DB_MONGODB_PASSWORD:-mongopass}@mongodb:27017/gitquery?authSource=admin
+      - REDIS_URL=redis://:${DB_REDIS_PASSWORD:-redispass}@redis:6379
+    networks:
+      - db-network
+      - web-network
+    restart: unless-stopped
+    volumes:
+      - training-models:/app/models
+      - training-data:/app/training_data
+      - training-logs:/app/logs
+
+volumes:
+  training-models:
+    external: true
+  training-data:
+    external: true
+  training-logs:
+    external: true
+
+networks:
+  db-network:
+    name: git-query-db-network
+  web-network:
+    name: git-query-web-network
+
+```
