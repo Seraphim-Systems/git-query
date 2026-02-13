@@ -5,8 +5,8 @@ This module reads per-service API keys from the shared configuration
 for backwards compatibility.
 """
 
-import os
 from typing import Optional, List
+import logging
 from fastapi import HTTPException, Security
 from fastapi.security import APIKeyHeader
 
@@ -29,9 +29,10 @@ INVALID_PLACEHOLDERS = {"change-me", "dev-local-key", ""}
 VALID_API_KEYS = [k for k in candidate_keys if k and k not in INVALID_PLACEHOLDERS]
 
 if not VALID_API_KEYS:
-    raise RuntimeError(
-        "At least one API key must be set to a secure value. "
-        "Configure via shared settings or environment variables."
+    logger = logging.getLogger(__name__)
+    logger.warning(
+        "No valid API keys found for storage services. "
+        "The application will start, but storage endpoints will reject requests until API keys are configured."
     )
 
 
