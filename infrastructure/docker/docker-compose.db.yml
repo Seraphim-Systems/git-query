@@ -1,5 +1,3 @@
-
-
 services:
   # Database Services
   mongodb:
