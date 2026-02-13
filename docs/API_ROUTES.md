@@ -28,10 +28,15 @@ nginx: 80
 - `GET /api/health/databases`
 
 ### Protected Endpoints (API Key Required)
-All `/api/*` endpoints require an API key in the `Authorization` header:
+All `/api/*` endpoints require an API key in either the `Authorization` header
+or the `X-API-Key` header. Examples:
 
 ```http
 Authorization: Bearer <your-api-key>
+```
+
+```http
+X-API-Key: <your-api-key>
 ```
 
 **API Keys (per service):**
@@ -105,7 +110,7 @@ List all collections in the database.
 
 ---
 
-### POST /api/mongodb/{collection}/query
+### POST /api/mongodb/collections/{collection}/query
 Query documents in a collection.
 
 **Auth:** MongoDB API key required
@@ -133,7 +138,7 @@ Query documents in a collection.
 
 ---
 
-### POST /api/mongodb/{collection}/bulk
+### POST /api/mongodb/collections/{collection}/bulk
 Bulk insert or upsert documents.
 
 **Auth:** MongoDB API key required
@@ -157,6 +162,42 @@ Bulk insert or upsert documents.
   "updated": 2,
   "errors": []
 }
+
+---
+
+### DELETE /api/mongodb/collections/{collection}/documents
+Delete documents from a collection using a JSON filter in the request body.
+
+**Auth:** MongoDB API key required
+
+**Request Body:**
+```json
+{
+  "filter": {"stars": {"$lt": 10}},
+  "many": true
+}
+```
+
+**Response:**
+```json
+{ "deleted": 10 }
+```
+
+Use this route for filter-based deletes. For single-document deletes by id,
+use `DELETE /api/mongodb/collections/{collection}/documents/{doc_id}`.
+
+---
+
+### DELETE /api/mongodb/collections/{collection}
+Drop an entire collection (destructive). Returns whether the collection existed
+and was dropped.
+
+**Auth:** MongoDB API key required
+
+**Response:**
+```json
+{ "collection": "mycoll", "dropped": true }
+```
 ```
 
 **Use Cases:**

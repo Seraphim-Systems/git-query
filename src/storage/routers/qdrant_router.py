@@ -7,6 +7,7 @@ from typing import Dict, Any
 from qdrant_client.models import VectorParams, Distance
 from src.db.models import QdrantQuery, QdrantInsert
 from src.db.clients import get_qdrant_client
+from src.db.adapters.qdrant_adapter import QdrantAdapter
 from src.processing.qdrant_helpers import serialize_collection_description
 from src.storage.auth import get_api_key
 
@@ -19,25 +20,25 @@ router = APIRouter(prefix="/qdrant", tags=["Qdrant"])
 @router.post("/collections/{collection}/points", dependencies=[Depends(get_api_key)])
 async def create_points(collection: str, payload: Dict[str, Any] = Body(...)):
     """Modern alias for bulk upsert: POST /collections/{collection}/points"""
-    return await bulk_upsert_vectors(collection, payload)
+    return await bulk_upsert_vectors_impl(collection, payload)
 
 
 @router.post("/collections/{collection}/search", dependencies=[Depends(get_api_key)])
 async def search_collection_modern(collection: str, query: Dict[str, Any] = Body(...)):
     """Modern alias for searching a collection"""
-    return await search_collection(collection, query)
+    return await search_collection_impl(collection, query)
 
 
 @router.delete("/collections/{collection}", dependencies=[Depends(get_api_key)])
 async def delete_collection_modern(collection: str):
     """Modern alias for deleting collection"""
-    return await delete_collection(collection)
+    return await delete_collection_impl(collection)
 
 
 @router.delete("/collections/{collection}/points", dependencies=[Depends(get_api_key)])
 async def delete_points_modern(collection: str, payload: Dict[str, Any] = Body(...)):
     """Modern alias for deleting points in a collection"""
-    return await delete_points(collection, payload)
+    return await delete_points_impl(collection, payload)
 
 
 @router.post("/search", dependencies=[Depends(get_api_key)])
@@ -48,21 +49,10 @@ async def search_qdrant(query: QdrantQuery):
         raise HTTPException(status_code=503, detail="Qdrant not available")
 
     try:
-        results = qdrant_client.search(
-            collection_name=query.collection,
-            query_vector=query.vector,
-            limit=query.limit,
-            score_threshold=query.score_threshold,
+        adapter = QdrantAdapter(qdrant_client)
+        return adapter.search(
+            query.collection, query.vector, limit=query.limit, filter=None
         )
-
-        return {
-            "collection": query.collection,
-            "count": len(results),
-            "results": [
-                {"id": result.id, "score": result.score, "payload": result.payload}
-                for result in results
-            ],
-        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
 
@@ -75,6 +65,7 @@ async def insert_qdrant(insert: QdrantInsert):
         raise HTTPException(status_code=503, detail="Qdrant not available")
 
     try:
+        adapter = QdrantAdapter(qdrant_client)
         points = [
             {
                 "id": point.get("id"),
@@ -83,10 +74,11 @@ async def insert_qdrant(insert: QdrantInsert):
             }
             for point in insert.points
         ]
-
-        qdrant_client.upsert(collection_name=insert.collection, points=points)
-
-        return {"collection": insert.collection, "inserted_count": len(points)}
+        res = adapter.upsert_points(insert.collection, points, wait=True)
+        return {
+            "collection": insert.collection,
+            "inserted_count": res.get("upserted", 0),
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Insert failed: {str(e)}")
 
@@ -118,8 +110,7 @@ async def list_qdrant_collections():
         )
 
 
-@router.post("/{collection}/search", dependencies=[Depends(get_api_key)])
-async def search_collection(
+async def search_collection_impl(
     collection: str,
     query: Dict[str, Any] = Body(
         ...,
@@ -139,29 +130,15 @@ async def search_collection(
     try:
         vector = query.get("vector")
         limit = query.get("limit", 10)
-        score_threshold = query.get("score_threshold")
+        filt = query.get("filter")
 
-        results = qdrant_client.search(
-            collection_name=collection,
-            query_vector=vector,
-            limit=limit,
-            score_threshold=score_threshold,
-        )
-
-        return {
-            "collection": collection,
-            "count": len(results),
-            "results": [
-                {"id": result.id, "score": result.score, "payload": result.payload}
-                for result in results
-            ],
-        }
+        adapter = QdrantAdapter(qdrant_client)
+        return adapter.search(collection, vector, limit=limit, filter=filt)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
 
 
-@router.post("/{collection}/bulk", dependencies=[Depends(get_api_key)])
-async def bulk_upsert_vectors(
+async def bulk_upsert_vectors_impl(
     collection: str,
     payload: Dict[str, Any] = Body(
         ...,
@@ -194,8 +171,7 @@ async def bulk_upsert_vectors(
         points_data = payload.get("points", [])
         wait = payload.get("wait", True)
 
-        # Use plain dicts for points to avoid client-model/version serialization
-        # differences that can cause server-side format errors.
+        adapter = QdrantAdapter(qdrant_client)
         points = [
             {
                 "id": point.get("id"),
@@ -206,23 +182,25 @@ async def bulk_upsert_vectors(
         ]
 
         try:
-            qdrant_client.upsert(collection_name=collection, points=points, wait=wait)
+            res = adapter.upsert_points(collection, points, wait=wait)
         except Exception as e:
-            # If the collection doesn't exist, create it using the incoming
-            # vector dimensionality then retry the upsert once.
+            # Try to create collection if missing and retry once
             msg = str(e)
+            msg_lower = msg.lower()
+            # Cover a few common phrasings returned by different qdrant
+            # client/http responses (e.g. "doesn't exist", "does not exist",
+            # "not found"). This makes the auto-create fallback more
+            # robust across qdrant versions and client libraries.
             if (
-                "doesn't exist" in msg
-                or "Not found" in msg
-                or "Collection" in msg
-                and "doesn't exist" in msg
+                "doesn't exist" in msg_lower
+                or "does not exist" in msg_lower
+                or "not found" in msg_lower
+                or ("collection" in msg_lower and "does not" in msg_lower)
             ):
-                # Infer vector size from first point if available
                 if points and isinstance(points[0].get("vector"), (list, tuple)):
                     vec_size = len(points[0]["vector"])
                 else:
                     vec_size = 768
-
                 try:
                     qdrant_client.create_collection(
                         collection_name=collection,
@@ -231,56 +209,37 @@ async def bulk_upsert_vectors(
                         ),
                     )
                 except Exception:
-                    # If create_collection fails, re-raise original error
                     raise
 
-                # Retry upsert once
-                qdrant_client.upsert(
-                    collection_name=collection, points=points, wait=wait
-                )
+                res = adapter.upsert_points(collection, points, wait=wait)
             else:
                 raise
 
         return {
             "collection": collection,
-            "upserted": len(points),
+            "upserted": res.get("upserted", len(points)),
             "status": "completed",
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Bulk upsert failed: {str(e)}")
 
 
-@router.delete("/{collection}", dependencies=[Depends(get_api_key)])
-async def delete_collection(collection: str):
+async def delete_collection_impl(collection: str):
     """Delete an entire Qdrant collection."""
     qdrant_client = get_qdrant_client()
     if not qdrant_client:
         raise HTTPException(status_code=503, detail="Qdrant not available")
 
     try:
-        # Preferred method on client
-        if hasattr(qdrant_client, "delete_collection"):
-            result = qdrant_client.delete_collection(collection_name=collection)
-            return {"deleted": bool(result)}
-
-        # Fallback to HTTP-style call if client uses a different API
-        if hasattr(qdrant_client, "_client") and hasattr(
-            qdrant_client._client, "delete_collection"
-        ):
-            result = qdrant_client._client.delete_collection(collection_name=collection)
-            return {"deleted": bool(result)}
-
-        raise HTTPException(
-            status_code=501, detail="Delete collection not supported by client"
-        )
+        adapter = QdrantAdapter(qdrant_client)
+        return adapter.delete_collection(collection)
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Delete collection failed: {str(e)}"
         )
 
 
-@router.post("/{collection}/delete_points", dependencies=[Depends(get_api_key)])
-async def delete_points(collection: str, payload: Dict[str, Any] = Body(...)):
+async def delete_points_impl(collection: str, payload: Dict[str, Any] = Body(...)):
     """Delete specific points in a Qdrant collection by ids or by filter.
 
     Payload examples:
@@ -293,37 +252,12 @@ async def delete_points(collection: str, payload: Dict[str, Any] = Body(...)):
 
     try:
         ids = payload.get("ids")
-        selector = None
-        # Try client-native deletion APIs
-        if ids:
-            # Many qdrant client versions accept a `points_selector` or `points` kwarg
-            try:
-                if hasattr(qdrant_client, "delete"):
-                    qdrant_client.delete(
-                        collection_name=collection, points_selector={"ids": ids}
-                    )
-                    return {"deleted": len(ids)}
-                # fallback to delete_points if present
-                if hasattr(qdrant_client, "delete_points"):
-                    qdrant_client.delete_points(collection_name=collection, ids=ids)
-                    return {"deleted": len(ids)}
-            except Exception:
-                # fall through to attempt HTTP API
-                pass
-
-        # If filter provided, try passing through
-        if payload.get("filter"):
-            try:
-                qdrant_client.delete(
-                    collection_name=collection, filter=payload.get("filter")
-                )
-                return {"deleted": "filter_applied"}
-            except Exception:
-                pass
-
-        raise HTTPException(
-            status_code=400, detail="Unsupported delete request payload"
-        )
+        filt = payload.get("filter")
+        adapter = QdrantAdapter(qdrant_client)
+        try:
+            return adapter.delete_points(collection, ids=ids, filter=filt)
+        except ValueError as ve:
+            raise HTTPException(status_code=400, detail=str(ve))
     except HTTPException:
         raise
     except Exception as e:
