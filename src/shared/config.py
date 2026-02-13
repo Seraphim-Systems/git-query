@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from pydantic import Field
 from typing import List, Optional
 
 
@@ -26,10 +27,11 @@ class Settings(BaseSettings):
     jwt_expiration: int = 86400
 
     # API Keys
-    mongodb_api_key: Optional[str] = None
-    redis_api_key: Optional[str] = None
-    qdrant_api_key: Optional[str] = None
-    mcp_api_key: Optional[str] = None
+    # API keys - read from new environment variable names (preferred)
+    mongodb_api_key: Optional[str] = Field(None, env="APIKEY_MONGODB")
+    redis_api_key: Optional[str] = Field(None, env="APIKEY_REDIS")
+    qdrant_api_key: Optional[str] = Field(None, env="APIKEY_QDRANT")
+    mcp_api_key: Optional[str] = Field(None, env="APIKEY_MCP")
 
     # CORS
     allowed_origins: str = "*"
