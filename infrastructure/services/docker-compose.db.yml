@@ -113,8 +113,11 @@ services:
       # Cosmos DB (emulator) - provide host/port and optional key so the
       # gateway can initialize a Mongo-compatible Cosmos client at startup.
       - COSMOS_DB_HOST=${COSMOS_DB_HOST:-cosmos-db}
-      - COSMOS_DB_PORT=${COSMOS_DB_PORT:-10255}
+      - COSMOS_DB_PORT=${COSMOS_DB_PORT:-10251}
       - COSMOS_DB_KEY=${COSMOS_DB_KEY:-C2y6yDjf5/R+ob0N...==}
+      # Convenient Mongo-compatible connection string used by init_clients
+      - COSMOS_DB_URL=${COSMOS_DB_URL:-mongodb://cosmos-db:10251}
+      - API_COSMOS_URL=${API_COSMOS_URL:-mongodb://cosmos-db:10251}
     expose:
       - "80"
     depends_on:
