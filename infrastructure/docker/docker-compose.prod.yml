@@ -1,0 +1,65 @@
+# Production override - do not bind host ports; only expose internal ports
+# Use this with: -f docker-compose.base.yml -f docker-compose.db.yml -f docker-compose.mcp.yml -f docker-compose.reco.yml -f docker-compose.training.yml -f docker-compose.prod.yml
+
+name: git-query
+
+services:
+  # Ensure no host ports are published in production; bind volumes into project tree
+  mongodb:
+    ports: []
+    volumes:
+      - ../../volumes/mongodb/data:/data/db
+      - ../../volumes/mongodb/config:/data/configdb
+      - ../../src/db/inits/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+
+  cosmos-db:
+    ports: []
+    volumes:
+      - ../../volumes/cosmos:/data/db
+
+  qdrant:
+    ports: []
+    volumes:
+      - ../../volumes/qdrant/storage:/qdrant/storage
+      - ../../volumes/qdrant/snapshots:/qdrant/snapshots
+
+  redis:
+    ports: []
+    volumes:
+      - ../../volumes/redis/data:/data
+
+  mcp-server:
+    ports: []
+    environment:
+      - LOG_LEVEL=INFO
+
+  gateway:
+    # Do not publish host port 80; only expose container port so reverse proxy
+    # or host networking handles external access. Gateway listens on 80 internally.
+    ports: []
+    expose:
+      - "80"
+    environment:
+      - LOG_LEVEL=INFO
+    networks:
+      - db-network
+      - proxy
+
+  recommender:
+    volumes:
+      - ../../volumes/recommender/models:/app/models
+
+  training:
+    volumes:
+      - ../../volumes/training/models:/app/models
+      - ../../volumes/training/data:/app/training_data
+      - ../../volumes/training/logs:/app/logs
+
+networks:
+  db-network:
+    name: git-query-db-network
+  web-network:
+    name: git-query-web-network
+  proxy:
+    external: true
+    name: proxy
