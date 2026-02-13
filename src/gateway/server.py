@@ -36,12 +36,82 @@ from src.db.clients import (
     get_mongo_client,
 )
 
-# Configure logging
-logging.basicConfig(
-    level=settings.log_level,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
+# Configure concise, human-friendly logging for container output
+import sys
+from datetime import datetime
+
+
+class CompactFormatter(logging.Formatter):
+    """Compact log formatter: ISO timestamp, single-letter level, short logger name.
+
+    Examples:
+      2026-02-13T15:04:05 I gateway: Started
+      2026-02-13T15:04:06 W auth: Missing API key
+    """
+
+    LEVEL_MAP = {
+        "DEBUG": "D",
+        "INFO": "I",
+        "WARNING": "W",
+        "ERROR": "E",
+        "CRITICAL": "C",
+    }
+
+    def formatTime(self, record, datefmt=None):
+        return datetime.utcfromtimestamp(record.created).strftime("%Y-%m-%dT%H:%M:%S")
+
+    def format(self, record):
+        level = self.LEVEL_MAP.get(record.levelname, record.levelname[:1])
+        short_name = record.name.split(".")[-1]
+        time = self.formatTime(record)
+        message = record.getMessage()
+
+        if record.exc_info:
+            # Append a one-line exception summary for brevity
+            try:
+                exc_text = self.formatException(record.exc_info).splitlines()[-1]
+                message = f"{message} | {exc_text}"
+            except Exception:
+                pass
+
+        return f"{time} {level} {short_name}: {message}"
+
+
+# Attach compact formatter to root logger so all library logs (uvicorn, etc.) are concise
+root_logger = logging.getLogger()
+# Preserve any existing handlers in interactive/dev modes; replace basic config otherwise
+if not root_logger.handlers:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(CompactFormatter())
+    root_logger.addHandler(handler)
+else:
+    # Update existing handlers to use compact formatter
+    for h in list(root_logger.handlers):
+        try:
+            h.setFormatter(CompactFormatter())
+        except Exception:
+            pass
+
+root_logger.setLevel(settings.log_level)
 logger = logging.getLogger(__name__)
+
+# Quiet overly-verbose third-party loggers that flood container output
+NOISY_LOGGERS = [
+    "pymongo",
+    "pymongo.topology",
+    "pymongo.pool",
+    "motor",
+    "motor.motor_asyncio",
+    "urllib3",
+    "asyncio",
+    "qdrant_client",
+]
+
+for name in NOISY_LOGGERS:
+    try:
+        logging.getLogger(name).setLevel(logging.WARNING)
+    except Exception:
+        pass
 
 
 @asynccontextmanager
