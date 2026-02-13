@@ -89,7 +89,9 @@ jobs:
           EPOCHS=${{ github.event.inputs.epochs || '10' }}
           LEARNING_RATE=${{ github.event.inputs.learning_rate || '0.001' }}
           EOF
-          
+          # Copy .env to docker directory where compose is run
+          cp .env infrastructure/docker/.env
+
           echo "✅ Environment configured"
           ENDSSH
 
@@ -133,9 +135,14 @@ jobs:
           echo "🚀 Starting ML Training..."
           echo "Parameters: Epochs=${{ github.event.inputs.epochs || '10' }}, Batch Size=${{ github.event.inputs.batch_size || '64' }}, LR=${{ github.event.inputs.learning_rate || '0.001' }}"
           
+
+          # Ensure proxy network exists and API gateway is running and connected to proxy/internal networks
+          docker network inspect proxy >/dev/null 2>&1 || docker network create proxy || true
+          docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d --build --no-deps gateway || true
+
           # Remove old training container if exists
           docker-compose -f docker-compose.base.yml -f docker-compose.training.yml down
-          
+
           # Start training (will run to completion)
           docker-compose -f docker-compose.base.yml -f docker-compose.training.yml up --build
           

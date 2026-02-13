@@ -144,6 +144,11 @@ jobs:
           echo "🔧 Running qdrant init (one-off)..."
           docker-compose $COMPOSE run --rm --build qdrant-init || true
 
+          # Ensure proxy network exists and API gateway is running and connected to proxy/internal networks
+          echo "🚀 Ensuring gateway is running and connected to networks..."
+          docker network inspect proxy >/dev/null 2>&1 || docker network create proxy || true
+          docker-compose $COMPOSE up -d --build --no-deps gateway || true
+
           # If a single non-all service was requested and it's a DB, allow explicit deploy
           if [ "${{ github.event.inputs.services }}" != "all" ]; then
             echo "🚀 Deploying single requested service: ${{ github.event.inputs.services }}"
