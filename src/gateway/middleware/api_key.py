@@ -5,6 +5,7 @@ from fastapi import Request, HTTPException, status
 from starlette.middleware.base import BaseHTTPMiddleware
 from src.gateway.middleware.shared import PUBLIC_PATHS
 from src.shared.config import settings
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,7 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
                 return parts[1]
         return None
 
-    def _validate_service_key(self, api_key: str, service: str) -> bool:
+    def _validate_service_key(self, api_key: str, service: str | None = None) -> bool:
         """
         Validate API key for a specific service.
         Checks against environment variables or config.
@@ -65,14 +66,35 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         # If a specific service is provided, prefer validating against that
         # service key. Otherwise, accept any configured service key as valid.
         candidate_keys = [
-            getattr(settings, "mongodb_api_key", None),
-            getattr(settings, "redis_api_key", None),
-            getattr(settings, "qdrant_api_key", None),
-            getattr(settings, "mcp_api_key", None),
+            getattr(settings, "mongodb_api_key", None) or os.getenv("APIKEY_MONGODB"),
+            getattr(settings, "redis_api_key", None) or os.getenv("APIKEY_REDIS"),
+            getattr(settings, "qdrant_api_key", None) or os.getenv("APIKEY_QDRANT"),
+            getattr(settings, "mcp_api_key", None) or os.getenv("APIKEY_MCP"),
         ]
 
+        # If a service name is provided, validate specifically against that
+        # configured key (if present). This preserves compatibility with any
+        # callers that pass a service argument.
+        if service:
+            service_map = {
+                "mongodb": getattr(settings, "mongodb_api_key", None),
+                "redis": getattr(settings, "redis_api_key", None),
+                "qdrant": getattr(settings, "qdrant_api_key", None),
+                "mcp": getattr(settings, "mcp_api_key", None),
+            }
+            expected = service_map.get(service)
+            if expected:
+                return api_key == expected
+            # If no specific key configured for the named service, fall
+            # through to global validation below.
+
         # Filter out None/placeholder values
-        valid = [k for k in candidate_keys if k]
+        # Filter out None/empty and placeholders
+        valid = [
+            k
+            for k in candidate_keys
+            if k and k not in {"", "change-me", "dev-local-key"}
+        ]
 
         if not valid:
             logger.warning("No API keys configured in settings; rejecting all requests")
