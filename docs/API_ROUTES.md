@@ -11,7 +11,7 @@ mcp-server: 8090
 mongodb: 27017
 redis: 6379
 qdrant: 6333, 6334
-cosmos-db: 8081
+nginx: 80
 nginx: 80
 
 - **Root:** `/` - Serves static web application

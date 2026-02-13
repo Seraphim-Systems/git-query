@@ -1,7 +1,7 @@
 """API Key authentication middleware - simplified per-service validation."""
 
 import logging
-from fastapi import Request, HTTPException, status
+from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from src.gateway.middleware.shared import PUBLIC_PATHS
@@ -80,10 +80,14 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         # callers that pass a service argument.
         if service:
             service_map = {
-                "mongodb": getattr(settings, "mongodb_api_key", None),
-                "redis": getattr(settings, "redis_api_key", None),
-                "qdrant": getattr(settings, "qdrant_api_key", None),
-                "mcp": getattr(settings, "mcp_api_key", None),
+                "mongodb": getattr(settings, "mongodb_api_key", None)
+                or os.getenv("APIKEY_MONGODB"),
+                "redis": getattr(settings, "redis_api_key", None)
+                or os.getenv("APIKEY_REDIS"),
+                "qdrant": getattr(settings, "qdrant_api_key", None)
+                or os.getenv("APIKEY_QDRANT"),
+                "mcp": getattr(settings, "mcp_api_key", None)
+                or os.getenv("APIKEY_MCP"),
             }
             expected = service_map.get(service)
             if expected:
@@ -111,7 +115,6 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
                 os.getenv("APIKEY_MONGODB", "dev-mongodb-key"),
                 os.getenv("APIKEY_REDIS", "dev-redis-key"),
                 os.getenv("APIKEY_QDRANT", "dev-qdrant-key"),
-                os.getenv("APIKEY_COSMODB", "dev-cosmos-key"),
                 os.getenv("APIKEY_MCP", "dev-mcp-key"),
             }
             # Clean set (remove None/empty)

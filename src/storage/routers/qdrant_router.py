@@ -7,6 +7,7 @@ from typing import Dict, Any
 from qdrant_client.models import PointStruct
 from src.db.models import QdrantQuery, QdrantInsert
 from src.db.clients import get_qdrant_client
+from src.processing.qdrant_helpers import serialize_collection_description
 from src.storage.auth import get_api_key
 
 router = APIRouter(prefix="/qdrant", tags=["Qdrant"])
@@ -72,17 +73,19 @@ async def list_qdrant_collections():
 
     try:
         collections = qdrant_client.get_collections()
-        return {
-            "collections": [
-                {
-                    "name": col.name,
-                    "vectors_count": col.vectors_count,
-                    "points_count": col.points_count,
-                }
-                for col in collections.collections
-            ]
-        }
+        items = []
+        for col in getattr(collections, "collections", []):
+            try:
+                items.append(serialize_collection_description(col))
+            except Exception:
+                # Ensure a best-effort fallback so a single unexpected item
+                # doesn't cause the entire endpoint to fail.
+                items.append({"name": str(col), "vectors_count": 0, "points_count": 0})
+
+        return {"collections": items}
     except Exception as e:
+        # Provide a clearer error message while avoiding leaking internal
+        # client types/structures in the response.
         raise HTTPException(
             status_code=500, detail=f"Failed to list collections: {str(e)}"
         )

@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     redis_api_key: Optional[str] = Field(None, env="APIKEY_REDIS")
     qdrant_api_key: Optional[str] = Field(None, env="APIKEY_QDRANT")
     mcp_api_key: Optional[str] = Field(None, env="APIKEY_MCP")
+    # Cosmos support removed; no emulator API key
 
     # CORS
     allowed_origins: str = "*"

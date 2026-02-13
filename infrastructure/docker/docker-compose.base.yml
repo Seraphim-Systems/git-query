@@ -9,8 +9,6 @@ volumes:
     name: git-query-mongodb-data
   mongodb-config:
     name: git-query-mongodb-config
-  cosmos-data:
-    name: git-query-cosmos-data
   qdrant-storage:
     name: git-query-qdrant-storage
   qdrant-snapshots:

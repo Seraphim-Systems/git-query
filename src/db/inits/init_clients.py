@@ -80,34 +80,8 @@ async def startup_db_clients():
                 # In case the event loop is shutting down, propagate last exception
                 raise RuntimeError(f"Failed to connect to MongoDB: {last_exc}")
 
-    # Cosmos (Mongo API) - optional
-    cosmos_url = os.getenv("COSMOS_DB_URL") or os.getenv("COSMOS_URL")
-    cosmos_url = cosmos_url or os.getenv("API_COSMOS_URL")
-    # If service exposes a dedicated COSMOS env, prefer it; otherwise skip
-    if cosmos_url:
-        cosmos_key = os.getenv("COSMOS_DB_KEY") or os.getenv("APIKEY_COSMODB")
-        try:
-            client = MongoClient(
-                cosmos_url,
-                password=cosmos_key,
-                serverSelectionTimeoutMS=5000,
-                tls=True,
-                tlsAllowInvalidCertificates=True,
-            )
-            client.admin.command("ping")
-            _assign(clients_mod, "cosmos_client", client)
-            try:
-                from src.db.config import db_clients as db_clients_cfg
-
-                db_clients_cfg._cosmos_client = client
-            except Exception:
-                logger.debug("db_config mirror unavailable")
-            logger.info("CosmosDB (Mongo API) connected: %s", cosmos_url)
-        except Exception as e:
-            _assign(clients_mod, "cosmos_client", None)
-            logger.warning("CosmosDB connection failed (optional): %s", e)
-    else:
-        _assign(clients_mod, "cosmos_client", None)
+    # Cosmos DB support removed from startup (optional service)
+    _assign(clients_mod, "cosmos_client", None)
 
     # Redis
     redis_url = getattr(settings, "redis_url", None) or os.getenv("REDIS_URL")
@@ -140,7 +114,16 @@ async def startup_db_clients():
     try:
         scheme = "https" if qdrant_use_tls else "http"
         url = f"{scheme}://{qdrant_host}:{qdrant_port}"
-        qc = QdrantClient(url=url, api_key=qdrant_api_key or None, timeout=10)
+        # Skip strict compatibility checks between client and server during
+        # local development; warn instead. This avoids startup warnings/errors
+        # when the container image version differs slightly from the client
+        # library used in the gateway image.
+        qc = QdrantClient(
+            url=url,
+            api_key=qdrant_api_key or None,
+            timeout=10,
+            check_compatibility=False,
+        )
         qc.get_collections()
         _assign(clients_mod, "qdrant_client", qc)
         logger.info("Qdrant connected")
@@ -178,17 +161,4 @@ async def shutdown_db_clients():
     except Exception as e:
         logger.error(f"Error closing Qdrant client: {e}")
 
-    try:
-        if getattr(clients_mod, "cosmos_client", None):
-            clients_mod.cosmos_client.close()
-            logger.info("Cosmos client closed")
-    except Exception as e:
-        logger.error(f"Error closing Cosmos client: {e}")
-
-    # Clear mirror in db.config if present
-    try:
-        from src.db.config import db_clients as db_clients_cfg
-
-        db_clients_cfg._cosmos_client = None
-    except Exception:
-        pass
+    # Cosmos client cleanup removed
