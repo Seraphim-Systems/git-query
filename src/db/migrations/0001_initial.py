@@ -1,4 +1,4 @@
-"""Initial migration: create core collections and indexes for Mongo/Cosmos.
+"""Initial migration: create core collections and indexes for MongoDB.
 
 This migration is idempotent and will create collections/indexes if missing.
 It records applied migrations in `schema_migrations` collection.

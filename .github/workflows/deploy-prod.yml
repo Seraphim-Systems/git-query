@@ -26,7 +26,6 @@ jobs:
           DB_MONGODB_PASSWORD=${{ secrets.DB_MONGODB_PASSWORD }}
           DB_MONGODB_DATABASE=${{ secrets.DB_MONGODB_DATABASE }}
           DB_REDIS_PASSWORD=${{ secrets.DB_REDIS_PASSWORD }}
-          DB_COSMOS_PARTITION_COUNT=${{ secrets.DB_COSMOS_PARTITION_COUNT }}
           DB_QDRANT_API_KEY=${{ secrets.DB_QDRANT_API_KEY }}
           # Application Secrets
           APP_SESSION_SECRET=${{ secrets.APP_SESSION_SECRET }}

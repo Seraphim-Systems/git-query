@@ -5,10 +5,7 @@ services:
   mongodb:
     ports:
       - "27017:27017"
-
-  cosmos-db:
-    ports:
-      - "8081:8081"
+  # cosmos-db removed from development override
 
   qdrant:
     ports:

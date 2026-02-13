@@ -3,6 +3,7 @@ Redis API endpoints
 """
 
 from typing import Dict, Any
+import json
 from fastapi import APIRouter, HTTPException, Depends, Body, Query
 from src.db.clients import get_redis_client
 from src.storage.auth import get_api_key
@@ -18,9 +19,19 @@ async def get_redis_key(key: str):
         raise HTTPException(status_code=503, detail="Redis not available")
 
     try:
-        value = redis_client.get(key)
+        raw = redis_client.get(key)
         ttl = redis_client.ttl(key)
-        return {"key": key, "value": value, "ttl": ttl if ttl > 0 else None}
+
+        # Normalize binary values to string for JSON responses
+        if isinstance(raw, (bytes, bytearray)):
+            try:
+                value = raw.decode("utf-8")
+            except Exception:
+                value = raw.decode("utf-8", errors="replace")
+        else:
+            value = raw
+
+        return {"key": key, "value": value, "ttl": ttl if ttl and ttl > 0 else None}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Get failed: {str(e)}")
 
@@ -28,7 +39,7 @@ async def get_redis_key(key: str):
 @router.put("/{key}", dependencies=[Depends(get_api_key)])
 async def set_redis_key(
     key: str,
-    payload: Dict[str, Any] = Body(..., example={"value": "data", "ttl": 3600}),
+    payload: Any = Body(..., example={"value": "data", "ttl": 3600}),
 ):
     """Set value in Redis with optional TTL (requires API key)"""
     redis_client = get_redis_client()
@@ -36,11 +47,21 @@ async def set_redis_key(
         raise HTTPException(status_code=503, detail="Redis not available")
 
     try:
-        value = payload.get("value")
-        ttl = payload.get("ttl")
+        # Accept either a JSON object {value, ttl} or a raw string body
+        ttl = None
+        if isinstance(payload, dict):
+            value = payload.get("value")
+            ttl = payload.get("ttl")
+        else:
+            # Could be a raw string or number from CLI; convert to string
+            value = payload
+
+        # If value is a complex object, serialize as JSON string
+        if value is not None and not isinstance(value, (str, bytes, bytearray, int, float, bool)):
+            value = json.dumps(value)
 
         if ttl:
-            redis_client.setex(key, ttl, value)
+            redis_client.setex(key, int(ttl), value)
         else:
             redis_client.set(key, value)
         return {"key": key, "status": "success"}
@@ -88,14 +109,23 @@ async def redis_batch_operations(
             key = op.get("key")
 
             if action == "get":
-                value = redis_client.get(key)
-                results.append({"key": key, "value": value, "status": "ok"})
+                raw = redis_client.get(key)
+                if isinstance(raw, (bytes, bytearray)):
+                    try:
+                        val = raw.decode("utf-8")
+                    except Exception:
+                        val = raw.decode("utf-8", errors="replace")
+                else:
+                    val = raw
+                results.append({"key": key, "value": val, "status": "ok"})
 
             elif action == "set":
                 value = op.get("value")
                 ttl = op.get("ttl")
+                if value is not None and not isinstance(value, (str, bytes, bytearray, int, float, bool)):
+                    value = json.dumps(value)
                 if ttl:
-                    redis_client.setex(key, ttl, value)
+                    redis_client.setex(key, int(ttl), value)
                 else:
                     redis_client.set(key, value)
                 results.append({"key": key, "status": "ok"})
@@ -139,8 +169,15 @@ async def list_redis_keys(pattern: str = "*", limit: int = Query(default=100, le
 
     try:
         keys = []
-        for key in redis_client.scan_iter(match=pattern, count=limit):
-            keys.append(key)
+        for raw_key in redis_client.scan_iter(match=pattern, count=limit):
+            if isinstance(raw_key, (bytes, bytearray)):
+                try:
+                    k = raw_key.decode("utf-8")
+                except Exception:
+                    k = raw_key.decode("utf-8", errors="replace")
+            else:
+                k = raw_key
+            keys.append(k)
             if len(keys) >= limit:
                 break
         return {"pattern": pattern, "count": len(keys), "keys": keys}

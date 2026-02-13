@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional, List
+from typing import Any, Optional, List
 
 from src.db.clients import get_redis_client
 from src.db.adapters.interfaces import KeyValueRepository

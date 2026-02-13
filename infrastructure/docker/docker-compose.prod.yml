@@ -11,11 +11,7 @@ services:
       - ../../volumes/mongodb/data:/data/db
       - ../../volumes/mongodb/config:/data/configdb
       - ../../src/db/inits/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
-
-  cosmos-db:
-    ports: []
-    volumes:
-      - ../../volumes/cosmos:/data/db
+  # cosmos-db removed from production override
 
   qdrant:
     ports: []

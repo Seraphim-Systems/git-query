@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 mongo_client: Optional[MongoClient] = None
 redis_client: Optional[redis.Redis] = None
 qdrant_client: Optional[QdrantClient] = None
-cosmos_client: Optional[MongoClient] = None
 
 
 async def startup_db_clients():
@@ -53,7 +52,3 @@ def get_redis_client() -> Optional[redis.Redis]:
 
 def get_qdrant_client() -> Optional[QdrantClient]:
     return qdrant_client
-
-
-def get_cosmos_client() -> Optional[MongoClient]:
-    return cosmos_client

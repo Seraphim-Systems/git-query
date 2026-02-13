@@ -13,26 +13,14 @@ class DatabaseConfig:
 
     mongodb_url: str
     mongodb_db: str
-    cosmos_db_url: Optional[str]
-    cosmos_db_name: str
     qdrant_url: Optional[str]
     qdrant_api_key: Optional[str]
 
     @classmethod
     def from_settings(cls):
         # Prefer shared settings, otherwise fall back to env vars
-        mongodb_url = getattr(settings, "mongodb_url", None) or os.getenv(
-            "MONGODB_URL"
-        )
+        mongodb_url = getattr(settings, "mongodb_url", None) or os.getenv("MONGODB_URL")
         mongodb_db = getattr(settings, "mongodb_db", "gitquery")
-
-        cosmos_db_url = os.getenv("COSMOS_DB_URL")
-        if not cosmos_db_url:
-            ch = os.getenv("COSMOS_DB_HOST", "cosmos")
-            cp = os.getenv("COSMOS_DB_PORT", "10255")
-            cosmos_db_url = f"mongodb://{ch}:{cp}" if ch and cp else None
-
-        cosmos_db_name = os.getenv("COSMOS_DB_NAME", "gitquery_cosmos")
 
         qdrant_url = os.getenv(
             "QDRANT_URL",
@@ -46,8 +34,6 @@ class DatabaseConfig:
         return cls(
             mongodb_url=mongodb_url,
             mongodb_db=mongodb_db,
-            cosmos_db_url=cosmos_db_url,
-            cosmos_db_name=cosmos_db_name,
             qdrant_url=qdrant_url,
             qdrant_api_key=qdrant_api_key,
         )
@@ -65,7 +51,7 @@ class DatabaseClients:
     def __init__(self):
         if not self._initialized:
             self.config = DatabaseConfig.from_settings()
-            self._mongodb_client = self._cosmos_client = self._qdrant_client = None
+            self._mongodb_client = self._qdrant_client = None
             self._initialized = True
 
     @property
@@ -75,19 +61,6 @@ class DatabaseClients:
 
             self._mongodb_client = MongoClient(self.config.mongodb_url)
         return self._mongodb_client
-
-    @property
-    def cosmos(self):
-        if self._cosmos_client is None and self.config.cosmos_db_url:
-            from pymongo import MongoClient
-
-            self._cosmos_client = MongoClient(
-                self.config.cosmos_db_url,
-                ssl=True,
-                tls=True,
-                tlsAllowInvalidCertificates=True,
-            )
-        return self._cosmos_client
 
     @property
     def qdrant(self):
@@ -119,8 +92,6 @@ class DatabaseClients:
     def close_all(self):
         if self._mongodb_client:
             self._mongodb_client.close()
-        if self._cosmos_client:
-            self._cosmos_client.close()
         if self._qdrant_client:
             self._qdrant_client.close()
         # Attempt to close redis if present on the runtime clients
@@ -139,10 +110,6 @@ db_clients = DatabaseClients()
 
 def get_mongodb_db():
     return db_clients.mongodb[db_clients.config.mongodb_db]
-
-
-def get_cosmos_db():
-    return db_clients.cosmos[db_clients.config.cosmos_db_name]
 
 
 def get_qdrant_client():

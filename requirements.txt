@@ -31,8 +31,6 @@ hiredis>=2.3.0
 # Qdrant Vector Database
 qdrant-client>=1.7.0
 
-# Azure Cosmos DB
-azure-cosmos>=4.5.0
 
 # Configuration
 python-dotenv>=1.0.0

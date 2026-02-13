@@ -29,10 +29,6 @@ class DatabaseManager:
         """Get MongoDB client instance (pymongo.MongoClient)."""
         return self._clients.mongodb
 
-    def get_cosmos(self):
-        """Get Cosmos DB client instance (pymongo.MongoClient) or None."""
-        return self._clients.cosmos
-
     def get_qdrant(self):
         """Get Qdrant client instance or None."""
         return self._clients.qdrant
@@ -62,14 +58,6 @@ def get_mongodb_db(db_name: Optional[str] = None):
         return db_manager.get_mongodb()[db_manager.config.mongodb_db]
     # Fallback: return the default database handle
     return db_manager.get_mongodb()
-
-
-def get_cosmos_db(db_name: Optional[str] = None):
-    if db_name:
-        return db_manager.get_cosmos()[db_name]
-    if db_manager.config and getattr(db_manager.config, "cosmos_db_name", None):
-        return db_manager.get_cosmos()[db_manager.config.cosmos_db_name]
-    return db_manager.get_cosmos()
 
 
 def get_qdrant_client():

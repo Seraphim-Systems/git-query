@@ -80,38 +80,6 @@ async def _check_qdrant(request: Request) -> Dict[str, Any]:
         return {"status": False, "error": str(e), "url": collections_url}
 
 
-async def _check_cosmos(request: Request) -> Dict[str, Any]:
-    url = "https://cosmos-db:8081/"
-    # Prefer the initialized Cosmos (Mongo API) client if available. That
-    # ensures we probe with the configured credentials instead of making an
-    # anonymous HTTP request which will often return 401 for Cosmos instances
-    # (especially the emulator). Import at runtime to avoid circular imports.
-    try:
-        from src.db.clients import get_cosmos_client
-
-        cclient = get_cosmos_client()
-        if cclient:
-            try:
-                # MongoClient is synchronous; run the ping in a thread.
-                await asyncio.to_thread(lambda: cclient.admin.command("ping"))
-                return {"status": True, "url": getattr(cclient, "address", url)}
-            except Exception as e:
-                logger.debug("Cosmos Mongo client ping failed: %s", e)
-    except Exception:
-        # If import or access fails, fall back to HTTP probe below.
-        logger.debug("Cosmos client not available for health probe")
-
-    # Fallback HTTP probe (anonymous). Treat 200/404 as healthy; 401 is
-    # considered unauthorized (reportable) rather than implicitly healthy.
-    try:
-        async with httpx.AsyncClient(timeout=5.0, verify=False) as client:
-            resp = await client.get(url)
-            ok = resp.status_code in (200, 404)
-            return {"status": ok, "url": url, "http_status": resp.status_code}
-    except Exception as e:
-        return {"status": False, "error": str(e), "url": url}
-
-
 async def _check_mcp_server(request: Request) -> Dict[str, Any]:
     url = getattr(settings, "mcp_server_url", "http://mcp-server:8001")
     try:
@@ -163,16 +131,7 @@ async def health_qdrant(request: Request):
     )
 
 
-@router.get("/cosmos", include_in_schema=True)
-async def health_cosmos(request: Request):
-    return JSONResponse(
-        status_code=(
-            status.HTTP_200_OK
-            if (await _check_cosmos(request)).get("status")
-            else status.HTTP_503_SERVICE_UNAVAILABLE
-        ),
-        content={"service": "cosmos", "result": await _check_cosmos(request)},
-    )
+# /cosmos health endpoint removed
 
 
 @router.get("/mcp", include_in_schema=True)
@@ -194,7 +153,6 @@ async def health_check_all(request: Request):
         mongo_res = await _check_mongodb(request)
         redis_res = await _check_redis(request)
         qdrant_res = await _check_qdrant(request)
-        cosmos_res = await _check_cosmos(request)
         mcp_res = await _check_mcp_server(request)
 
         services_status = {
@@ -202,7 +160,6 @@ async def health_check_all(request: Request):
             "mongodb": bool(mongo_res.get("status")),
             "redis": bool(redis_res.get("status")),
             "qdrant": bool(qdrant_res.get("status")),
-            "cosmos": bool(cosmos_res.get("status")),
             "mcp_server": bool(mcp_res.get("status")),
         }
 
@@ -223,7 +180,6 @@ async def health_check_all(request: Request):
                     "mongodb": mongo_res,
                     "redis": redis_res,
                     "qdrant": qdrant_res,
-                    "cosmos": cosmos_res,
                     "mcp_server": mcp_res,
                 },
             },
@@ -247,13 +203,11 @@ async def health_check_databases(request: Request):
     mongo_res = await _check_mongodb(request)
     redis_res = await _check_redis(request)
     qdrant_res = await _check_qdrant(request)
-    cosmos_res = await _check_cosmos(request)
 
     databases = {
         "mongodb": mongo_res,
         "redis": redis_res,
         "qdrant": qdrant_res,
-        "cosmos": cosmos_res,
     }
 
     overall_healthy = any(db.get("status", False) for db in databases.values())
