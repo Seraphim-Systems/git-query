@@ -8,7 +8,7 @@ external clients and the web frontend.
 - The API Gateway: central entry point for external clients and the web frontend.
 	- External clients call routes under `/api` on the Gateway.
 	- Database routes are available at `/api/{service}/...` (for example
-	  `/api/mongodb/collections`). The Gateway now mounts the database routers
+	  `/api/mongodb/collections`). The Gateway mounts the database routers
 	  and applies middleware for API key validation, rate limiting, and session
 	  handling on these routes.
 
