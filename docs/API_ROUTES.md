@@ -267,7 +267,7 @@ List all vector collections.
 
 ---
 
-### POST /api/qdrant/{collection}/search
+### POST /api/qdrant/collections/{collection}/search
 Search for similar vectors.
 
 **Auth:** Qdrant API key required
@@ -299,8 +299,8 @@ Search for similar vectors.
 
 ---
 
-### POST /api/qdrant/{collection}/bulk
-Bulk upsert vectors.
+### POST /api/qdrant/collections/{collection}/points
+Bulk upsert vectors (modern RESTful path).
 
 **Auth:** Qdrant API key required
 
@@ -434,8 +434,8 @@ curl -X POST "https://api.gitquery.com/api/mongodb/repositories/query" \
   -H "Content-Type: application/json" \
   -d '{"filter": {"stars": {"$gt": 100}}, "limit": 10}'
 
-# Bulk upsert to Qdrant
-curl -X POST "https://api.gitquery.com/api/qdrant/embeddings/bulk" \
+# Bulk upsert to Qdrant (modern path)
+curl -X POST "https://api.gitquery.com/api/qdrant/collections/embeddings/points" \
   -H "Authorization: Bearer your-api-key" \
   -H "Content-Type: application/json" \
   -d '{"points": [{"id": "1", "vector": [0.1, 0.2], "payload": {"name": "item1"}}]}'

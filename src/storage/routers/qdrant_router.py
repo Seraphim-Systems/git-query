@@ -13,6 +13,33 @@ from src.storage.auth import get_api_key
 router = APIRouter(prefix="/qdrant", tags=["Qdrant"])
 
 
+# Modern RESTful aliases (kept in addition to legacy routes for compatibility)
+
+
+@router.post("/collections/{collection}/points", dependencies=[Depends(get_api_key)])
+async def create_points(collection: str, payload: Dict[str, Any] = Body(...)):
+    """Modern alias for bulk upsert: POST /collections/{collection}/points"""
+    return await bulk_upsert_vectors(collection, payload)
+
+
+@router.post("/collections/{collection}/search", dependencies=[Depends(get_api_key)])
+async def search_collection_modern(collection: str, query: Dict[str, Any] = Body(...)):
+    """Modern alias for searching a collection"""
+    return await search_collection(collection, query)
+
+
+@router.delete("/collections/{collection}", dependencies=[Depends(get_api_key)])
+async def delete_collection_modern(collection: str):
+    """Modern alias for deleting collection"""
+    return await delete_collection(collection)
+
+
+@router.delete("/collections/{collection}/points", dependencies=[Depends(get_api_key)])
+async def delete_points_modern(collection: str, payload: Dict[str, Any] = Body(...)):
+    """Modern alias for deleting points in a collection"""
+    return await delete_points(collection, payload)
+
+
 @router.post("/search", dependencies=[Depends(get_api_key)])
 async def search_qdrant(query: QdrantQuery):
     """Search Qdrant vector database (requires API key)"""
@@ -221,3 +248,83 @@ async def bulk_upsert_vectors(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Bulk upsert failed: {str(e)}")
+
+
+@router.delete("/{collection}", dependencies=[Depends(get_api_key)])
+async def delete_collection(collection: str):
+    """Delete an entire Qdrant collection."""
+    qdrant_client = get_qdrant_client()
+    if not qdrant_client:
+        raise HTTPException(status_code=503, detail="Qdrant not available")
+
+    try:
+        # Preferred method on client
+        if hasattr(qdrant_client, "delete_collection"):
+            result = qdrant_client.delete_collection(collection_name=collection)
+            return {"deleted": bool(result)}
+
+        # Fallback to HTTP-style call if client uses a different API
+        if hasattr(qdrant_client, "_client") and hasattr(
+            qdrant_client._client, "delete_collection"
+        ):
+            result = qdrant_client._client.delete_collection(collection_name=collection)
+            return {"deleted": bool(result)}
+
+        raise HTTPException(
+            status_code=501, detail="Delete collection not supported by client"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Delete collection failed: {str(e)}"
+        )
+
+
+@router.post("/{collection}/delete_points", dependencies=[Depends(get_api_key)])
+async def delete_points(collection: str, payload: Dict[str, Any] = Body(...)):
+    """Delete specific points in a Qdrant collection by ids or by filter.
+
+    Payload examples:
+    - {"ids": ["pt1","pt2"]}
+    - {"filter": {...}}  # will be passed through to client if supported
+    """
+    qdrant_client = get_qdrant_client()
+    if not qdrant_client:
+        raise HTTPException(status_code=503, detail="Qdrant not available")
+
+    try:
+        ids = payload.get("ids")
+        selector = None
+        # Try client-native deletion APIs
+        if ids:
+            # Many qdrant client versions accept a `points_selector` or `points` kwarg
+            try:
+                if hasattr(qdrant_client, "delete"):
+                    qdrant_client.delete(
+                        collection_name=collection, points_selector={"ids": ids}
+                    )
+                    return {"deleted": len(ids)}
+                # fallback to delete_points if present
+                if hasattr(qdrant_client, "delete_points"):
+                    qdrant_client.delete_points(collection_name=collection, ids=ids)
+                    return {"deleted": len(ids)}
+            except Exception:
+                # fall through to attempt HTTP API
+                pass
+
+        # If filter provided, try passing through
+        if payload.get("filter"):
+            try:
+                qdrant_client.delete(
+                    collection_name=collection, filter=payload.get("filter")
+                )
+                return {"deleted": "filter_applied"}
+            except Exception:
+                pass
+
+        raise HTTPException(
+            status_code=400, detail="Unsupported delete request payload"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Delete points failed: {str(e)}")

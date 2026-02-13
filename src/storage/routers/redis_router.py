@@ -57,7 +57,9 @@ async def set_redis_key(
             value = payload
 
         # If value is a complex object, serialize as JSON string
-        if value is not None and not isinstance(value, (str, bytes, bytearray, int, float, bool)):
+        if value is not None and not isinstance(
+            value, (str, bytes, bytearray, int, float, bool)
+        ):
             value = json.dumps(value)
 
         if ttl:
@@ -67,6 +69,19 @@ async def set_redis_key(
         return {"key": key, "status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Set failed: {str(e)}")
+
+
+@router.delete("/{key}", dependencies=[Depends(get_api_key)])
+async def delete_redis_key(key: str):
+    """Delete a Redis key (modern RESTful DELETE)."""
+    redis_client = get_redis_client()
+    if not redis_client:
+        raise HTTPException(status_code=503, detail="Redis not available")
+    try:
+        deleted = redis_client.delete(key)
+        return {"key": key, "deleted": int(deleted)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
 
 
 @router.post("/batch", dependencies=[Depends(get_api_key)])
@@ -122,7 +137,9 @@ async def redis_batch_operations(
             elif action == "set":
                 value = op.get("value")
                 ttl = op.get("ttl")
-                if value is not None and not isinstance(value, (str, bytes, bytearray, int, float, bool)):
+                if value is not None and not isinstance(
+                    value, (str, bytes, bytearray, int, float, bool)
+                ):
                     value = json.dumps(value)
                 if ttl:
                     redis_client.setex(key, int(ttl), value)
