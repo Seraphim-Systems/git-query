@@ -8,6 +8,7 @@ from src.db.models import MongoQuery, MongoInsert
 from src.db.clients import get_mongo_client
 from src.storage.auth import get_api_key
 from pymongo import UpdateOne
+from bson import ObjectId
 
 router = APIRouter(prefix="/mongodb", tags=["MongoDB"])
 
@@ -224,3 +225,52 @@ async def bulk_upsert_collection(
         return {"inserted": inserted_count, "updated": updated_count, "errors": errors}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Bulk operation failed: {str(e)}")
+
+
+@router.post("/{collection}/delete", dependencies=[Depends(get_api_key)])
+async def delete_from_collection(
+    collection: str,
+    payload: Dict[str, Any] = Body(
+        ...,
+        example={"filter": {"_id": "507f1f77bcf86cd799439011"}, "many": True},
+    ),
+):
+    """
+    Delete documents from a MongoDB collection.
+
+    Payload:
+      - filter: MongoDB filter to select documents to delete
+      - many: whether to delete many (True) or a single document (False)
+
+    Returns deleted count.
+    """
+    mongo_client = get_mongo_client()
+    if not mongo_client:
+        raise HTTPException(status_code=503, detail="MongoDB not available")
+
+    try:
+        db = mongo_client.get_database("gitquery")
+        coll = db.get_collection(collection)
+
+        filter_query = payload.get("filter", {})
+        many = bool(payload.get("many", True))
+
+        # If filter references _id as a string, try to cast to ObjectId for matching
+        if "_id" in filter_query and isinstance(filter_query["_id"], str):
+            val = filter_query["_id"]
+            try:
+                filter_query["_id"] = ObjectId(val)
+            except Exception:
+                # leave as-is if not a valid ObjectId
+                pass
+
+        if many:
+            result = coll.delete_many(filter_query)
+            deleted = result.deleted_count
+        else:
+            result = coll.delete_one(filter_query)
+            deleted = result.deleted_count
+
+        return {"deleted": int(deleted)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
