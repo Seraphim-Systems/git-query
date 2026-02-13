@@ -55,19 +55,19 @@ async def startup_db_clients():
             client = MongoClient(mongodb_url, serverSelectionTimeoutMS=5000)
             client.admin.command("ping")
             _assign(clients_mod, "mongo_client", client)
-            logger.info("✓ MongoDB connected successfully (attempt %d)", attempt)
+            logger.info("MongoDB connected (attempt %d)", attempt)
             break
         except Exception as e:
             last_exc = e
             _assign(clients_mod, "mongo_client", None)
             elapsed = time.time() - start
             if elapsed >= max_wait_seconds:
-                logger.error("✗ MongoDB connection failed after %ds: %s", elapsed, e)
+                logger.error("MongoDB connection failed after %ds: %s", elapsed, e)
                 raise RuntimeError(f"Failed to connect to MongoDB: {e}")
             # Exponential backoff (capped)
             backoff = min(1 * (2 ** (attempt - 1)), 8)
             logger.warning(
-                "MongoDB not ready (attempt %d, waited %ds), retrying in %ds...: %s",
+                "MongoDB not ready (attempt %d, waited %ds), retrying in %ds: %s",
                 attempt,
                 int(elapsed),
                 backoff,
@@ -102,12 +102,10 @@ async def startup_db_clients():
                 db_clients_cfg._cosmos_client = client
             except Exception:
                 logger.debug("db_config mirror unavailable")
-            logger.info(
-                "✓ CosmosDB (Mongo API) connected successfully (%s)", cosmos_url
-            )
+            logger.info("CosmosDB (Mongo API) connected: %s", cosmos_url)
         except Exception as e:
             _assign(clients_mod, "cosmos_client", None)
-            logger.warning("✗ CosmosDB connection failed (optional): %s", e)
+            logger.warning("CosmosDB connection failed (optional): %s", e)
     else:
         _assign(clients_mod, "cosmos_client", None)
 
@@ -121,10 +119,10 @@ async def startup_db_clients():
         rc = redis.from_url(redis_url, decode_responses=True, socket_timeout=5)
         rc.ping()
         _assign(clients_mod, "redis_client", rc)
-        logger.info("✓ Redis connected successfully")
+        logger.info("Redis connected")
     except Exception as e:
         _assign(clients_mod, "redis_client", None)
-        logger.error("✗ Redis connection failed: %s", e)
+        logger.error("Redis connection failed: %s", e)
         raise RuntimeError(f"Failed to connect to Redis: {e}")
 
     # Qdrant (optional)
@@ -145,10 +143,10 @@ async def startup_db_clients():
         qc = QdrantClient(url=url, api_key=qdrant_api_key or None, timeout=10)
         qc.get_collections()
         _assign(clients_mod, "qdrant_client", qc)
-        logger.info("✓ Qdrant connected successfully")
+        logger.info("Qdrant connected")
     except Exception as e:
         _assign(clients_mod, "qdrant_client", None)
-        logger.warning("✗ Qdrant connection failed (optional service): %s", e)
+        logger.warning("Qdrant connection failed (optional): %s", e)
 
 
 async def shutdown_db_clients():
