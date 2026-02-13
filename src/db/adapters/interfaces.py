@@ -3,6 +3,7 @@ from typing import Protocol, Any, Dict, List, Optional
 
 class CollectionRepository(Protocol):
     """Protocol for simple document collection repositories (Mongo/Cosmos)."""
+
     def list_collections(self, database: Optional[str] = None) -> List[str]:
         raise NotImplementedError()
 
@@ -36,6 +37,7 @@ class CollectionRepository(Protocol):
 
 class KeyValueRepository(Protocol):
     """Protocol for key/value stores (Redis)."""
+
     def get(self, key: str) -> Optional[Any]:
         raise NotImplementedError()
 
@@ -54,6 +56,7 @@ class KeyValueRepository(Protocol):
 
 class VectorRepository(Protocol):
     """Protocol for vector stores (Qdrant)."""
+
     def list_collections(self) -> List[str]:
         raise NotImplementedError()
 
