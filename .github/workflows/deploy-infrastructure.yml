@@ -23,28 +23,9 @@ jobs:
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
-          printf '%s' "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          # remove any stray CR characters
-          sed -i 's/\r$//' ~/.ssh/id_rsa || true
-          ssh-keyscan -H "${{ secrets.INFRA_HETZNER_HOST }}" >> ~/.ssh/known_hosts
-          # basic checks: file exists and is not empty
-          if [ ! -s ~/.ssh/id_rsa ]; then
-            echo "ERROR: ~/.ssh/id_rsa missing or empty"
-            exit 1
-          fi
-          # derive public key from private key (fails if passphrase/invalid)
-          ssh-keygen -y -f ~/.ssh/id_rsa > /tmp/id_rsa.pub || { echo "ERROR: cannot derive public key (passphrase/invalid key)"; exit 1; }
-          # print public key fingerprint and the public key for manual verification
-          ssh-keygen -lf /tmp/id_rsa.pub || true
-          echo "--- PUBLIC KEY (paste to remote authorized_keys for verification) ---"
-          cat /tmp/id_rsa.pub
-          echo "---------------------------------------------------------------"
-          # force using this key for the test connection
-          ssh -i ~/.ssh/id_rsa -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes -vvv "${{ secrets.INFRA_HETZNER_USER }}"@"${{ secrets.INFRA_HETZNER_HOST }}" 'echo "SSH_OK"' || {
-            echo "ERROR: SSH connectivity test failed; see above ssh -vvv output for details"
-            exit 1
-          }
+          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts
 
       - name: Clone or Update Repository
         run: |
@@ -86,23 +67,9 @@ jobs:
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
-          printf '%s' "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          sed -i 's/\r$//' ~/.ssh/id_rsa || true
-          ssh-keyscan -H "${{ secrets.INFRA_HETZNER_HOST }}" >> ~/.ssh/known_hosts
-          if [ ! -s ~/.ssh/id_rsa ]; then
-            echo "ERROR: ~/.ssh/id_rsa missing or empty"
-            exit 1
-          fi
-          ssh-keygen -y -f ~/.ssh/id_rsa > /tmp/id_rsa.pub || { echo "ERROR: cannot derive public key (passphrase/invalid key)"; exit 1; }
-          ssh-keygen -lf /tmp/id_rsa.pub || true
-          echo "--- PUBLIC KEY ---"
-          cat /tmp/id_rsa.pub
-          echo "------------------"
-          ssh -i ~/.ssh/id_rsa -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes -vvv "${{ secrets.INFRA_HETZNER_USER }}"@"${{ secrets.INFRA_HETZNER_HOST }}" 'echo "SSH_OK"' || {
-            echo "ERROR: SSH connectivity test failed; see above ssh -vvv output for details"
-            exit 1
-          }
+          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts
 
       - name: Create Environment File
         run: |
@@ -145,23 +112,9 @@ jobs:
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
-          printf '%s' "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          sed -i 's/\r$//' ~/.ssh/id_rsa || true
-          ssh-keyscan -H "${{ secrets.INFRA_HETZNER_HOST }}" >> ~/.ssh/known_hosts
-          if [ ! -s ~/.ssh/id_rsa ]; then
-            echo "ERROR: ~/.ssh/id_rsa missing or empty"
-            exit 1
-          fi
-          ssh-keygen -y -f ~/.ssh/id_rsa > /tmp/id_rsa.pub || { echo "ERROR: cannot derive public key (passphrase/invalid key)"; exit 1; }
-          ssh-keygen -lf /tmp/id_rsa.pub || true
-          echo "--- PUBLIC KEY ---"
-          cat /tmp/id_rsa.pub
-          echo "------------------"
-          ssh -i ~/.ssh/id_rsa -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes -vvv "${{ secrets.INFRA_HETZNER_USER }}"@"${{ secrets.INFRA_HETZNER_HOST }}" 'echo "SSH_OK"' || {
-            echo "ERROR: SSH connectivity test failed; see above ssh -vvv output for details"
-            exit 1
-          }
+          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts
 
       - name: Deploy Infrastructure Services
         run: |
