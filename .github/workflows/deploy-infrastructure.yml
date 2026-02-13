@@ -23,9 +23,16 @@ jobs:
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          printf '%s' "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts
+          # remove any stray CR characters
+          sed -i 's/\r$//' ~/.ssh/id_rsa || true
+          ssh-keyscan -H "${{ secrets.INFRA_HETZNER_HOST }}" >> ~/.ssh/known_hosts
+          # Quick connectivity check (verbose to capture reason for early disconnects)
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes -vvv "${{ secrets.INFRA_HETZNER_USER }}"@"${{ secrets.INFRA_HETZNER_HOST }}" 'echo "SSH_OK"' || {
+            echo "ERROR: SSH connectivity test failed; see above ssh -vvv output for details"
+            exit 1
+          }
 
       - name: Clone or Update Repository
         run: |
@@ -67,9 +74,14 @@ jobs:
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          printf '%s' "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts
+          sed -i 's/\r$//' ~/.ssh/id_rsa || true
+          ssh-keyscan -H "${{ secrets.INFRA_HETZNER_HOST }}" >> ~/.ssh/known_hosts
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes -vvv "${{ secrets.INFRA_HETZNER_USER }}"@"${{ secrets.INFRA_HETZNER_HOST }}" 'echo "SSH_OK"' || {
+            echo "ERROR: SSH connectivity test failed; see above ssh -vvv output for details"
+            exit 1
+          }
 
       - name: Create Environment File
         run: |
@@ -112,9 +124,14 @@ jobs:
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          printf '%s' "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts
+          sed -i 's/\r$//' ~/.ssh/id_rsa || true
+          ssh-keyscan -H "${{ secrets.INFRA_HETZNER_HOST }}" >> ~/.ssh/known_hosts
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes -vvv "${{ secrets.INFRA_HETZNER_USER }}"@"${{ secrets.INFRA_HETZNER_HOST }}" 'echo "SSH_OK"' || {
+            echo "ERROR: SSH connectivity test failed; see above ssh -vvv output for details"
+            exit 1
+          }
 
       - name: Deploy Infrastructure Services
         run: |
