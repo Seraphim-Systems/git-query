@@ -15,17 +15,13 @@ from src.shared.config import settings
 
 # Gather candidate API keys from shared settings first, then fall back to
 # legacy environment variables used in older deployments.
+
+# Primary keys come from shared settings (which map to the new APIKEY_* env vars)
 candidate_keys: List[Optional[str]] = [
     getattr(settings, "mongodb_api_key", None),
     getattr(settings, "redis_api_key", None),
     getattr(settings, "qdrant_api_key", None),
 ]
-
-# Legacy fallback
-candidate_keys.append(os.getenv("DATA_INGESTION_API_KEY"))
-candidate_keys.append(os.getenv("MONGODB_API_KEY"))
-candidate_keys.append(os.getenv("REDIS_API_KEY"))
-candidate_keys.append(os.getenv("QDRANT_API_KEY_AUTH"))
 
 
 # Filter out insecure placeholder values and None
