@@ -111,8 +111,9 @@ app.add_middleware(
 )
 
 # Add custom middleware
-app.add_middleware(APIKeyMiddleware)  # API key auth for /api/db/*
-app.add_middleware(SessionMiddleware)
+# Enforce API key auth for non-public endpoints. Session-based auth removed
+# in favor of API-key-only access for all guarded routes.
+app.add_middleware(APIKeyMiddleware)
 app.add_middleware(
     RateLimitMiddleware,
     max_requests=settings.rate_limit_requests,
