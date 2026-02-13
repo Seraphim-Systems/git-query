@@ -4,7 +4,7 @@
 PUBLIC_PATHS = [
     "/health",
     "/api/health",
-    "/api/db/health",
+    "/api/health/databases",
     "/favicon.ico",
     "/docs/",
     "/openapi.json",
