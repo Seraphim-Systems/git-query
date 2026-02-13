@@ -10,7 +10,6 @@ on:
         options:
           - all
           - mongodb
-          - cosmos
           - qdrant
           - redis
         default: 'all'
@@ -83,7 +82,6 @@ jobs:
           DB_MONGODB_PASSWORD=${{ secrets.DB_MONGODB_PASSWORD }}
           DB_MONGODB_DATABASE=${{ secrets.DB_MONGODB_DATABASE }}
           DB_REDIS_PASSWORD=${{ secrets.DB_REDIS_PASSWORD }}
-          DB_COSMOS_PARTITION_COUNT=${{ secrets.DB_COSMOS_PARTITION_COUNT }}
           SVC_QDRANT_LOG_LEVEL=${{ secrets.SVC_QDRANT_LOG_LEVEL }}
           APP_SESSION_SECRET=${{ secrets.APP_SESSION_SECRET }}
           APP_JWT_SECRET=${{ secrets.APP_JWT_SECRET }}
@@ -91,8 +89,6 @@ jobs:
           APIKEY_MONGODB=${{ secrets.APIKEY_MONGODB }}
           APIKEY_REDIS=${{ secrets.APIKEY_REDIS }}
           APIKEY_QDRANT=${{ secrets.APIKEY_QDRANT }}
-          # Cosmos DB configuration: accept APIKEY_COSMODB or COSMOS_DB_KEY
-          APIKEY_COSMODB=${{ secrets.APIKEY_COSMODB }}
           SVC_NGINX_SERVER_NAME=${{ secrets.SVC_NGINX_SERVER_NAME }}
           SVC_LOG_LEVEL=${{ secrets.SVC_LOG_LEVEL }}
           EOF
@@ -130,11 +126,11 @@ jobs:
           # Compose files: only base + db for infrastructure deployments limited to databases
           COMPOSE="-f docker-compose.base.yml -f docker-compose.db.yml"
 
-          echo "🚀 Deploying databases only (mongodb, redis, qdrant, cosmos-db)..."
+          echo "🚀 Deploying databases only (mongodb, redis, qdrant)..."
 
           # Start databases first
-          echo "📦 Starting databases (mongodb, redis, qdrant, cosmos-db)..."
-          docker-compose $COMPOSE up -d --build mongodb redis qdrant cosmos-db
+          echo "📦 Starting databases (mongodb, redis, qdrant)..."
+          docker-compose $COMPOSE up -d --build mongodb redis qdrant
 
           # Wait for databases to initialize
           echo "⏳ Waiting 30 seconds for databases to initialize..."

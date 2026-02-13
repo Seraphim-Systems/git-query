@@ -23,8 +23,6 @@ class Settings(BaseSettings):
 
     # Databases
     mongodb_url: str = ""
-    cosmos_db_url: str = ""
-    cosmos_db_key: str = ""
     qdrant_url: str = ""
     redis_url: str = ""
 

@@ -1,7 +1,7 @@
 """Compatibility DB router (legacy alias).
 
 Provides an in-process alias at `/api/db/*` that mounts the storage package
-routers (mongodb, redis, qdrant, cosmos, batch). This preserves the legacy
+routers (mongodb, redis, qdrant, batch). This preserves the legacy
 `/api/db/...` paths while the canonical routes remain under `/api/{service}/...`.
 """
 
@@ -11,7 +11,6 @@ from src.storage.routers import (
     mongodb_router,
     redis_router,
     qdrant_router,
-    cosmos_router,
 )
 
 # Delegate DB health checks to the canonical health module so both
@@ -26,7 +25,6 @@ router = APIRouter(prefix="/api/db", tags=["database"])
 router.include_router(mongodb_router.router, prefix="/mongodb")
 router.include_router(redis_router.router, prefix="/redis")
 router.include_router(qdrant_router.router, prefix="/qdrant")
-router.include_router(cosmos_router.router, prefix="/cosmos")
 
 
 @router.get("/health", include_in_schema=True)

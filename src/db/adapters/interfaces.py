@@ -3,8 +3,8 @@ from typing import Protocol, Any, Dict, List, Optional
 
 class CollectionRepository(Protocol):
     """Protocol for simple document collection repositories (Mongo/Cosmos)."""
-
-    def list_collections(self, database: Optional[str] = None) -> List[str]: ...
+    def list_collections(self, database: Optional[str] = None) -> List[str]:
+        raise NotImplementedError()
 
     def query(
         self,
@@ -15,11 +15,13 @@ class CollectionRepository(Protocol):
         limit: int = 100,
         skip: int = 0,
         sort: Optional[Dict[str, int]] = None,
-    ) -> Dict[str, Any]: ...
+    ) -> Dict[str, Any]:
+        raise NotImplementedError()
 
     def insert(
         self, database: str, collection: str, documents: List[Dict[str, Any]]
-    ) -> Dict[str, Any]: ...
+    ) -> Dict[str, Any]:
+        raise NotImplementedError()
 
     def bulk_upsert(
         self,
@@ -28,29 +30,37 @@ class CollectionRepository(Protocol):
         documents: List[Dict[str, Any]],
         ordered: bool = False,
         upsert: bool = True,
-    ) -> Dict[str, Any]: ...
+    ) -> Dict[str, Any]:
+        raise NotImplementedError()
 
 
 class KeyValueRepository(Protocol):
     """Protocol for key/value stores (Redis)."""
+    def get(self, key: str) -> Optional[Any]:
+        raise NotImplementedError()
 
-    def get(self, key: str) -> Optional[Any]: ...
+    def set(self, key: str, value: Any, expire: Optional[int] = None) -> bool:
+        raise NotImplementedError()
 
-    def set(self, key: str, value: Any, expire: Optional[int] = None) -> bool: ...
+    def delete(self, key: str) -> int:
+        raise NotImplementedError()
 
-    def delete(self, key: str) -> int: ...
+    def keys(self, pattern: str = "*") -> List[str]:
+        raise NotImplementedError()
 
-    def keys(self, pattern: str = "*") -> List[str]: ...
-
-    def ttl(self, key: str) -> int: ...
+    def ttl(self, key: str) -> int:
+        raise NotImplementedError()
 
 
 class VectorRepository(Protocol):
     """Protocol for vector stores (Qdrant)."""
+    def list_collections(self) -> List[str]:
+        raise NotImplementedError()
 
-    def list_collections(self) -> List[str]: ...
-
-    def upsert_points(self, collection: str, points: List[Dict[str, Any]]) -> Dict[str, Any]: ...
+    def upsert_points(
+        self, collection: str, points: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        raise NotImplementedError()
 
     def search(
         self,
@@ -58,4 +68,5 @@ class VectorRepository(Protocol):
         vector: List[float],
         limit: int = 10,
         filter: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]: ...
+    ) -> Dict[str, Any]:
+        raise NotImplementedError()

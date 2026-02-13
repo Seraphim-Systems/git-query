@@ -20,12 +20,11 @@ from src.gateway.routers import auth, chat, recommendations, user, health
 
 # Include DB routers directly in the Gateway so the Gateway serves DB endpoints
 # (replacing the separate db-query-api service). These routers originate from
-# the storage package and provide Mongo, Redis, Qdrant, Cosmos and batch routes.
+# the storage package and provide Mongo, Redis, Qdrant and batch routes.
 from src.storage.routers import (
     mongodb_router,
     redis_router,
     qdrant_router,
-    cosmos_router,
 )
 
 from src.db.clients import (
@@ -251,7 +250,6 @@ app.include_router(user.router, prefix="/user", tags=["User"])
 app.include_router(mongodb_router.router, prefix="/api")
 app.include_router(redis_router.router, prefix="/api")
 app.include_router(qdrant_router.router, prefix="/api")
-app.include_router(cosmos_router.router, prefix="/api")
 
 
 # Health check

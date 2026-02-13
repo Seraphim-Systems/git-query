@@ -25,25 +25,7 @@ services:
       retries: 3
       start_period: 30s
 
-  cosmos-db:
-    image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:latest
-    container_name: git-query-cosmos-db
-    environment:
-      AZURE_COSMOS_EMULATOR_PARTITION_COUNT: ${DB_COSMOS_PARTITION_COUNT:-10}
-      AZURE_COSMOS_EMULATOR_ENABLE_DATA_PERSISTENCE: 'true'
-      AZURE_COSMOS_EMULATOR_IP_ADDRESS_OVERRIDE: 0.0.0.0
-    volumes:
-      - cosmos-data:/data/db
-    networks:
-      - db-network
-    restart: unless-stopped
-    expose:
-      - "8081"
-      - "10250"
-      - "10251"
-      - "10252"
-      - "10253"
-      - "10254"
+  # cosmos-db service removed
 
   qdrant:
     image: qdrant/qdrant:v1.7.4
@@ -108,21 +90,18 @@ services:
       # Provide database connection URLs using the DB_* secrets defined for services
       - REDIS_URL=redis://:${DB_REDIS_PASSWORD:-redispass}@redis:6379
       - MONGODB_URL=mongodb://${DB_MONGODB_USER:-admin}:${DB_MONGODB_PASSWORD:-mongopass}@mongodb:27017/${DB_MONGODB_DATABASE:-gitquery}?authSource=admin
-      # Cosmos DB (emulator) - provide host/port and optional key so the
-      # gateway can initialize a Mongo-compatible Cosmos client at startup.
-      - COSMOS_DB_HOST=${COSMOS_DB_HOST:-cosmos-db}
-      - COSMOS_DB_PORT=${COSMOS_DB_PORT:-10251}
-      - COSMOS_DB_KEY=${COSMOS_DB_KEY:-C2y6yDjf5/R+ob0N...==}
-      # Convenient Mongo-compatible connection string used by init_clients
-      - COSMOS_DB_URL=${COSMOS_DB_URL:-mongodb://cosmos-db:10251}
-      - API_COSMOS_URL=${API_COSMOS_URL:-mongodb://cosmos-db:10251}
+      # Ensure gateway resolves Qdrant to the qdrant service on the
+      # compose network instead of localhost so the Qdrant client can
+      # successfully connect at startup.
+      - QDRANT_HOST=${QDRANT_HOST:-qdrant}
+      - QDRANT_HTTP_PORT=${QDRANT_HTTP_PORT:-6333}
+      # Cosmos DB removed
     expose:
       - "80"
     depends_on:
       - mongodb
       - redis
       - qdrant
-      - cosmos-db
       - qdrant-init
     networks:
       - db-network
@@ -135,8 +114,6 @@ volumes:
     name: git-query-mongodb-data
   mongodb-config:
     name: git-query-mongodb-config
-  cosmos-data:
-    name: git-query-cosmos-data
   qdrant-storage:
     name: git-query-qdrant-storage
   qdrant-snapshots:
