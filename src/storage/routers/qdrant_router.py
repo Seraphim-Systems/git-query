@@ -4,7 +4,7 @@ Qdrant API endpoints
 
 from fastapi import APIRouter, HTTPException, Depends, Body
 from typing import Dict, Any
-from qdrant_client.models import PointStruct
+from qdrant_client.models import VectorParams, Distance
 from src.db.models import QdrantQuery, QdrantInsert
 from src.db.clients import get_qdrant_client
 from src.processing.qdrant_helpers import serialize_collection_description
@@ -49,11 +49,11 @@ async def insert_qdrant(insert: QdrantInsert):
 
     try:
         points = [
-            PointStruct(
-                id=point.get("id"),
-                vector=point["vector"],
-                payload=point.get("payload", {}),
-            )
+            {
+                "id": point.get("id"),
+                "vector": point["vector"],
+                "payload": point.get("payload", {}),
+            }
             for point in insert.points
         ]
 
@@ -167,16 +167,52 @@ async def bulk_upsert_vectors(
         points_data = payload.get("points", [])
         wait = payload.get("wait", True)
 
+        # Use plain dicts for points to avoid client-model/version serialization
+        # differences that can cause server-side format errors.
         points = [
-            PointStruct(
-                id=point.get("id"),
-                vector=point["vector"],
-                payload=point.get("payload", {}),
-            )
+            {
+                "id": point.get("id"),
+                "vector": point["vector"],
+                "payload": point.get("payload", {}),
+            }
             for point in points_data
         ]
 
-        qdrant_client.upsert(collection_name=collection, points=points, wait=wait)
+        try:
+            qdrant_client.upsert(collection_name=collection, points=points, wait=wait)
+        except Exception as e:
+            # If the collection doesn't exist, create it using the incoming
+            # vector dimensionality then retry the upsert once.
+            msg = str(e)
+            if (
+                "doesn't exist" in msg
+                or "Not found" in msg
+                or "Collection" in msg
+                and "doesn't exist" in msg
+            ):
+                # Infer vector size from first point if available
+                if points and isinstance(points[0].get("vector"), (list, tuple)):
+                    vec_size = len(points[0]["vector"])
+                else:
+                    vec_size = 768
+
+                try:
+                    qdrant_client.create_collection(
+                        collection_name=collection,
+                        vectors_config=VectorParams(
+                            size=vec_size, distance=Distance.COSINE
+                        ),
+                    )
+                except Exception:
+                    # If create_collection fails, re-raise original error
+                    raise
+
+                # Retry upsert once
+                qdrant_client.upsert(
+                    collection_name=collection, points=points, wait=wait
+                )
+            else:
+                raise
 
         return {
             "collection": collection,
