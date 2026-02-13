@@ -13,6 +13,81 @@ from bson import ObjectId
 router = APIRouter(prefix="/mongodb", tags=["MongoDB"])
 
 
+# Modern RESTful aliases
+
+
+@router.post("/collections/{collection}/query", dependencies=[Depends(get_api_key)])
+async def query_collection_modern(collection: str, query: Dict[str, Any] = Body(...)):
+    """Modern alias for querying a collection."""
+    return await query_collection(collection, query)
+
+
+@router.post("/collections/{collection}/bulk", dependencies=[Depends(get_api_key)])
+async def bulk_upsert_collection_modern(
+    collection: str, payload: Dict[str, Any] = Body(...)
+):
+    """Modern alias for bulk upsert into a collection."""
+    return await bulk_upsert_collection(collection, payload)
+
+
+@router.delete(
+    "/collections/{collection}/documents", dependencies=[Depends(get_api_key)]
+)
+async def delete_from_collection_modern(
+    collection: str, payload: Dict[str, Any] = Body(...)
+):
+    """Modern alias for deleting documents from a collection."""
+    return await delete_from_collection(collection, payload)
+
+
+@router.get(
+    "/collections/{collection}/documents/{doc_id}", dependencies=[Depends(get_api_key)]
+)
+async def get_document_by_id(collection: str, doc_id: str):
+    """Fetch a single document by its _id (string)."""
+    mongo_client = get_mongo_client()
+    if not mongo_client:
+        raise HTTPException(status_code=503, detail="MongoDB not available")
+    try:
+        db = mongo_client.get_database("gitquery")
+        coll = db.get_collection(collection)
+        try:
+            oid = ObjectId(doc_id)
+        except Exception:
+            oid = doc_id
+        doc = coll.find_one({"_id": oid})
+        if not doc:
+            raise HTTPException(status_code=404, detail="Document not found")
+        if "_id" in doc:
+            doc["_id"] = str(doc["_id"])
+        return {"document": doc}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Get failed: {str(e)}")
+
+
+@router.delete(
+    "/collections/{collection}/documents/{doc_id}", dependencies=[Depends(get_api_key)]
+)
+async def delete_document_by_id(collection: str, doc_id: str):
+    """Delete a single document by its _id."""
+    mongo_client = get_mongo_client()
+    if not mongo_client:
+        raise HTTPException(status_code=503, detail="MongoDB not available")
+    try:
+        db = mongo_client.get_database("gitquery")
+        coll = db.get_collection(collection)
+        try:
+            oid = ObjectId(doc_id)
+        except Exception:
+            oid = doc_id
+        result = coll.delete_one({"_id": oid})
+        return {"deleted": int(result.deleted_count)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
+
+
 @router.post("/query", dependencies=[Depends(get_api_key)])
 async def query_mongodb(query: MongoQuery):
     """
