@@ -1,4 +1,3 @@
-```dockercompose
 # Training service compose
 # Usage: docker-compose -f docker-compose.base.yml -f docker-compose.training.yml up
 
@@ -34,5 +33,3 @@ networks:
     name: git-query-db-network
   web-network:
     name: git-query-web-network
-
-```
