@@ -13,10 +13,9 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from src.shared.config import settings
 from src.gateway.services.session_manager import SessionManager
 from src.gateway.services.user_service import UserService
-from src.gateway.middleware.session import SessionMiddleware
 from src.gateway.middleware.rate_limit import RateLimitMiddleware
 from src.gateway.middleware.api_key import APIKeyMiddleware
-from src.gateway.routers import auth, chat, recommendations, user, health, db
+from src.gateway.routers import auth, chat, recommendations, user, health
 
 
 # Include DB routers directly in the Gateway so the Gateway serves DB endpoints
@@ -237,7 +236,6 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
 
 # Include routers
 app.include_router(health.router)
-app.include_router(db.router)
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(chat.router, prefix="/chat", tags=["Chat"])
 app.include_router(
@@ -247,10 +245,13 @@ app.include_router(user.router, prefix="/user", tags=["User"])
 
 # Mount the storage routers under `/api` so DB endpoints are served by the
 # Gateway process itself (previously provided by the db-query-api service).
-app.include_router(mongodb_router.router, prefix="/api/mongodb")
-app.include_router(redis_router.router, prefix="/api/redis")
-app.include_router(qdrant_router.router, prefix="/api/qdrant")
-app.include_router(cosmos_router.router, prefix="/api/cosmos")
+# Mount storage routers under `/api` so service paths are `/api/{service}/...`.
+# This avoids duplicated segments like `/api/mongodb/mongodb` and removes the
+# legacy `/api/db/...` namespace which previously produced `/api/db/mongodb/mongodb`.
+app.include_router(mongodb_router.router, prefix="/api")
+app.include_router(redis_router.router, prefix="/api")
+app.include_router(qdrant_router.router, prefix="/api")
+app.include_router(cosmos_router.router, prefix="/api")
 
 
 # Health check

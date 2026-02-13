@@ -17,7 +17,7 @@ nginx: 80
 - **Root:** `/` - Serves static web application
 - **API:** `/api/` - API endpoints
 - **Health:** `/api/health` - System health checks (public)
-- **Database:** `/api/db/{service}/` - Database operations (requires API key)
+- **Database:** `/api/{service}/` - Database operations (requires API key)
 
 ---
 
@@ -28,7 +28,7 @@ nginx: 80
 - `GET /api/health/databases`
 
 ### Protected Endpoints (API Key Required)
-All `/api/db/*` endpoints require an API key in the `Authorization` header:
+All `/api/*` endpoints require an API key in the `Authorization` header:
 
 ```http
 Authorization: Bearer <your-api-key>
@@ -88,9 +88,9 @@ Returns database-specific health checks.
 
 ## MongoDB Endpoints
 
-Base path: `/api/db/mongodb`
+Base path: `/api/mongodb`
 
-### GET /api/db/mongodb/collections
+### GET /api/mongodb/collections
 List all collections in the database.
 
 **Auth:** MongoDB API key required
@@ -105,7 +105,7 @@ List all collections in the database.
 
 ---
 
-### POST /api/db/mongodb/{collection}/query
+### POST /api/mongodb/{collection}/query
 Query documents in a collection.
 
 **Auth:** MongoDB API key required
@@ -133,7 +133,7 @@ Query documents in a collection.
 
 ---
 
-### POST /api/db/mongodb/{collection}/bulk
+### POST /api/mongodb/{collection}/bulk
 Bulk insert or upsert documents.
 
 **Auth:** MongoDB API key required
@@ -168,9 +168,9 @@ Bulk insert or upsert documents.
 
 ## Redis Endpoints
 
-Base path: `/api/db/redis`
+Base path: `/api/redis`
 
-### GET /api/db/redis/{key}
+### GET /api/redis/{key}
 Get value for a key.
 
 **Auth:** Redis API key required
@@ -186,7 +186,7 @@ Get value for a key.
 
 ---
 
-### PUT /api/db/redis/{key}
+### PUT /api/redis/{key}
 Set value for a key with optional TTL.
 
 **Auth:** Redis API key required
@@ -209,7 +209,7 @@ Set value for a key with optional TTL.
 
 ---
 
-### POST /api/db/redis/batch
+### POST /api/redis/batch
 Execute batch Redis operations.
 
 **Auth:** Redis API key required
@@ -245,9 +245,9 @@ Execute batch Redis operations.
 
 ## Qdrant Endpoints
 
-Base path: `/api/db/qdrant`
+Base path: `/api/qdrant`
 
-### GET /api/db/qdrant/collections
+### GET /api/qdrant/collections
 List all vector collections.
 
 **Auth:** Qdrant API key required
@@ -267,7 +267,7 @@ List all vector collections.
 
 ---
 
-### POST /api/db/qdrant/{collection}/search
+### POST /api/qdrant/{collection}/search
 Search for similar vectors.
 
 **Auth:** Qdrant API key required
@@ -299,7 +299,7 @@ Search for similar vectors.
 
 ---
 
-### POST /api/db/qdrant/{collection}/bulk
+### POST /api/qdrant/{collection}/bulk
 Bulk upsert vectors.
 
 **Auth:** Qdrant API key required
@@ -333,9 +333,9 @@ Bulk upsert vectors.
 
 ## MCP Endpoints
 
-Base path: `/api/db/mcp`
+Base path: `/api/mcp`
 
-### GET /api/db/mcp/tools
+### GET /api/mcp/tools
 List available MCP tools.
 
 **Auth:** MCP API key required
@@ -352,7 +352,7 @@ List available MCP tools.
 
 ---
 
-### POST /api/db/mcp/tools/{tool_name}
+### POST /api/mcp/tools/{tool_name}
 Execute an MCP tool (recommendation engine, etc.).
 
 **Auth:** MCP API key required
@@ -413,7 +413,7 @@ headers = {"Authorization": f"Bearer {API_KEY}"}
 
 # Bulk insert
 response = requests.post(
-    f"{BASE_URL}/db/mongodb/repositories/bulk",
+    f"{BASE_URL}/mongodb/repositories/bulk",
     json={
         "documents": [
             {"_id": "1", "name": "repo1", "stars": 100},
@@ -429,13 +429,13 @@ print(response.json())
 ### cURL
 ```bash
 # Query MongoDB
-curl -X POST "https://api.gitquery.com/api/db/mongodb/repositories/query" \
+curl -X POST "https://api.gitquery.com/api/mongodb/repositories/query" \
   -H "Authorization: Bearer your-api-key" \
   -H "Content-Type: application/json" \
   -d '{"filter": {"stars": {"$gt": 100}}, "limit": 10}'
 
 # Bulk upsert to Qdrant
-curl -X POST "https://api.gitquery.com/api/db/qdrant/embeddings/bulk" \
+curl -X POST "https://api.gitquery.com/api/qdrant/embeddings/bulk" \
   -H "Authorization: Bearer your-api-key" \
   -H "Content-Type: application/json" \
   -d '{"points": [{"id": "1", "vector": [0.1, 0.2], "payload": {"name": "item1"}}]}'
