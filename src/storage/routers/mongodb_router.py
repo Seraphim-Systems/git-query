@@ -19,7 +19,7 @@ router = APIRouter(prefix="/mongodb", tags=["MongoDB"])
 @router.post("/collections/{collection}/query", dependencies=[Depends(get_api_key)])
 async def query_collection_modern(collection: str, query: Dict[str, Any] = Body(...)):
     """Modern alias for querying a collection."""
-    return await query_collection(collection, query)
+    return await query_collection_impl(collection, query)
 
 
 @router.post("/collections/{collection}/bulk", dependencies=[Depends(get_api_key)])
@@ -27,7 +27,7 @@ async def bulk_upsert_collection_modern(
     collection: str, payload: Dict[str, Any] = Body(...)
 ):
     """Modern alias for bulk upsert into a collection."""
-    return await bulk_upsert_collection(collection, payload)
+    return await bulk_upsert_collection_impl(collection, payload)
 
 
 @router.delete(
@@ -37,7 +37,7 @@ async def delete_from_collection_modern(
     collection: str, payload: Dict[str, Any] = Body(...)
 ):
     """Modern alias for deleting documents from a collection."""
-    return await delete_from_collection(collection, payload)
+    return await _delete_from_collection_impl(collection, payload)
 
 
 @router.get(
@@ -173,8 +173,33 @@ async def list_mongodb_collections(database: str = "gitquery"):
         )
 
 
-@router.post("/{collection}/query", dependencies=[Depends(get_api_key)])
-async def query_collection(
+@router.delete("/collections/{collection}", dependencies=[Depends(get_api_key)])
+async def drop_mongodb_collection(collection: str, database: str = "gitquery"):
+    """Drop a MongoDB collection. Returns whether the collection was dropped.
+
+    Note: dropping a collection removes its data and metadata. This is a
+    destructive operation; callers must ensure they intend to remove the
+    collection entirely.
+    """
+    mongo_client = get_mongo_client()
+    if not mongo_client:
+        raise HTTPException(status_code=503, detail="MongoDB not available")
+
+    try:
+        db = mongo_client.get_database(database)
+        # Use PyMongo's drop_collection which returns None; check existence
+        # beforehand to provide a clear boolean response.
+        exists = collection in db.list_collection_names()
+        if not exists:
+            return {"collection": collection, "dropped": False, "reason": "not_found"}
+
+        db.drop_collection(collection)
+        return {"collection": collection, "dropped": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Drop failed: {str(e)}")
+
+
+async def query_collection_impl(
     collection: str,
     query: Dict[str, Any] = Body(
         ...,
@@ -223,8 +248,7 @@ async def query_collection(
         raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
 
 
-@router.post("/{collection}/bulk", dependencies=[Depends(get_api_key)])
-async def bulk_upsert_collection(
+async def bulk_upsert_collection_impl(
     collection: str,
     payload: Dict[str, Any] = Body(
         ...,
@@ -302,22 +326,21 @@ async def bulk_upsert_collection(
         raise HTTPException(status_code=500, detail=f"Bulk operation failed: {str(e)}")
 
 
-@router.post("/{collection}/delete", dependencies=[Depends(get_api_key)])
-async def delete_from_collection(
-    collection: str,
-    payload: Dict[str, Any] = Body(
-        ...,
-        example={"filter": {"_id": "507f1f77bcf86cd799439011"}, "many": True},
-    ),
-):
-    """
-    Delete documents from a MongoDB collection.
+def _cast_id_if_needed(filter_query: Dict[str, Any]):
+    if "_id" in filter_query and isinstance(filter_query["_id"], str):
+        val = filter_query["_id"]
+        try:
+            filter_query["_id"] = ObjectId(val)
+        except Exception:
+            pass
 
-    Payload:
-      - filter: MongoDB filter to select documents to delete
-      - many: whether to delete many (True) or a single document (False)
 
-    Returns deleted count.
+async def _delete_from_collection_impl(collection: str, payload: Dict[str, Any]):
+    """Internal implementation for deleting documents from a collection.
+
+    This is intentionally not exposed as a POST route; callers should use the
+    modern `DELETE /collections/{collection}/documents` route which accepts a
+    JSON body describing the filter.
     """
     mongo_client = get_mongo_client()
     if not mongo_client:
@@ -330,14 +353,7 @@ async def delete_from_collection(
         filter_query = payload.get("filter", {})
         many = bool(payload.get("many", True))
 
-        # If filter references _id as a string, try to cast to ObjectId for matching
-        if "_id" in filter_query and isinstance(filter_query["_id"], str):
-            val = filter_query["_id"]
-            try:
-                filter_query["_id"] = ObjectId(val)
-            except Exception:
-                # leave as-is if not a valid ObjectId
-                pass
+        _cast_id_if_needed(filter_query)
 
         if many:
             result = coll.delete_many(filter_query)
