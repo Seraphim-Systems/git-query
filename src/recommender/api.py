@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import time
 from typing import Optional
+from datetime import datetime
 
 from .config import settings
 from .models import (
@@ -86,6 +87,7 @@ async def health_check():
         "status": "healthy",
         "service": "recommender",
         "version": "1.0.0",
+        "timestamp": datetime.utcnow().isoformat(),
     }
 
 
@@ -265,4 +267,3 @@ async def list_engines():
     for name, engine in app.state.engines.items():
         engines.append(engine.get_metadata())
     return {"engines": engines}
-
