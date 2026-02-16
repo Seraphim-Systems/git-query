@@ -18,10 +18,8 @@ volumes:
     name: git-query-scraper-data
   processing-data:
     name: git-query-processing-data
-  recommender-models:
-    name: git-query-recommender-models
-  training-models:
-    name: git-query-training-models
+  model-artifacts:
+    name: git-query-model-artifacts
   training-data:
     name: git-query-training-data
   training-logs:

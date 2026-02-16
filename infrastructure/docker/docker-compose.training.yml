@@ -16,7 +16,7 @@ services:
       - web-network
     restart: unless-stopped
     volumes:
-      - training-models:/app/models
+      - model-artifacts:/app/models
       - training-data:/app/training_data
       - training-logs:/app/logs
 networks:

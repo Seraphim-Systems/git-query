@@ -85,25 +85,27 @@ class EmbeddingTrainer:
 
         logger.info(f"Model saved to: {output_path}")
 
-        # Save metadata
+        # Save metadata via registry
         metadata = ModelMetadata(
             model_id=f"embedding_{variant}_{datetime.utcnow().timestamp()}",
             model_type="embedding",
             variant=variant,
             version="1.0.0",
-            model_path=output_path,
+            path=os.path.relpath(output_path, settings.model_path),
             hyperparameters={
                 "base_model": self.base_model,
                 "epochs": epochs,
                 "batch_size": batch_size,
             },
-            training_metrics={"num_examples": len(train_examples)},
+            metrics={"num_examples": float(len(train_examples))},
             trained_at=datetime.utcnow(),
-            is_active=False,  # Set to True after validation
+            is_active=False,
+            status="candidate"
         )
 
-        from ..database import db_manager
-        await db_manager.save_model_metadata(metadata)
+        from ..services.registry_service import ModelRegistryService
+        registry = ModelRegistryService()
+        await registry.register_model(metadata)
 
         return {
             "model_path": output_path,

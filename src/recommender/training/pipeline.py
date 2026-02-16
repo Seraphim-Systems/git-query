@@ -1,6 +1,7 @@
 """Training pipeline orchestrator."""
 
 import asyncio
+import os
 from datetime import datetime
 from typing import Optional
 import logging
@@ -8,6 +9,7 @@ import logging
 from ..config import settings
 from ..database import db_manager
 from ..models import ModelMetadata
+from ..services import ModelRegistryService
 from .embedding_trainer import EmbeddingTrainer
 from .reranker_trainer import RerankerTrainer
 
@@ -31,6 +33,10 @@ class TrainingPipeline:
         self.variant = variant
         self.embedding_trainer = EmbeddingTrainer()
         self.reranker_trainer = RerankerTrainer()
+        self.registry = ModelRegistryService()
+        
+        # Ensure model path exists
+        os.makedirs(settings.model_path, exist_ok=True)
 
     async def run_full_pipeline(
         self,
