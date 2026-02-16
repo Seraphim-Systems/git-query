@@ -56,6 +56,17 @@ class DatabaseManager:
         await self.db[settings.interactions_collection].create_index([("repo_id", 1)])
         await self.db[settings.user_prefs_collection].create_index([("user_id", 1)], unique=True)
 
+        # Repository text index for performant keyword search
+        await self.db[settings.repos_collection].create_index(
+            [
+                ("name", "text"),
+                ("description", "text"),
+                ("topics", "text"),
+            ],
+            name="repo_text_search",
+            weights={"name": 10, "topics": 5, "description": 1},
+        )
+
         # Qdrant collection
         try:
             self.qdrant_client.get_collection(settings.qdrant_repos_collection)
