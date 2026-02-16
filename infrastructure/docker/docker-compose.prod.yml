@@ -1,7 +1,6 @@
 # Production override - do not bind host ports; only expose internal ports
 # Use this with: -f docker-compose.base.yml -f docker-compose.db.yml -f docker-compose.mcp.yml -f docker-compose.reco.yml -f docker-compose.training.yml -f docker-compose.prod.yml
 
-name: git-query
 
 services:
   # Ensure no host ports are published in production; bind volumes into project tree
