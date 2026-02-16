@@ -1,5 +1,7 @@
 // Home page (Chat) functionality
 document.addEventListener('DOMContentLoaded', () => {
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const API_BASE = isLocalhost ? 'http://localhost:80' : '';
     const messageInput = document.getElementById('messageInput');
     const sendBtn = document.getElementById('sendBtn');
     const messagesContainer = document.getElementById('messages');
@@ -127,7 +129,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         try {
             // Send message to API
-            const response = await fetch('/api/chat', {
+            const response = await fetch(`${API_BASE}/api/chat`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

@@ -1,5 +1,7 @@
 // Register functionality
 document.addEventListener('DOMContentLoaded', () => {
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const API_BASE = isLocalhost ? 'http://localhost:80' : '';
     const registerForm = document.getElementById('registerForm');
     const nameInput = document.getElementById('name');
     const emailInput = document.getElementById('email');
@@ -80,11 +82,12 @@ document.addEventListener('DOMContentLoaded', () => {
         submitBtn.textContent = 'Creating account...';
         
         try {
-            const response = await fetch('/api/auth/register', {
+            const response = await fetch(`${API_BASE}/api/auth/register`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
+                credentials: 'include',
                 body: JSON.stringify({
                     name: nameInput.value.trim(),
                     email: emailInput.value.trim(),

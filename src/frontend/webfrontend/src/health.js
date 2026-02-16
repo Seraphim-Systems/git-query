@@ -1,12 +1,15 @@
+const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const API_BASE = isLocalhost ? 'http://localhost:80' : '';
+
 // Health monitoring functionality
 class HealthMonitor {
     constructor() {
         this.services = [
-            { id: 'gateway', name: 'Gateway', icon: '🌐', endpoint: '/api/health' },
-            { id: 'mongodb', name: 'MongoDB', icon: '🍃', endpoint: '/api/health/mongodb' },
-            { id: 'redis', name: 'Redis', icon: '💾', endpoint: '/api/health/redis' },
-            { id: 'qdrant', name: 'Qdrant', icon: '🔍', endpoint: '/api/health/qdrant' },
-            { id: 'mcp', name: 'MCP Server', icon: '🔌', endpoint: 'http://localhost:8090/health', isDirect: true }
+            { id: 'gateway', name: 'Gateway', icon: '🌐', endpoint: `${API_BASE}/api/health` },
+            { id: 'mongodb', name: 'MongoDB', icon: '🍃', endpoint: `${API_BASE}/api/health/mongodb` },
+            { id: 'redis', name: 'Redis', icon: '💾', endpoint: `${API_BASE}/api/health/redis` },
+            { id: 'qdrant', name: 'Qdrant', icon: '🔍', endpoint: `${API_BASE}/api/health/qdrant` },
+            { id: 'mcp', name: 'MCP Server', icon: '🔌', endpoint: `${API_BASE}/api/health/mcp` }
         ];
         
         this.healthData = {};
