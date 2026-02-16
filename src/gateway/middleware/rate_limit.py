@@ -27,46 +27,5 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         """Process request and check rate limit."""
 
-        # Skip rate limiting for public endpoints (health, docs, etc.)
-        if any(request.url.path.startswith(path) for path in PUBLIC_PATHS):
-            return await call_next(request)
-
-        # Get client identifier (IP or user_id if authenticated)
-        client_id = request.client.host if request.client else "unknown"
-
-        # If user is authenticated, use user_id for rate limiting
-        if hasattr(request.state, "user_id"):
-            client_id = request.state.user_id
-
-        current_time = time.time()
-
-        # Clean old requests outside the time window
-        self.request_counts[client_id] = [
-            req_time
-            for req_time in self.request_counts[client_id]
-            if current_time - req_time < self.window_seconds
-        ]
-
-        # Check if limit exceeded
-        if len(self.request_counts[client_id]) >= self.max_requests:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f"Rate limit exceeded. Max {self.max_requests} requests per {self.window_seconds} seconds.",
-            )
-
-        # Add current request
-        self.request_counts[client_id].append(current_time)
-
-        # Process request
-        response = await call_next(request)
-
-        # Add rate limit headers
-        response.headers["X-RateLimit-Limit"] = str(self.max_requests)
-        response.headers["X-RateLimit-Remaining"] = str(
-            self.max_requests - len(self.request_counts[client_id])
-        )
-        response.headers["X-RateLimit-Reset"] = str(
-            int(current_time + self.window_seconds)
-        )
-
-        return response
+        # Rate limiting disabled: simply forward the request.
+        return await call_next(request)
