@@ -206,3 +206,6 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 .vscode/tasks.json
+
+# Zed IDE 
+.DS_Store
