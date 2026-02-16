@@ -1,5 +1,4 @@
 # Development override - exposes ports to host for debugging
-name: git-query
 
 services:
   mongodb:
