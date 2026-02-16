@@ -41,5 +41,11 @@ services:
     networks:
       - db-network
       - web-network
+
+  webserver:
+    ports:
+      - "8080:8080"
+    environment:
+      LOG_LEVEL: DEBUG
   # Note: db-query-api removed in favor of running the API Gateway which now
   # serves DB endpoints. The `gateway` service will bind host port 80 in dev.

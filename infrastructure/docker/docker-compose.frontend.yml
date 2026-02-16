@@ -1,0 +1,37 @@
+# Frontend web server compose
+# Usage: docker-compose -f docker-compose.base.yml -f docker-compose.frontend.yml up
+
+services:
+  webserver:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.webserver
+    container_name: git-query-webserver
+    environment:
+      - WEBSERVER_HOST=0.0.0.0
+      - WEBSERVER_PORT=8080
+      - LOG_LEVEL=${SVC_LOG_LEVEL:-INFO}
+      # Gateway URL for API proxying
+      - GATEWAY_URL=${GATEWAY_URL:-http://gateway:80}
+      - MONGODB_URL=mongodb://${DB_MONGODB_USER:-admin}:${DB_MONGODB_PASSWORD:-mongopass}@mongodb:27017/${DB_MONGODB_DATABASE:-gitquery}?authSource=admin
+      - REDIS_URL=redis://:${DB_REDIS_PASSWORD:-redispass}@redis:6379
+      - QDRANT_HOST=${QDRANT_HOST:-qdrant}
+      - QDRANT_PORT=${QDRANT_HTTP_PORT:-6333}
+    networks:
+      - db-network
+      - web-network
+    restart: unless-stopped
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  db-network:
+    name: git-query-db-network
+  web-network:
+    name: git-query-web-network
