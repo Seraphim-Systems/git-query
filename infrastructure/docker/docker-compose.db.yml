@@ -1,4 +1,3 @@
-name: git-query
 
 services:
   # Database Services
