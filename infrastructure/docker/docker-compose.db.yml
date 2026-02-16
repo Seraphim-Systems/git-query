@@ -82,7 +82,10 @@ services:
     build:
       context: ../..
       dockerfile: infrastructure/docker/Dockerfile.gateway
-    container_name: git-query-gateway
+    # Tag the built image with the compose project name so image names
+    # are namespaced per-project when built or pushed locally.
+    image: ${COMPOSE_PROJECT_NAME:-git-query}/gateway:latest
+    container_name: ${COMPOSE_PROJECT_NAME:-git-query}-gateway
     env_file:
       - .env
     environment:
