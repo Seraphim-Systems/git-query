@@ -27,7 +27,14 @@ services:
   mcp-server:
     ports: []
     environment:
-      - LOG_LEVEL=INFO
+      LOG_LEVEL: ${SVC_LOG_LEVEL:-INFO}
+      MONGODB_URL: "mongodb://${DB_MONGODB_USER:-admin}:${DB_MONGODB_PASSWORD:-mongopass}@mongodb:27017/gitquery?authSource=admin"
+      REDIS_URL: "redis://:${DB_REDIS_PASSWORD:-redispass}@redis:6379"
+      QDRANT_HOST: "${QDRANT_HOST:-qdrant}"
+      QDRANT_PORT: "${QDRANT_HTTP_PORT:-6333}"
+      QDRANT_API_KEY: "${DB_QDRANT_API_KEY:-}"
+      MCP_API_KEY: "${APIKEY_MCP}"
+      OPENAI_API_KEY: "${APP_OPENAI_API_KEY}"
 
   gateway:
     # Do not publish host port 80; only expose container port so reverse proxy
@@ -36,7 +43,11 @@ services:
     expose:
       - "80"
     environment:
-      - LOG_LEVEL=INFO
+      LOG_LEVEL: ${SVC_LOG_LEVEL:-INFO}
+      REDIS_URL: "redis://:${DB_REDIS_PASSWORD:-redispass}@redis:6379"
+      MONGODB_URL: "mongodb://${DB_MONGODB_USER:-admin}:${DB_MONGODB_PASSWORD:-mongopass}@mongodb:27017/${DB_MONGODB_DATABASE:-gitquery}?authSource=admin"
+      QDRANT_HOST: "${QDRANT_HOST:-qdrant}"
+      QDRANT_HTTP_PORT: "${QDRANT_HTTP_PORT:-6333}"
     networks:
       - db-network
       - proxy

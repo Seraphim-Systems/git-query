@@ -56,6 +56,21 @@ async def startup_db_clients():
             client.admin.command("ping")
             _assign(clients_mod, "mongo_client", client)
             logger.info("MongoDB connected (attempt %d)", attempt)
+            # Run any pending migrations against the target database.
+            try:
+                from src.db.migrate import run_migrations
+
+                db = (
+                    client[getattr(settings, "mongodb_db")]
+                    if getattr(settings, "mongodb_db", None)
+                    else client.get_database()
+                )
+                run_migrations(db)
+                logger.info("Database migrations applied successfully")
+            except Exception as e:
+                logger.exception("Failed to apply database migrations: %s", e)
+                # Propagate to fail fast so deployment tooling can detect migration issues
+                raise
             break
         except Exception as e:
             last_exc = e
