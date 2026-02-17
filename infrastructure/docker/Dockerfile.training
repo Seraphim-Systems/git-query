@@ -1,28 +1,55 @@
 # syntax=docker/dockerfile:1.4
 FROM python:3.11-slim AS base
+
 WORKDIR /app
 
-FROM base AS builder
-RUN --mount=type=cache,target=/var/cache/apt/archives \
-  apt-get update && apt-get install -y --no-install-recommends build-essential python3-venv && rm -rf /var/lib/apt/lists/*
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt /app/requirements.txt
+FROM base AS builder
+
+# Create virtual environment
+RUN python -m venv /app/.venv
+
+# Copy requirements
+COPY src/recommender/requirements.txt /tmp/requirements.txt
+
+# Install Python dependencies
 RUN --mount=type=cache,target=/root/.cache/pip \
-  python -m venv /app/.venv && /app/.venv/bin/pip install --upgrade pip && /app/.venv/bin/pip install --no-cache-dir -r /app/requirements.txt
+    /app/.venv/bin/pip install --upgrade pip && \
+    /app/.venv/bin/pip install -r /tmp/requirements.txt && \
+    /app/.venv/bin/pip install requests
 
 FROM base AS final
+
+# Copy virtual environment from builder
 COPY --from=builder /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Copy training code
+# Copy training code and upload scripts
 COPY src/recommender/training /app/training
+COPY src/recommender/scripts /app/scripts
 COPY src/shared /app/shared
 
-# Create directories
-RUN mkdir -p /app/models /app/training_data /app/logs
+# Create directories for models and data
+RUN mkdir -p /app/models/vectors /app/models/metadata /app/models/checkpoints && \
+    mkdir -p /app/training_data && \
+    mkdir -p /app/logs
 
 # Set Python path
 ENV PYTHONPATH=/app
 
-# Run training job
-CMD ["python", "-m", "training"]
+# Environment variables (override via docker-compose or .env)
+ENV PYTHONUNBUFFERED=1
+# API credentials MUST be provided via environment variables
+# Do NOT set API_BASE_URL or APIKEY_MONGODB here
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD test -f /app/models/metadata/training_metadata_latest.json || exit 1
+
+# Run training pipeline
+CMD ["python", "-m", "training.unified_pipeline"]
