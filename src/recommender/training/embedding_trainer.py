@@ -136,16 +136,6 @@ class EmbeddingTrainer:
 
     def _repo_to_text(self, repo: Dict[str, Any]) -> str:
         """Convert repository data to text for embedding."""
-        parts = []
-
-        if repo.get("name"):
-            parts.append(repo["name"])
-
-        if repo.get("description"):
-            parts.append(repo["description"])
-
-        if repo.get("topics"):
-            parts.append(" ".join(repo["topics"]))
-
-        return " | ".join(parts)
+        from .utils import prepare_repo_text
+        return prepare_repo_text(repo)
 

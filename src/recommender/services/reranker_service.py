@@ -116,15 +116,11 @@ class RerankerService:
 
     def _create_repo_text(self, repo: RepositoryResult) -> str:
         """Create text representation of repository for reranking."""
-        parts = [repo.name]
-
-        if repo.description:
-            parts.append(repo.description)
-
-        if repo.language:
-            parts.append(f"Language: {repo.language}")
-
-        parts.append(f"Stars: {repo.stars}")
-
-        return " | ".join(parts)
+        from ..training.utils import prepare_repo_text
+        repo_dict = {
+            "name": repo.name,
+            "description": repo.description,
+            "language": repo.language,
+        }
+        return prepare_repo_text(repo_dict)
 
