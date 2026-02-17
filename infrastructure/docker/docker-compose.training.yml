@@ -8,19 +8,34 @@ services:
       dockerfile: infrastructure/docker/Dockerfile.training
     container_name: git-query-training
     environment:
-      - LOG_LEVEL=${SVC_LOG_LEVEL:-INFO}
-      - MONGODB_URL=mongodb://${DB_MONGODB_USER:-admin}:${DB_MONGODB_PASSWORD:-mongopass}@mongodb:27017/gitquery?authSource=admin
-      - REDIS_URL=redis://:${DB_REDIS_PASSWORD:-redispass}@redis:6379
-    networks:
-      - db-network
-      - web-network
-    restart: unless-stopped
+      # API Configuration - REQUIRED in .env file
+      - API_BASE_URL=${API_BASE_URL}
+      - APIKEY_MONGODB=${APIKEY_MONGODB}
+
+      # Training Configuration
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
+      - BATCH_SIZE=${BATCH_SIZE:-32}
+      - FETCH_BATCH_SIZE=${FETCH_BATCH_SIZE:-100}
+      - MAX_REPOS=${MAX_REPOS:-}
+      - SKIP_IF_NO_NEW_DATA=${SKIP_IF_NO_NEW_DATA:-true}
+
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+
+    # No network needed - training only connects to external API via internet
+    restart: "no"  # Run once, don't restart
     volumes:
+      # Persist trained models
       - training-models:/app/models
+      # Cache downloaded data
       - training-data:/app/training_data
+      # Logs
       - training-logs:/app/logs
-networks:
-  db-network:
-    name: git-query-db-network
-  web-network:
-    name: git-query-web-network
+
+volumes:
+  training-models:
+    name: git-query-training-models
+  training-data:
+    name: git-query-training-data
+  training-logs:
+    name: git-query-training-logs

@@ -1,12 +1,14 @@
 """Training pipelines for the recommendation system."""
 
-from .embedding_trainer import EmbeddingTrainer
-from .reranker_trainer import RerankerTrainer
-from .pipeline import TrainingPipeline
+# Don't import other modules here - they have dependencies we don't need
+# Just export the unified pipeline for Docker usage
 
 __all__ = [
-    "EmbeddingTrainer",
-    "RerankerTrainer",
-    "TrainingPipeline",
+    "UnifiedTrainingPipeline",
 ]
 
+# Main entry point for Docker container
+if __name__ == "__main__":
+    from .unified_pipeline import main
+
+    main()
