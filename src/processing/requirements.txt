@@ -31,6 +31,8 @@ hiredis>=2.3.0
 # Qdrant Vector Database
 qdrant-client>=1.7.0
 
+# Azure Cosmos DB
+azure-cosmos>=4.5.0
 
 # Configuration
 python-dotenv>=1.0.0
@@ -43,3 +45,7 @@ kagglehub>=0.2.9
 
 # Streaming JSON for large datasets
 ijson>=3.2.3
+
+# Machine Learning & Embeddings
+sentence-transformers>=2.2.2
+torch>=2.0.0
