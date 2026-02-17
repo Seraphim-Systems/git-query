@@ -133,12 +133,15 @@ class ModelMetadata(BaseModel):
 
     model_id: str
     model_type: Literal["embedding", "cross_encoder", "personalization"]
-    variant: str
+    variant: str = Field(..., description="Variant name for A/B testing")
     version: str
-    model_path: str
-    hyperparameters: Dict[str, Any]
-    training_metrics: Dict[str, float]
-    trained_at: datetime
+    path: str = Field(..., description="Relative path within the model volume")
+    hyperparameters: Dict[str, Any] = Field(default_factory=dict)
+    metrics: Dict[str, float] = Field(
+        default_factory=dict, description="Training evaluation metrics"
+    )
+    trained_at: datetime = Field(default_factory=datetime.utcnow)
     is_active: bool = False
+    status: Literal["candidate", "active", "archived"] = "candidate"
     notes: Optional[str] = None
 

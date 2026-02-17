@@ -22,6 +22,7 @@ from .services import (
     RerankerService,
     PersonalizationService,
     ABTestService,
+    ModelRegistryService,
 )
 
 
@@ -37,6 +38,7 @@ async def lifespan(app: FastAPI):
     app.state.reranker_service = RerankerService()
     app.state.personalization_service = PersonalizationService()
     app.state.ab_test_service = ABTestService()
+    app.state.registry_service = ModelRegistryService()
 
     # Initialize engines
     app.state.engines = {
@@ -51,9 +53,9 @@ async def lifespan(app: FastAPI):
         ),
     }
 
-    # Load models
-    app.state.embedding_service.load_model()
-    app.state.reranker_service.load_model()
+    # Load active models
+    await app.state.embedding_service.load_active_model()
+    await app.state.reranker_service.load_active_model()
 
     yield
 
@@ -267,3 +269,42 @@ async def list_engines():
     for name, engine in app.state.engines.items():
         engines.append(engine.get_metadata())
     return {"engines": engines}
+
+
+# ===== Model Management Endpoints =====
+
+@app.get("/admin/models")
+async def list_models(
+    model_type: Optional[str] = None, 
+    status: Optional[str] = None
+):
+    """List all registered models."""
+    registry: ModelRegistryService = app.state.registry_service
+    models = await registry.list_models(model_type, status)
+    return {"models": models}
+
+
+@app.post("/admin/models/reload")
+async def reload_models(variant: str = "default"):
+    """Reload active models from the registry."""
+    try:
+        await app.state.embedding_service.load_active_model(variant)
+        await app.state.reranker_service.load_active_model(variant)
+        return {
+            "status": "success",
+            "message": "Models reloaded",
+            "active_embedding": app.state.embedding_service.current_model_id,
+            "active_reranker": app.state.reranker_service.current_model_id,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to reload models: {str(e)}")
+
+
+@app.post("/admin/models/promote/{model_id}")
+async def promote_model(model_id: str):
+    """Promote a model to active status."""
+    registry: ModelRegistryService = app.state.registry_service
+    success = await registry.promote_model(model_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Model not found or promotion failed")
+    return {"status": "success", "message": f"Model {model_id} promoted to active"}

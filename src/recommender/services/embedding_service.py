@@ -1,11 +1,15 @@
 """Embedding service for semantic search."""
 
-from typing import List
+import os
+from typing import List, Optional
 import torch
 from sentence_transformers import SentenceTransformer
 from ..config import settings
+from ..models import ModelMetadata
 import asyncio
-from functools import lru_cache
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class EmbeddingService:
@@ -14,12 +18,41 @@ class EmbeddingService:
     def __init__(self, model_name: str = None):
         self.model_name = model_name or settings.embedding_model_name
         self.model = None
+        self.current_model_id: Optional[str] = None
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    def load_model(self):
-        """Load the embedding model."""
-        if self.model is None:
-            self.model = SentenceTransformer(self.model_name, device=self.device)
+    async def load_active_model(self, variant: str = "default"):
+        """Load the currently active embedding model from the registry."""
+        from .registry_service import ModelRegistryService
+        registry = ModelRegistryService()
+        
+        active_model = await registry.get_active_model("embedding", variant)
+        
+        if not active_model:
+            logger.warning(f"No active embedding model found for variant '{variant}'. Using default: {self.model_name}")
+            self.load_model(self.model_name)
+            return
+
+        if active_model.model_id == self.current_model_id:
+            logger.info(f"Embedding model {active_model.model_id} is already loaded.")
+            return
+
+        # Load from path
+        full_path = os.path.join(settings.model_path, active_model.path)
+        if os.path.exists(full_path):
+            logger.info(f"Loading active embedding model: {active_model.model_id} from {full_path}")
+            self.load_model(full_path)
+            self.current_model_id = active_model.model_id
+        else:
+            logger.error(f"Active model path not found: {full_path}. Falling back to default.")
+            self.load_model(self.model_name)
+
+    def load_model(self, model_path: str = None):
+        """Load the embedding model into memory."""
+        target = model_path or self.model_name
+        if self.model is None or target != self.model_name:
+            logger.info(f"Initializing SentenceTransformer with: {target}")
+            self.model = SentenceTransformer(target, device=self.device)
         return self.model
 
     async def embed_text(self, text: str) -> List[float]:

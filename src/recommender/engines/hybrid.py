@@ -78,8 +78,15 @@ class HybridRetrievalEngine(RecommendationEngine):
             top_k=settings.hybrid_search_top_k,
         )
 
-        return [{"repo_id": r["repo_id"], "score": r["score"], "source": "semantic"}
-                for r in results]
+        return [
+            {
+                "repo_id": r["repo_id"],
+                "score": r["score"],
+                "source": "semantic",
+                "payload": r.get("payload", {}),
+            }
+            for r in results
+        ]
 
     async def _keyword_search(
         self, request: RecommendationRequest
@@ -88,11 +95,9 @@ class HybridRetrievalEngine(RecommendationEngine):
         query_filter = {}
 
         if request.query:
-            query_filter["$or"] = [
-                {"name": {"$regex": request.query, "$options": "i"}},
-                {"description": {"$regex": request.query, "$options": "i"}},
-                {"topics": {"$in": [request.query]}},
-            ]
+            # Use MongoDB Text Search ($text) for O(log N) performance
+            # Requires a text index on name, description, and topics
+            query_filter["$text"] = {"$search": request.query}
 
         repos = await db_manager.search_repositories(
             query_filter=query_filter,
@@ -101,7 +106,7 @@ class HybridRetrievalEngine(RecommendationEngine):
 
         return [
             {
-                "repo_id": repo.get("repo_id", repo.get("_id")),
+                "repo_id": repo.get("repo_id", str(repo.get("_id"))),
                 "repo_data": repo,
                 "score": 1.0,
                 "source": "keyword",
@@ -123,6 +128,10 @@ class HybridRetrievalEngine(RecommendationEngine):
             scores[repo_id] = scores.get(repo_id, 0) + 1 / (self.k + rank)
             sources[repo_id] = sources.get(repo_id, set())
             sources[repo_id].add("semantic")
+            
+            # Fallback metadata from Qdrant payload
+            if "payload" in result and repo_id not in repo_data:
+                repo_data[repo_id] = result["payload"]
 
         # Process keyword results
         for rank, result in enumerate(keyword_results, start=1):
@@ -131,6 +140,7 @@ class HybridRetrievalEngine(RecommendationEngine):
             sources[repo_id] = sources.get(repo_id, set())
             sources[repo_id].add("keyword")
             if "repo_data" in result:
+                # Keyword data is usually richer, so it takes precedence
                 repo_data[repo_id] = result["repo_data"]
 
         # Sort by fused score

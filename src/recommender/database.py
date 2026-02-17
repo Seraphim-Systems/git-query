@@ -1,6 +1,7 @@
 """Database clients for the recommendation system."""
 
 import asyncio
+import os
 from typing import Any, Dict, List, Optional
 from motor.motor_asyncio import AsyncIOMotorClient
 from qdrant_client import QdrantClient
@@ -11,6 +12,7 @@ import json
 
 from .config import settings
 from .models import UserInteraction, UserPreferences, EvaluationMetrics, ABTestConfig, ModelMetadata
+from src.db.config import db_clients
 
 
 class DatabaseManager:
@@ -23,20 +25,24 @@ class DatabaseManager:
         self.db = None
 
     async def connect(self):
-        """Initialize all database connections."""
+        """Initialize all database connections using shared storage configuration."""
+        config = db_clients.config
+        
         # MongoDB
-        self.mongo_client = AsyncIOMotorClient(settings.mongodb_url)
-        self.db = self.mongo_client.gitquery
+        # Use shared settings or env vars for the URL
+        mongo_url = config.mongodb_url or settings.mongodb_url
+        self.mongo_client = AsyncIOMotorClient(mongo_url)
+        self.db = self.mongo_client[config.mongodb_db or "gitquery"]
 
         # Qdrant
         self.qdrant_client = QdrantClient(
-            host=settings.qdrant_host,
-            port=settings.qdrant_port,
-            api_key=settings.qdrant_api_key,
+            url=config.qdrant_url,
+            api_key=config.qdrant_api_key or settings.qdrant_api_key,
         )
 
         # Redis
-        self.redis_client = await redis.from_url(settings.redis_url)
+        redis_url = os.getenv("REDIS_URL") or settings.redis_url
+        self.redis_client = await redis.from_url(redis_url)
 
         # Ensure collections exist
         await self._ensure_collections()
@@ -49,6 +55,17 @@ class DatabaseManager:
         )
         await self.db[settings.interactions_collection].create_index([("repo_id", 1)])
         await self.db[settings.user_prefs_collection].create_index([("user_id", 1)], unique=True)
+
+        # Repository text index for performant keyword search
+        await self.db[settings.repos_collection].create_index(
+            [
+                ("name", "text"),
+                ("description", "text"),
+                ("topics", "text"),
+            ],
+            name="repo_text_search",
+            weights={"name": 10, "topics": 5, "description": 1},
+        )
 
         # Qdrant collection
         try:

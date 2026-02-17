@@ -3,6 +3,8 @@
 from typing import List, Dict, Any
 from collections import defaultdict
 import numpy as np
+import json
+import os
 
 
 class RecommenderEvaluator:
@@ -19,6 +21,37 @@ class RecommenderEvaluator:
 
     def __init__(self):
         pass
+
+    def save_report(self, metrics: Dict[str, Any], path: str):
+        """
+        Save evaluation metrics to a JSON file.
+
+        Args:
+            metrics: Dictionary of metrics to save
+            path: File path to save the report
+        """
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+
+        # Convert numpy types to native types for JSON serialization
+        serializable_metrics = self._make_serializable(metrics)
+
+        with open(path, "w") as f:
+            json.dump(serializable_metrics, f, indent=2)
+
+    def _make_serializable(self, obj: Any) -> Any:
+        """Recursively convert numpy types to native Python types."""
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, (np.ndarray,)):
+            return self._make_serializable(obj.tolist())
+        elif isinstance(obj, dict):
+            return {k: self._make_serializable(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [self._make_serializable(item) for item in obj]
+        return obj
 
     def evaluate(
         self,

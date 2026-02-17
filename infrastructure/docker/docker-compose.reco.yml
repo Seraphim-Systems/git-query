@@ -23,7 +23,7 @@ services:
     expose:
       - "8095"
     volumes:
-      - recommender-models:/app/models
+      - model-artifacts:/app/models
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8095/health"]
       interval: 30s

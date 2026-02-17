@@ -5,6 +5,8 @@ from typing import Dict, Any, List
 from sentence_transformers import CrossEncoder, InputExample
 from datetime import datetime
 import os
+import shutil
+import glob
 
 from ..config import settings
 from ..models import ModelMetadata
@@ -20,8 +22,9 @@ class RerankerTrainer:
     Used for reranking top K candidates.
     """
 
-    def __init__(self, base_model: str = None):
+    def __init__(self, base_model: str = None, checkpoint_save_total_limit: int = 3):
         self.base_model = base_model or settings.cross_encoder_model_name
+        self.checkpoint_save_total_limit = checkpoint_save_total_limit
         self.model = None
 
     async def train(
@@ -63,41 +66,98 @@ class RerankerTrainer:
             f"reranker_{variant}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}",
         )
 
+        def train_callback(score: float, epoch: int, steps: int):
+            """Callback to save checkpoints during training."""
+            metrics = {"score": score, "steps": steps}
+            # epoch is 0-indexed in callback
+            self._save_checkpoint(epoch + 1, metrics, variant)
+
         self.model.fit(
             train_dataloader=self._create_dataloader(train_examples, batch_size),
             epochs=epochs,
             warmup_steps=100,
             output_path=output_path,
             show_progress_bar=True,
+            callback=train_callback
         )
 
         logger.info(f"Model saved to: {output_path}")
 
-        # Save metadata
+        # Save metadata via registry
         metadata = ModelMetadata(
             model_id=f"reranker_{variant}_{datetime.utcnow().timestamp()}",
             model_type="cross_encoder",
             variant=variant,
             version="1.0.0",
-            model_path=output_path,
+            path=os.path.relpath(output_path, settings.model_path),
             hyperparameters={
                 "base_model": self.base_model,
                 "epochs": epochs,
                 "batch_size": batch_size,
             },
-            training_metrics={"num_examples": len(train_examples)},
+            metrics={"num_examples": float(len(train_examples))},
             trained_at=datetime.utcnow(),
             is_active=False,
+            status="candidate"
         )
 
-        from ..database import db_manager
-        await db_manager.save_model_metadata(metadata)
+        from ..services.registry_service import ModelRegistryService
+        registry = ModelRegistryService()
+        await registry.register_model(metadata)
 
         return {
             "model_path": output_path,
             "num_examples": len(train_examples),
             "epochs": epochs,
         }
+
+    def _save_checkpoint(self, epoch: int, metrics: Dict[str, Any], variant: str):
+        """
+        Save training checkpoint and prune old ones.
+        
+        Args:
+            epoch: Current epoch number (1-based)
+            metrics: Current metrics
+            variant: Model variant name
+        """
+        checkpoint_dir = os.path.join(settings.checkpoint_path, variant)
+        os.makedirs(checkpoint_dir, exist_ok=True)
+        
+        epoch_path = os.path.join(checkpoint_dir, f"epoch_{epoch}")
+        
+        logger.info(f"Saving checkpoint to {epoch_path}")
+        self.model.save(epoch_path)
+        
+        # Prune old checkpoints
+        self._prune_checkpoints(checkpoint_dir)
+
+    def _prune_checkpoints(self, checkpoint_dir: str):
+        """
+        Keep only the latest N checkpoints in the directory.
+        
+        Args:
+            checkpoint_dir: Directory containing checkpoints
+        """
+        checkpoints = glob.glob(os.path.join(checkpoint_dir, "epoch_*"))
+        
+        # Sort by epoch number
+        def get_epoch_num(path):
+            try:
+                dirname = os.path.basename(path)
+                return int(dirname.split("_")[-1])
+            except (ValueError, IndexError):
+                return -1
+                
+        checkpoints.sort(key=get_epoch_num)
+        
+        if len(checkpoints) > self.checkpoint_save_total_limit:
+            to_delete = checkpoints[:-self.checkpoint_save_total_limit]
+            for path in to_delete:
+                logger.info(f"Pruning old checkpoint: {path}")
+                if os.path.isdir(path):
+                    shutil.rmtree(path)
+                else:
+                    os.remove(path)
 
     def _prepare_examples(self, training_data: Dict[str, List]) -> List[InputExample]:
         """
