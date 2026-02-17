@@ -2,14 +2,14 @@
 
 import asyncio
 import sys
-from recommender.database import db_manager
-from recommender.models import (
+from src.recommender.database import db_manager
+from src.recommender.models import (
     RecommendationRequest,
     UserInteraction,
     InteractionType,
     ABTestConfig,
 )
-from recommender.engines import BaselineEngine, HybridRetrievalEngine
+from src.recommender.engines import BaselineEngine, HybridRetrievalEngine
 from datetime import datetime, timedelta
 
 
@@ -105,4 +105,3 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n\nTest failed with error: {e}")
         sys.exit(1)
-
