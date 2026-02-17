@@ -1,8 +1,8 @@
 """Configuration for the recommendation system."""
 
+import logging
 from pydantic_settings import BaseSettings
 from typing import Optional
-
 
 class RecommenderSettings(BaseSettings):
     """Settings for the recommender service."""
@@ -13,11 +13,13 @@ class RecommenderSettings(BaseSettings):
     log_level: str = "INFO"
 
     # Database connections
-    mongodb_url: str = "mongodb://admin:mongopass@localhost:27017/gitquery?authSource=admin"
-    redis_url: str = "redis://:redispass@localhost:6379"
-    qdrant_host: str = "localhost"
-    qdrant_port: int = 6333
+    mongodb_url: str = "mongodb://localhost:27017/gitquery?authSource=admin"
+    redis_url: str = "redis://localhost:6379"
+    qdrant_url: str = "http://localhost:6333"
     qdrant_api_key: Optional[str] = None
+
+    # API Keys
+    embedding_api_key: Optional[str] = None
 
     # Model paths
     model_path: str = "./models"
@@ -62,7 +64,12 @@ class RecommenderSettings(BaseSettings):
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+        extra = "ignore"
 
 
 settings = RecommenderSettings()
 
+if not settings.embedding_api_key:
+    logging.warning(
+        "EMBEDDING_API_KEY not set. Embedding functionality may be limited."
+    )

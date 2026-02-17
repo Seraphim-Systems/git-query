@@ -1,3 +1,46 @@
+"""CLI script to create an A/B test configuration in the database."""
+
+import asyncio
+import argparse
+import logging
+from datetime import datetime, timedelta
+from ..database import db_manager
+from ..models import ABTestConfig
+from ..config import settings
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+
+logger = logging.getLogger(__name__)
+
+
+async def main():
+    parser = argparse.ArgumentParser(description="Create A/B test configuration")
+    parser.add_argument(
+        "--name",
+        type=str,
+        required=True,
+        help="Name of the A/B test",
+    )
+    parser.add_argument(
+        "--description",
+        type=str,
+        default="",
+        help="Description of the A/B test",
+    )
+    parser.add_argument(
+        "--variants",
+        nargs="+",
+        required=True,
+        help="List of variant names (e.g., baseline hybrid)",
+    )
+    parser.add_argument(
+        "--splits",
+        nargs="+",
+        type=float,
+        required=True,
         help="Traffic splits (e.g., 0.5 0.5 for 50/50 split)",
     )
     parser.add_argument(
@@ -15,7 +58,6 @@
     if abs(sum(args.splits) - 1.0) > 0.001:
         raise ValueError("Traffic splits must sum to 1.0")
 
-    # Create A/B test config
     test_id = f"ab_test_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
 
     ab_test = ABTestConfig(
@@ -38,13 +80,15 @@
         await db_manager.connect()
 
         # Deactivate any existing active tests
-        await db_manager.db[db_manager.db.ab_tests_collection].update_many(
+        await db_manager.db[settings.ab_tests_collection].update_many(
             {"is_active": True},
             {"$set": {"is_active": False}},
         )
 
         # Insert new test
-        await db_manager.db["ab_tests"].insert_one(ab_test.model_dump())
+        await db_manager.db[settings.ab_tests_collection].insert_one(
+            ab_test.model_dump()
+        )
 
         logger.info(f"A/B test created successfully: {test_id}")
 
@@ -57,37 +101,3 @@
 
 if __name__ == "__main__":
     asyncio.run(main())
-"""Git-Query Recommendation System.
-
-AI-powered repository recommendation with hybrid retrieval,
-personalization, and A/B testing.
-"""
-
-__version__ = "1.0.0"
-
-from .config import settings
-from .models import (
-    RecommendationRequest,
-    RecommendationResponse,
-    UserInteraction,
-    InteractionType,
-)
-from .engines import (
-    RecommendationEngine,
-    BaselineEngine,
-    HybridRetrievalEngine,
-    PersonalizedEngine,
-)
-
-__all__ = [
-    "settings",
-    "RecommendationRequest",
-    "RecommendationResponse",
-    "UserInteraction",
-    "InteractionType",
-    "RecommendationEngine",
-    "BaselineEngine",
-    "HybridRetrievalEngine",
-    "PersonalizedEngine",
-]
-

@@ -3,9 +3,12 @@
 from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+import logging
 import time
 from typing import Optional
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 from .config import settings
 from .models import (
@@ -205,17 +208,21 @@ async def update_user_preferences_task(interaction: UserInteraction):
     try:
         personalization_service: PersonalizationService = app.state.personalization_service
 
-        # Fetch repo data (would need to get from DB)
-        # For now, we'll skip the actual update
-        # In production, you'd fetch the repo and pass it here
-        # repo_data = await db_manager.get_repository(interaction.repo_id)
-        # await personalization_service.update_preferences_from_interaction(
-        #     interaction, repo_data
-        # )
-        pass
+        # Fetch repo data from database
+        repos = await db_manager.search_repositories(
+            {"_id": interaction.repo_id}, limit=1
+        )
+        if not repos:
+            repos = await db_manager.search_repositories(
+                {"id": interaction.repo_id}, limit=1
+            )
+
+        if repos:
+            await personalization_service.update_preferences_from_interaction(
+                interaction, repos[0]
+            )
     except Exception as e:
-        # Log error but don't fail the request
-        print(f"Failed to update preferences: {e}")
+        logger.error("Failed to update preferences: %s", e)
 
 
 # ===== User Preferences =====
@@ -255,9 +262,11 @@ async def get_active_ab_test():
 async def clear_cache():
     """Clear recommendation cache."""
     try:
-        # Clear all cache keys starting with "reco:"
-        # This would need proper implementation
-        return {"status": "success", "message": "Cache cleared"}
+        cleared = 0
+        async for key in db_manager.redis_client.scan_iter(match="reco:*"):
+            await db_manager.redis_client.delete(key)
+            cleared += 1
+        return {"status": "success", "message": f"Cleared {cleared} cache entries"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to clear cache: {str(e)}")
 

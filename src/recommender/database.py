@@ -1,7 +1,6 @@
 """Database clients for the recommendation system."""
 
 import asyncio
-import os
 from typing import Any, Dict, List, Optional
 from motor.motor_asyncio import AsyncIOMotorClient
 from qdrant_client import QdrantClient
@@ -40,9 +39,8 @@ class DatabaseManager:
             api_key=config.qdrant_api_key or settings.qdrant_api_key,
         )
 
-        # Redis
-        redis_url = os.getenv("REDIS_URL") or settings.redis_url
-        self.redis_client = await redis.from_url(redis_url)
+        # Redis - use recommender's own config
+        self.redis_client = await redis.from_url(settings.redis_url)
 
         # Ensure collections exist
         await self._ensure_collections()
