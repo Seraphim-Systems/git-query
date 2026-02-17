@@ -1,7 +1,7 @@
-"""Kaggle → Cosmos DB raw dataset loader.
+"""Kaggle → database raw dataset loader.
 
 Downloads a Kaggle dataset via kagglehub, loads a JSON array file,
-and upserts documents into Cosmos DB (Mongo API).
+and upserts documents into MongoDB/Cosmos DB.
 """
 
 from __future__ import annotations
@@ -104,6 +104,126 @@ def _batch(iterable: Iterable[Dict[str, Any]], batch_size: int) -> Iterable[List
         yield chunk
 
 
+def _is_duplicate_error(exc: httpx.HTTPStatusError) -> bool:
+    status = exc.response.status_code
+    body = (exc.response.text or "").lower()
+    return status == 409 or "duplicate key" in body or "e11000" in body or "already exists" in body
+
+
+def _post_gateway_bulk_with_retry(
+    client: httpx.Client,
+    bulk_url: str,
+    headers: Dict[str, str],
+    database_name: str,
+    documents: List[Dict[str, Any]],
+) -> Dict[str, int]:
+    payload = {
+        "documents": documents,
+        "ordered": False,
+        "upsert": True,
+        "database": database_name,
+    }
+
+    try:
+        response = client.post(bulk_url, json=payload, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        return {
+            "upserted": int(data.get("upserted") or 0),
+            "modified": int(data.get("modified") or 0),
+            "failed_docs": 0,
+            "duplicate_docs": 0,
+        }
+    except httpx.HTTPStatusError as exc:
+        if _is_duplicate_error(exc):
+            return {
+                "upserted": 0,
+                "modified": 0,
+                "failed_docs": 0,
+                "duplicate_docs": len(documents),
+            }
+
+        if exc.response.status_code < 500 or len(documents) <= 1:
+            bad_id = documents[0].get("_id") if documents else None
+            print(
+                f"Skipping document due to gateway error status={exc.response.status_code}, _id={bad_id}",
+                flush=True,
+            )
+            return {
+                "upserted": 0,
+                "modified": 0,
+                "failed_docs": len(documents),
+                "duplicate_docs": 0,
+            }
+
+        mid = len(documents) // 2
+        left = _post_gateway_bulk_with_retry(
+            client, bulk_url, headers, database_name, documents[:mid]
+        )
+        right = _post_gateway_bulk_with_retry(
+            client, bulk_url, headers, database_name, documents[mid:]
+        )
+        return {
+            "upserted": left["upserted"] + right["upserted"],
+            "modified": left["modified"] + right["modified"],
+            "failed_docs": left["failed_docs"] + right["failed_docs"],
+            "duplicate_docs": left["duplicate_docs"] + right["duplicate_docs"],
+        }
+
+
+def _post_gateway_insert_with_retry(
+    client: httpx.Client,
+    insert_url: str,
+    headers: Dict[str, str],
+    database_name: str,
+    collection_name: str,
+    documents: List[Dict[str, Any]],
+) -> Dict[str, int]:
+    payload = {
+        "database": database_name,
+        "collection": collection_name,
+        "documents": documents,
+    }
+    try:
+        response = client.post(insert_url, json=payload, headers=headers)
+        response.raise_for_status()
+        return {"upserted": 0, "modified": 0, "failed_docs": 0, "duplicate_docs": 0}
+    except httpx.HTTPStatusError as exc:
+        if _is_duplicate_error(exc):
+            return {
+                "upserted": 0,
+                "modified": 0,
+                "failed_docs": 0,
+                "duplicate_docs": len(documents),
+            }
+
+        if exc.response.status_code < 500 or len(documents) <= 1:
+            bad_id = documents[0].get("_id") if documents else None
+            print(
+                f"Skipping document due to gateway insert error status={exc.response.status_code}, _id={bad_id}",
+                flush=True,
+            )
+            return {
+                "upserted": 0,
+                "modified": 0,
+                "failed_docs": len(documents),
+                "duplicate_docs": 0,
+            }
+        mid = len(documents) // 2
+        left = _post_gateway_insert_with_retry(
+            client, insert_url, headers, database_name, collection_name, documents[:mid]
+        )
+        right = _post_gateway_insert_with_retry(
+            client, insert_url, headers, database_name, collection_name, documents[mid:]
+        )
+        return {
+            "upserted": 0,
+            "modified": 0,
+            "failed_docs": left["failed_docs"] + right["failed_docs"],
+            "duplicate_docs": left["duplicate_docs"] + right["duplicate_docs"],
+        }
+
+
 def load_to_cosmos(
     dataset: str,
     file_path: str | None,
@@ -118,6 +238,9 @@ def load_to_cosmos(
     progress_every: int,
     gateway_url: str | None,
     api_key: str | None,
+    target: str,
+    gateway_bulk_path: str | None,
+    gateway_mongo_mode: str,
 ) -> None:
     print(f"Downloading dataset: {dataset}", flush=True)
     dataset_dir = Path(kagglehub.dataset_download(dataset))
@@ -181,17 +304,31 @@ def load_to_cosmos(
     use_gateway = bool(gateway_url)
     if use_gateway:
         base_url = gateway_url.rstrip("/")
-        bulk_url = f"{base_url}/api/v1/db/cosmos/{collection_name}/bulk"
+        if target == "mongodb" and gateway_mongo_mode == "insert":
+            bulk_url = f"{base_url}/api/mongodb/insert"
+        elif gateway_bulk_path:
+            bulk_url = f"{base_url}{gateway_bulk_path.format(target=target, collection=collection_name)}"
+        elif target == "mongodb":
+            bulk_url = f"{base_url}/api/mongodb/collections/{collection_name}/bulk"
+        else:
+            bulk_url = f"{base_url}/api/v1/db/{target}/{collection_name}/bulk"
         headers = {"X-API-Key": api_key} if api_key else {}
         client = httpx.Client(timeout=300.0)
     else:
-        from src.storage.db_config import get_cosmos_db  # noqa: E402
+        if target == "mongodb":
+            from src.storage.db_config import get_mongodb_db  # noqa: E402
 
-        cosmos_db = get_cosmos_db()
-        collection = cosmos_db[collection_name]
+            database = get_mongodb_db()
+        else:
+            from src.storage.db_config import get_cosmos_db  # noqa: E402
+
+            database = get_cosmos_db()
+        collection = database[collection_name]
 
     total_upserted = 0
     total_modified = 0
+    total_failed_docs = 0
+    total_duplicate_docs = 0
     batch: List[Dict[str, Any]] = []
     processed = 0
 
@@ -207,17 +344,23 @@ def load_to_cosmos(
 
         if len(batch) >= batch_size:
             if use_gateway:
-                payload = {
-                    "documents": batch,
-                    "ordered": False,
-                    "upsert": True,
-                    "database": database_name,
-                }
-                response = client.post(bulk_url, json=payload, headers=headers)
-                response.raise_for_status()
-                data = response.json()
-                total_upserted += int(data.get("upserted") or 0)
-                total_modified += int(data.get("modified") or 0)
+                if target == "mongodb" and gateway_mongo_mode == "insert":
+                    result = _post_gateway_insert_with_retry(
+                        client,
+                        bulk_url,
+                        headers,
+                        database_name,
+                        collection_name,
+                        batch,
+                    )
+                else:
+                    result = _post_gateway_bulk_with_retry(
+                        client, bulk_url, headers, database_name, batch
+                    )
+                total_upserted += result["upserted"]
+                total_modified += result["modified"]
+                total_failed_docs += result["failed_docs"]
+                total_duplicate_docs += result["duplicate_docs"]
             else:
                 ops = [ReplaceOne({"_id": d["_id"]}, d, upsert=True) for d in batch]
                 try:
@@ -235,17 +378,23 @@ def load_to_cosmos(
 
     if batch:
         if use_gateway:
-            payload = {
-                "documents": batch,
-                "ordered": False,
-                "upsert": True,
-                "database": database_name,
-            }
-            response = client.post(bulk_url, json=payload, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-            total_upserted += int(data.get("upserted") or 0)
-            total_modified += int(data.get("modified") or 0)
+            if target == "mongodb" and gateway_mongo_mode == "insert":
+                result = _post_gateway_insert_with_retry(
+                    client,
+                    bulk_url,
+                    headers,
+                    database_name,
+                    collection_name,
+                    batch,
+                )
+            else:
+                result = _post_gateway_bulk_with_retry(
+                    client, bulk_url, headers, database_name, batch
+                )
+            total_upserted += result["upserted"]
+            total_modified += result["modified"]
+            total_failed_docs += result["failed_docs"]
+            total_duplicate_docs += result["duplicate_docs"]
         else:
             ops = [ReplaceOne({"_id": d["_id"]}, d, upsert=True) for d in batch]
             try:
@@ -261,7 +410,7 @@ def load_to_cosmos(
         client.close()
 
     print(
-        f"Completed: upserted={total_upserted}, modified={total_modified}, "
+        f"Completed: upserted={total_upserted}, modified={total_modified}, duplicates={total_duplicate_docs}, failed_docs={total_failed_docs}, "
         f"collection={collection_name}",
         flush=True,
     )
@@ -269,19 +418,25 @@ def load_to_cosmos(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Load Kaggle JSON array dataset into Cosmos DB (Mongo API)."
+        description="Load Kaggle JSON array dataset into MongoDB/Cosmos DB."
     )
     parser.add_argument("--dataset", required=True, help="Kaggle dataset slug")
     parser.add_argument("--file", help="JSON filename inside the dataset")
     parser.add_argument(
         "--collection",
         default="repositories",
-        help="Target Cosmos collection name",
+        help="Target collection name",
     )
     parser.add_argument(
         "--database",
         default="gitquery",
-        help="Target Cosmos database name",
+        help="Target database name",
+    )
+    parser.add_argument(
+        "--target",
+        choices=["mongodb", "cosmos"],
+        default="mongodb",
+        help="Target backend for inserts",
     )
     parser.add_argument("--batch-size", type=int, default=1000)
     parser.add_argument(
@@ -309,11 +464,24 @@ def main() -> None:
     )
     parser.add_argument(
         "--gateway-url",
-        help="Gateway base URL for Cosmos bulk insert (e.g., https://host)",
+        help="Gateway base URL for bulk insert (e.g., https://host)",
     )
     parser.add_argument(
         "--api-key",
         help="API key for gateway (sent as X-API-Key)",
+    )
+    parser.add_argument(
+        "--gateway-bulk-path",
+        help=(
+            "Custom gateway bulk path template, e.g. "
+            "'/api/mongodb/collections/{collection}/bulk'"
+        ),
+    )
+    parser.add_argument(
+        "--gateway-mongo-mode",
+        choices=["insert", "bulk"],
+        default="insert",
+        help="Gateway mode for MongoDB target",
     )
 
     args = parser.parse_args()
@@ -332,6 +500,9 @@ def main() -> None:
         progress_every=args.progress_every,
         gateway_url=args.gateway_url,
         api_key=args.api_key,
+        target=args.target,
+        gateway_bulk_path=args.gateway_bulk_path,
+        gateway_mongo_mode=args.gateway_mongo_mode,
     )
 
 
