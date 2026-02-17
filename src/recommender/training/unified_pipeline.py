@@ -19,6 +19,13 @@ from datetime import datetime
 from sentence_transformers import SentenceTransformer
 import logging
 
+try:
+    from ..scripts.upload_embeddings import EmbeddingUploader
+except ImportError:
+    # When run as `python -m training.unified_pipeline` inside Docker,
+    # the scripts package lives at /app/scripts (sibling directory).
+    from scripts.upload_embeddings import EmbeddingUploader
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -164,7 +171,7 @@ class UnifiedTrainingPipeline:
             "filter": filters or {},
             "limit": limit,
             "skip": skip,
-            "sort": {"stargazers_count": -1}
+            "sort": {"stars": -1}
         }
 
         try:
@@ -227,33 +234,8 @@ class UnifiedTrainingPipeline:
 
     def prepare_repo_text(self, repo: Dict) -> str:
         """Prepare repository text for embedding."""
-        parts = []
-
-        if repo.get("name"):
-            parts.append(f"Repository: {repo['name']}")
-        if repo.get("description"):
-            parts.append(f"Description: {repo['description']}")
-        if repo.get("topics"):
-            topics = repo["topics"]
-            if isinstance(topics, list) and topics:
-                # Handle topics that might be dicts or strings
-                topic_strings = []
-                for topic in topics:
-                    if isinstance(topic, dict):
-                        # If topic is a dict, try to get 'name' or 'topic' field
-                        topic_str = topic.get('name') or topic.get('topic') or str(topic)
-                        topic_strings.append(topic_str)
-                    else:
-                        topic_strings.append(str(topic))
-                if topic_strings:
-                    parts.append(f"Topics: {', '.join(topic_strings)}")
-        if repo.get("language"):
-            parts.append(f"Language: {repo['language']}")
-        if repo.get("readme"):
-            readme = str(repo["readme"])[:500]
-            parts.append(f"README: {readme}")
-
-        return " | ".join(parts)
+        from .utils import prepare_repo_text as _prepare_repo_text
+        return _prepare_repo_text(repo)
 
     def train_embeddings(
         self,
@@ -370,6 +352,66 @@ class UnifiedTrainingPipeline:
         logger.info("✓ MODEL SAVED SUCCESSFULLY")
         logger.info("=" * 60)
 
+    def register_model(self, metadata: Dict, repo_ids: List[str]):
+        """Save model registration for the recommender service to pick up.
+
+        Writes model_registry_latest.json to models/metadata/ with
+        ModelMetadata-compatible fields. The recommender service reads this
+        file as an alternative to a MongoDB lookup, since the training
+        container does not set up a Motor async connection.
+        """
+        registration = {
+            "model_id": f"embedding-{metadata['timestamp']}",
+            "model_type": "embedding",
+            "model_name": metadata["model_name"],
+            "version": metadata["timestamp"],
+            "path": "vectors/repo_embeddings_latest.npy",
+            "mapping_path": "metadata/repo_mapping_latest.json",
+            "is_active": True,
+            "variant": "default",
+            "num_repos": metadata["num_repos"],
+            "embedding_dim": metadata["embedding_dim"],
+            "trained_at": metadata["timestamp"],
+            "metrics": {
+                "training_time_seconds": float(metadata["training_time_seconds"]),
+                "num_repos": float(metadata["num_repos"]),
+                "embedding_dim": float(metadata["embedding_dim"]),
+            },
+            "hyperparameters": {
+                "batch_size": metadata["batch_size"],
+                "device": metadata["device"],
+                "normalized": metadata.get("normalized", True),
+            },
+        }
+
+        reg_path = self.models_dir / "metadata" / "model_registry_latest.json"
+        with open(reg_path, 'w') as f:
+            json.dump(registration, f, indent=2)
+        logger.info(f"✓ Model registered: {reg_path}")
+
+    def upload_to_qdrant(self, embeddings: np.ndarray, repo_ids: List[str], metadata: Dict):
+        """Upload trained embeddings to Qdrant vector store."""
+        logger.info("=" * 60)
+        logger.info("UPLOADING TO QDRANT")
+        logger.info("=" * 60)
+
+        qdrant_api_key = os.getenv("APIKEY_QDRANT", self.api_key)
+        collection = os.getenv("QDRANT_COLLECTION", "repositories_embeddings")
+        batch_size = int(os.getenv("UPLOAD_BATCH_SIZE", "100"))
+
+        uploader = EmbeddingUploader(
+            base_url=self.api_base_url,
+            qdrant_api_key=qdrant_api_key,
+            models_dir=str(self.models_dir)
+        )
+
+        uploaded = uploader.upload_all(
+            collection=collection,
+            batch_size=batch_size
+        )
+
+        logger.info(f"Qdrant upload finished — {uploaded} points uploaded")
+
     def print_summary(self, repositories: List[Dict], metadata: Dict):
         """Print training summary."""
         logger.info("")
@@ -464,7 +506,17 @@ class UnifiedTrainingPipeline:
             # Step 5: Save model
             self.save_model(embeddings, repo_ids, metadata)
 
-            # Step 6: Print summary
+            # Step 6: Register model so recommender service can discover it
+            self.register_model(metadata, repo_ids)
+
+            # Step 7: Upload embeddings to Qdrant
+            skip_qdrant = os.getenv("SKIP_QDRANT_UPLOAD", "false").lower() == "true"
+            if skip_qdrant:
+                logger.info("Skipping Qdrant upload (SKIP_QDRANT_UPLOAD=true)")
+            else:
+                self.upload_to_qdrant(embeddings, repo_ids, metadata)
+
+            # Step 8: Print summary
             self.print_summary(repositories, metadata)
 
             total_time = time.time() - start_time

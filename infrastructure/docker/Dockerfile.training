@@ -29,8 +29,9 @@ FROM base AS final
 COPY --from=builder /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Copy training code
+# Copy training code and upload scripts
 COPY src/recommender/training /app/training
+COPY src/recommender/scripts /app/scripts
 COPY src/shared /app/shared
 
 # Create directories for models and data

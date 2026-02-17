@@ -1,11 +1,19 @@
 """Upload locally trained embeddings to Qdrant via server API."""
 
 import json
+import os
 import numpy as np
 import requests
 from pathlib import Path
 from typing import List, Dict
 import time
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 
 class EmbeddingUploader:
@@ -34,7 +42,7 @@ class EmbeddingUploader:
             raise FileNotFoundError(f"Embeddings not found: {embeddings_path}")
 
         embeddings = np.load(embeddings_path)
-        print(f"✓ Loaded embeddings: {embeddings.shape}")
+        logger.info(f"Loaded embeddings: {embeddings.shape}")
 
         # Load mapping
         mapping_path = self.models_dir / "metadata" / "repo_mapping_latest.json"
@@ -43,7 +51,7 @@ class EmbeddingUploader:
 
         with open(mapping_path, 'r') as f:
             mapping = json.load(f)
-        print(f"✓ Loaded mapping: {len(mapping)} repositories")
+        logger.info(f"Loaded mapping: {len(mapping)} repositories")
 
         # Load metadata
         metadata_path = self.models_dir / "metadata" / "training_metadata_latest.json"
@@ -51,9 +59,32 @@ class EmbeddingUploader:
         if metadata_path.exists():
             with open(metadata_path, 'r') as f:
                 metadata = json.load(f)
-            print(f"✓ Loaded metadata")
+            logger.info("Loaded metadata")
 
         return embeddings, mapping, metadata
+
+    def ensure_collection(self, collection: str, vector_size: int = 384):
+        """Create the Qdrant collection if it does not already exist."""
+        payload = {
+            "vectors": {
+                "size": vector_size,
+                "distance": "Cosine"
+            }
+        }
+
+        try:
+            response = requests.put(
+                f"{self.base_url}/api/qdrant/collections/{collection}",
+                headers=self.headers,
+                json=payload
+            )
+            response.raise_for_status()
+            logger.info(f"Created Qdrant collection '{collection}' (size={vector_size})")
+        except requests.exceptions.HTTPError:
+            # Collection already exists — that is fine
+            logger.info(f"Qdrant collection '{collection}' already exists (or creation was a no-op)")
+        except Exception as e:
+            logger.warning(f"Could not ensure Qdrant collection exists: {e}")
 
     def upload_batch(
         self,
@@ -77,7 +108,7 @@ class EmbeddingUploader:
             response.raise_for_status()
             return response.json()
         except Exception as e:
-            print(f"Error uploading batch: {e}")
+            logger.error(f"Error uploading batch: {e}")
             return {"status": "error", "error": str(e)}
 
     def upload_all(
@@ -87,15 +118,19 @@ class EmbeddingUploader:
     ):
         """Upload all embeddings to Qdrant."""
 
-        print("\n" + "="*60)
-        print(f"Uploading embeddings to Qdrant collection: {collection}")
-        print("="*60)
+        logger.info("=" * 60)
+        logger.info(f"Uploading embeddings to Qdrant collection: {collection}")
+        logger.info("=" * 60)
 
         # Load data
         embeddings, mapping, metadata = self.load_embeddings()
 
+        # Ensure collection exists before uploading
+        vector_size = embeddings.shape[1] if len(embeddings.shape) > 1 else 384
+        self.ensure_collection(collection, vector_size=vector_size)
+
         # Prepare points
-        print(f"\nPreparing {len(mapping)} points...")
+        logger.info(f"Preparing {len(mapping)} points...")
 
         repo_ids = list(mapping.keys())
         total_points = len(repo_ids)
@@ -121,54 +156,63 @@ class EmbeddingUploader:
                 }
                 batch_points.append(point)
 
-            print(f"Uploading batch {i//batch_size + 1}/{(total_points + batch_size - 1)//batch_size} ({len(batch_points)} points)...")
+            logger.info(
+                f"Uploading batch {i//batch_size + 1}/"
+                f"{(total_points + batch_size - 1)//batch_size} "
+                f"({len(batch_points)} points)..."
+            )
 
             result = self.upload_batch(collection, batch_points)
 
             if result.get("status") != "error":
                 uploaded += len(batch_points)
-                print(f"✓ Uploaded {uploaded}/{total_points} points")
+                logger.info(f"Uploaded {uploaded}/{total_points} points")
             else:
-                print(f"❌ Failed to upload batch: {result.get('error')}")
+                logger.error(f"Failed to upload batch: {result.get('error')}")
 
             # Rate limiting
             time.sleep(0.5)
 
-        print("\n" + "="*60)
-        print(f"✓ Upload complete!")
-        print(f"  Total uploaded: {uploaded}/{total_points}")
-        print("="*60)
+        logger.info("=" * 60)
+        logger.info("Upload complete!")
+        logger.info(f"  Total uploaded: {uploaded}/{total_points}")
+        logger.info("=" * 60)
+
+        return uploaded
 
 
 def main():
-    """Main upload function."""
+    """Main upload function — reads config from environment variables."""
 
-    print("\n" + "="*60)
-    print("UPLOAD EMBEDDINGS TO QDRANT")
-    print("="*60)
+    logger.info("=" * 60)
+    logger.info("UPLOAD EMBEDDINGS TO QDRANT")
+    logger.info("=" * 60)
 
-    # Get configuration
-    BASE_URL = input("Enter server URL (e.g., http://your-server.com or http://localhost:8000): ").strip()
-    QDRANT_API_KEY = input("Enter Qdrant API key: ").strip()
-    COLLECTION = input("Collection name (default: repositories_embeddings): ").strip() or "repositories_embeddings"
-    BATCH_SIZE = int(input("Batch size (default: 100): ").strip() or "100")
+    # Read configuration from environment variables
+    base_url = os.getenv("API_BASE_URL")
+    qdrant_api_key = os.getenv("APIKEY_QDRANT")
+
+    if not base_url or not qdrant_api_key:
+        raise ValueError(
+            "Missing required environment variables!\n"
+            "Please set API_BASE_URL and APIKEY_QDRANT."
+        )
+
+    collection = os.getenv("QDRANT_COLLECTION", "repositories_embeddings")
+    batch_size = int(os.getenv("UPLOAD_BATCH_SIZE", "100"))
+    models_dir = os.getenv("MODELS_DIR", "./models")
 
     # Initialize uploader
     uploader = EmbeddingUploader(
-        base_url=BASE_URL,
-        qdrant_api_key=QDRANT_API_KEY
+        base_url=base_url,
+        qdrant_api_key=qdrant_api_key,
+        models_dir=models_dir
     )
-
-    # Confirm
-    proceed = input("\nProceed with upload? (y/n): ").strip().lower()
-    if proceed != 'y':
-        print("Upload cancelled.")
-        return
 
     # Upload
     uploader.upload_all(
-        collection=COLLECTION,
-        batch_size=BATCH_SIZE
+        collection=collection,
+        batch_size=batch_size
     )
 
 
@@ -176,9 +220,8 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n\nUpload interrupted by user")
+        logger.warning("\nUpload interrupted by user")
     except Exception as e:
-        print(f"\n\n❌ Upload failed: {e}")
+        logger.error(f"\nUpload failed: {e}")
         import traceback
         traceback.print_exc()
-
