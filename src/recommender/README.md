@@ -1,290 +1,256 @@
-# Recommendation System
+# Recommender Service
 
-AI-powered repository recommendation system with hybrid retrieval, personalization, and A/B testing capabilities.
-
-## Overview
-
-This recommendation system implements the Netflix-style approach for GitHub repositories:
-- **Hybrid Retrieval**: Combines semantic embeddings (meaning) with keyword search (exact matches)
-- **Cross-Encoder Reranking**: Accurately ranks top candidates
-- **Personalization**: Learns user preferences from interactions (language, topics)
-- **A/B Testing**: Built-in support for testing different recommendation variants
-- **Constraint Enforcement**: User filters (language, stars, license) are never violated
+Repository recommendation system with hybrid retrieval, cross-encoder reranking, personalization, and A/B testing.
 
 ## Architecture
 
-The system follows SOLID principles for easy extension and A/B testing:
-
 ```
-┌─────────────────────────────────────────────────┐
-│          Recommendation Engines                 │
-│  (Easy to add new variants for A/B testing)     │
-├─────────────────────────────────────────────────┤
-│  BaselineEngine    │  Keyword search only       │
-│  HybridEngine      │  Embeddings + Keywords     │
-│  PersonalizedEngine│  Hybrid + User Preferences │
-└─────────────────────────────────────────────────┘
-           ↓                    ↓
-┌──────────────────┐   ┌────────────────┐
-│  Embedding       │   │  Reranker      │
-│  Service         │   │  Service       │
-│  (Bi-encoder)    │   │  (Cross-enc)   │
-└──────────────────┘   └────────────────┘
+Query -> RETRIEVAL -> RERANKING -> PERSONALIZATION -> Results
+         (fast)       (precise)    (user prefs)
+
+Retrieval:      bi-encoder embeddings (Qdrant) + keyword search (MongoDB)
+                merged via Reciprocal Rank Fusion (RRF)
+
+Reranking:      cross-encoder scores top candidates (pretrained for MVP,
+                DS replaces with custom LightGBM ranker later)
+
+Personalization: language/topic preference boost from interaction history
+                 (rule-based, activates after 5+ user interactions)
 ```
 
-## Key Features
+### Engines
 
-### 1. Hybrid Retrieval
-- **Semantic Search**: Understands "Caesar Cipher" ≈ "Shift Cipher"
-- **Keyword Search**: Catches exact term matches
-- **RRF Fusion**: Reciprocal Rank Fusion combines both approaches
-
-### 2. Personalization
-- Learns from user interactions (clicks, saves, thumbs up/down)
-- Boosts repos in preferred languages when language not specified
-- Only applies with minimum interaction threshold
-- Never overrides user constraints
-
-### 3. A/B Testing
-- Consistent hash-based user assignment
-- Multiple variants can run simultaneously
-- Traffic splitting configuration
-- Automatic metrics collection per variant
-
-### 4. Training & Evaluation
-- Offline evaluation with Precision@K, Recall@K, NDCG@K, MRR
-- Shadow mode testing before deployment
-- Continuous learning from user feedback
-- Model versioning and rollback support
-
-## Setup
-
-### Prerequisites
-- Python 3.11+
-- MongoDB (for data storage)
-- Qdrant (for vector search)
-- Redis (for caching)
-
-### Environment Variables
-
-Create a `.env` file (see `.env.example`):
-
-```bash
-# Server
-RECOMMENDER_HOST=0.0.0.0
-RECOMMENDER_PORT=8095
-LOG_LEVEL=INFO
-
-# Databases
-MONGODB_URL=mongodb://admin:mongopass@localhost:27017/gitquery?authSource=admin
-REDIS_URL=redis://:redispass@localhost:6379
-QDRANT_HOST=localhost
-QDRANT_PORT=6333
-QDRANT_API_KEY=
-
-# Models
-MODEL_PATH=./models
-EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
-CROSS_ENCODER_MODEL_NAME=cross-encoder/ms-marco-MiniLM-L-6-v2
-
-# Retrieval Settings
-HYBRID_SEARCH_TOP_K=100
-RERANK_TOP_K=20
-FINAL_TOP_K=10
-
-# Personalization
-ENABLE_PERSONALIZATION=true
-PERSONALIZATION_WEIGHT=0.15
-MIN_INTERACTIONS_FOR_PERSONALIZATION=5
-
-# Caching
-ENABLE_CACHE=true
-CACHE_TTL_SECONDS=3600
-
-# A/B Testing
-AB_TEST_ENABLED=true
-DEFAULT_VARIANT=baseline
-```
-
-### Installation
-
-```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Run the service
-python -m recommender
-```
-
-### Docker Deployment
-
-```bash
-# Build and run with docker-compose
-cd infrastructure/docker
-docker-compose -f docker-compose.base.yml -f docker-compose.reco.yml up
-```
-
-## API Endpoints
-
-### Get Recommendations
-```http
-POST /recommend
-Content-Type: application/json
-
-{
-  "query": "python web framework",
-  "user_id": "user123",
-  "language": "Python",
-  "min_stars": 100,
-  "top_k": 10,
-  "enable_personalization": true
-}
-```
-
-### Log User Interaction
-```http
-POST /interaction
-Content-Type: application/json
-
-{
-  "user_id": "user123",
-  "query": "python web framework",
-  "repo_id": "repo456",
-  "interaction_type": "click",
-  "position_in_results": 3,
-  "variant": "personalized"
-}
-```
-
-### Get User Preferences
-```http
-GET /preferences/{user_id}
-```
-
-### Get Metrics
-```http
-GET /metrics/{variant}
-```
-
-### Health Check
-```http
-GET /health
-```
-
-## Metrics We Track
-
-Based on your proposal, the system tracks:
-
-1. **User Queries**: What users search for
-2. **User Preferences**: Language preferences, topic interests
-3. **Recommendations Shown**: What the system recommended
-4. **User Choices**: What users actually clicked/saved
-5. **Click-Through Rate**: % of recommendations clicked
-6. **Feedback**: Thumbs up/down ratings
-7. **Precision@K**: Are top K results relevant?
-8. **NDCG@K**: Quality of ranking
-9. **MRR**: How quickly users find what they want
-
-## Training Pipeline
-
-The training pipeline can be run on a schedule:
-
-```python
-from recommender.training import TrainingPipeline
-
-pipeline = TrainingPipeline(variant="v2")
-await pipeline.run_full_pipeline(
-    train_embeddings=True,
-    train_reranker=True,
-    min_interactions=1000
-)
-```
-
-Steps:
-1. Extract training data from user interactions
-2. Train embedding model on (query, positive_repo) pairs
-3. Train cross-encoder on (query, repo, label) tuples
-4. Evaluate in shadow mode
-5. Deploy if performance improves
-
-## Adding New Recommendation Engines
-
-Thanks to SOLID principles, adding a new engine is simple:
-
-```python
-from recommender.engines.base import RecommendationEngine
-from recommender.models import RecommendationRequest, RepositoryResult
-
-class MyNewEngine(RecommendationEngine):
-    def __init__(self):
-        super().__init__(name="my_new_engine", version="1.0.0")
-    
-    async def recommend(self, request: RecommendationRequest) -> List[RepositoryResult]:
-        # Your recommendation logic here
-        pass
-    
-    async def explain(self, repo_id: str, request: RecommendationRequest) -> Dict:
-        # Explanation logic
-        pass
-```
-
-Then register it in `api.py` and use it in A/B tests!
+| Engine | Strategy | When to use |
+|--------|----------|-------------|
+| `baseline` | MongoDB keyword regex search | A/B test control group |
+| `hybrid` | Semantic + keyword + RRF + cross-encoder rerank | Default production |
+| `personalized` | Hybrid + user preference boost | Users with 5+ interactions |
 
 ## Project Structure
 
 ```
-recommender/
-├── __init__.py
-├── __main__.py          # Entry point
-├── api.py               # FastAPI application
-├── config.py            # Settings
-├── models.py            # Pydantic models
-├── database.py          # Database clients
-├── engines/             # Recommendation engines (SOLID)
-│   ├── base.py         # Abstract base class
-│   ├── baseline.py     # Keyword search
-│   ├── hybrid.py       # Embeddings + Keywords
-│   └── personalized.py # Hybrid + Personalization
-├── services/            # Business logic
-│   ├── embedding_service.py
-│   ├── reranker_service.py
-│   ├── personalization_service.py
-│   └── ab_test_service.py
-└── training/            # Training pipelines
-    ├── pipeline.py
-    ├── embedding_trainer.py
-    ├── reranker_trainer.py
-    └── evaluator.py
+src/recommender/
+  api.py                   # FastAPI app (10 endpoints)
+  config.py                # RecommenderSettings (pydantic-settings)
+  models.py                # Pydantic models
+  database.py              # MongoDB + Qdrant + Redis clients
+  engines/
+    base.py                # Abstract engine interface
+    baseline.py            # Keyword search only
+    hybrid.py              # Semantic + keyword + RRF + reranking
+    personalized.py        # Hybrid + user preference boost
+  services/
+    embedding_service.py   # Bi-encoder inference (all-MiniLM-L6-v2)
+    reranker_service.py    # Cross-encoder scoring (ms-marco-MiniLM-L-6-v2)
+    personalization_service.py  # Learn prefs from interactions
+    ab_test_service.py     # Consistent hash-based variant assignment
+    registry_service.py    # Model lifecycle (register/promote/archive)
+  data/
+    dataset.py             # RepoDataset: fetch, cache, DataFrame
+    features.py            # FeatureExtractor: numeric features for ML
+  training/
+    unified_pipeline.py    # Indexing pipeline: fetch -> embed -> Qdrant
+    utils.py               # Canonical prepare_repo_text()
+    embedding_trainer.py   # Fine-tune bi-encoder (needs interaction data)
+    reranker_trainer.py    # Fine-tune cross-encoder (needs interaction data)
+    evaluator.py           # Precision@K, NDCG@K, MRR, CTR
+  scripts/
+    upload_embeddings.py   # Upload .npy vectors to Qdrant
+    create_ab_test.py      # Create A/B test config in MongoDB
+  notebooks/
+    01_exploration_and_baseline.ipynb  # DS workflow example
 ```
 
-## Development
+## Quick Start
 
-### Running Tests
+### Run the API
+
 ```bash
-# TODO: Add tests
-pytest tests/
+python -m src.recommender
+# Starts on http://localhost:8095
 ```
 
-### Running Locally
+### Run the Indexing Pipeline (Docker)
+
 ```bash
-# Start dependencies
-docker-compose -f infrastructure/docker/docker-compose.db.yml up
+# Build
+docker build -f infrastructure/docker/Dockerfile.training -t gitquery-training .
 
-# Run service
-python -m recommender
+# Run (fetches repos, generates embeddings, uploads to Qdrant)
+docker run --rm --env-file .env \
+  -e MAX_REPOS=1000 \
+  -e SKIP_IF_NO_NEW_DATA=false \
+  -v $(pwd)/models:/app/models \
+  gitquery-training
 ```
 
-## Future Extensions
+### Environment Variables
 
-Based on your proposal, potential additions:
-- [ ] Implement data collection for all key metrics
-- [ ] Add online learning for continuous improvement
-- [ ] Implement diversity in recommendations
-- [ ] Add explainability features
-- [ ] Multi-armed bandit for dynamic A/B testing
-- [ ] Knowledge graph integration for better semantic understanding
+```bash
+# Required for indexing pipeline
+API_BASE_URL=https://gitquery.davidhoerz.com
+APIKEY_MONGODB=apikey
+APIKEY_QDRANT=apikey
 
-## License
+# Optional
+EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+BATCH_SIZE=32
+MAX_REPOS=                # empty = all
+SKIP_IF_NO_NEW_DATA=true
+SKIP_QDRANT_UPLOAD=false
+QDRANT_COLLECTION=repositories_embeddings
+```
 
-See main project LICENSE
+## API Endpoints
 
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/recommend` | Get recommendations (routes via A/B test) |
+| POST | `/recommend/explain/{repo_id}` | Why was this recommended? |
+| POST | `/interaction` | Log click/save/dismiss (updates prefs in background) |
+| GET | `/preferences/{user_id}` | User preference profile |
+| GET | `/metrics/{variant}` | Evaluation metrics for variant |
+| GET | `/ab-test` | Active A/B test config |
+| POST | `/admin/cache/clear` | Clear Redis cache |
+| GET | `/admin/engines` | List engines |
+| GET | `/admin/models` | List registered models |
+| POST | `/admin/models/reload` | Hot-reload active models |
+| POST | `/admin/models/promote/{model_id}` | Promote candidate to active |
+| GET | `/health` | Health check |
+
+## What's Working vs. Planned
+
+### Working Now (MVP)
+- Baseline engine (keyword search)
+- Indexing pipeline: fetch repos -> pretrained embeddings -> Qdrant upload
+- All API endpoints
+- Interaction logging + preference learning
+- A/B test framework
+- Model registry + promotion
+- Redis caching
+- Cross-encoder reranking (pretrained)
+
+### Needs User Data (Phase 2)
+- Personalized engine (needs 5+ interactions per user)
+- Embedding fine-tuning (embedding_trainer.py)
+- Cross-encoder fine-tuning (reranker_trainer.py)
+- Offline evaluation with real ground truth
+
+### Data Science Builds (Phase 3)
+- Custom ranking model (see DS section below)
+
+---
+
+## Data Science Guide
+
+### Your Goal
+
+Build a **ranking model** that replaces the pretrained cross-encoder reranker with a custom model trained on repo features.
+
+### The Pipeline
+
+```
+Step 1 (Retrieval - ML Eng owns):
+  bi-encoder + Qdrant + MongoDB keyword -> ~100 candidates
+
+Step 2 (Feature Extraction - you build):
+  For each candidate: semantic_score, keyword_score, stars, recency,
+  topic overlap, readme quality, fork ratio, etc.
+
+Step 3 (Ranking Model - you build):
+  LightGBM/XGBoost ranker: features -> relevance score -> top 10
+
+Step 4 (Personalization - ML Eng owns):
+  User preference boost (rule-based)
+```
+
+### Getting Started
+
+```python
+# In a Jupyter notebook
+from src.recommender.data import RepoDataset, FeatureExtractor
+
+# Load data
+ds = RepoDataset.from_gateway(
+    url="https://gitquery.davidhoerz.com",
+    api_key="apikey",
+    max_repos=5000
+)
+ds.save("src/recommender/notebooks/data/repos.parquet")
+
+# Explore
+df = ds.to_dataframe()
+ds.summary()
+
+# Extract features
+fe = FeatureExtractor()
+features = fe.extract_all(df, query="python web framework")
+
+# Train baseline model
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import GradientBoostingRegressor
+
+X_train, X_test, y_train, y_test = train_test_split(features, labels, test_size=0.2)
+model = GradientBoostingRegressor(n_estimators=100)
+model.fit(X_train, y_train)
+```
+
+See `notebooks/01_exploration_and_baseline.ipynb` for the full workflow.
+
+### What Model to Build
+
+**LightGBM ranker** with `lambdarank` objective. Not a neural network.
+
+Features to experiment with:
+- `semantic_score` - bi-encoder similarity (from EmbeddingService)
+- `cross_encoder_score` - cross-encoder similarity (from RerankerService)
+- `stars_log`, `forks_log` - popularity signals
+- `days_since_update` - freshness
+- `topic_overlap` - query-repo topic match
+- `readme_length` - documentation quality
+- `fork_star_ratio` - engagement signal
+- `has_license`, `is_permissive_license` - quality signals
+- `language_encoded` - one-hot top languages
+
+### Labels (Cold Start)
+
+No users yet, so create synthetic labels:
+- **Option A**: Topic overlap as relevance proxy (query terms in repo topics)
+- **Option B**: Manual labeling of 50-100 test queries
+- **Option C**: Star count as quality signal, combined with topic match
+
+### Evaluation
+
+Use `src/recommender/training/evaluator.py`:
+- Precision@K, Recall@K (K = 1, 5, 10, 20)
+- NDCG@K (ranking quality)
+- MRR (mean reciprocal rank)
+
+### Deploying Your Model
+
+1. Train and export model (`.pkl` or `.txt`)
+2. Register via `POST /admin/models` or `ModelRegistryService.register_model()`
+3. A/B test against baseline: `scripts/create_ab_test.py`
+4. Promote winner: `POST /admin/models/promote/{model_id}`
+5. Hot-reload: `POST /admin/models/reload`
+
+---
+
+## Adding a New Engine
+
+```python
+from src.recommender.engines.base import RecommendationEngine
+
+class MyEngine(RecommendationEngine):
+    def __init__(self):
+        super().__init__(name="my_engine", version="1.0.0")
+
+    async def recommend(self, request):
+        # Your ranking logic
+        pass
+
+    async def explain(self, repo_id, request):
+        return {"engine": self.name, "method": "custom"}
+```
+
+Register in `api.py` lifespan, then use via A/B test variant assignment.
