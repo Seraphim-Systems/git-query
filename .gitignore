@@ -212,3 +212,15 @@ __marimo__/
 
 # gemini
 .gemini
+
+# VSCode
+.vscode
+
+# claude
+.claude
+CLAUDE.md
+.mcp.json
+.claude-flow
+.swarm
+
+models/
