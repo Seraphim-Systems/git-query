@@ -1,5 +1,6 @@
 """Baseline recommendation engine - keyword search only."""
 
+import re
 from typing import List, Dict, Any
 from ..models import RecommendationRequest, RepositoryResult
 from ..database import db_manager
@@ -24,10 +25,11 @@ class BaselineEngine(RecommendationEngine):
 
         # Text search on name and description
         if request.query:
+            safe_query = re.escape(request.query)
             query_filter["$or"] = [
-                {"name": {"$regex": request.query, "$options": "i"}},
-                {"description": {"$regex": request.query, "$options": "i"}},
-                {"topics": {"$regex": request.query, "$options": "i"}},
+                {"name": {"$regex": safe_query, "$options": "i"}},
+                {"description": {"$regex": safe_query, "$options": "i"}},
+                {"topics": {"$regex": safe_query, "$options": "i"}},
             ]
 
         # Apply hard filters

@@ -88,9 +88,9 @@ docker run --rm --env-file .env \
 
 ```bash
 # Required for indexing pipeline
-API_BASE_URL=https://gitquery.davidhoerz.com
-APIKEY_MONGODB=apikey
-APIKEY_QDRANT=apikey
+API_BASE_URL=https://base-url
+APIKEY_MONGODB=your-api-key
+APIKEY_QDRANT=your-api-key
 
 # Optional
 EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
@@ -168,12 +168,16 @@ Step 4 (Personalization - ML Eng owns):
 
 ```python
 # In a Jupyter notebook
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
 from src.recommender.data import RepoDataset, FeatureExtractor
 
 # Load data
 ds = RepoDataset.from_gateway(
-    url="https://gitquery.davidhoerz.com",
-    api_key="apikey",
+    url=os.getenv("API_BASE_URL"),
+    api_key=os.getenv("GATEWAY_API_KEY"),
     max_repos=5000
 )
 ds.save("src/recommender/notebooks/data/repos.parquet")
