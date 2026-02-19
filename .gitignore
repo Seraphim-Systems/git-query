@@ -225,3 +225,4 @@ CLAUDE.md
 
 models/
 *.parquet
+*.csv
