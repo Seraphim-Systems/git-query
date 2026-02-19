@@ -172,12 +172,18 @@ class EmbeddingUploader:
                 if idx is None:
                     logger.warning(f"No index for repo {repo_id}, skipping")
                     continue
-                if idx < 0 or idx >= embeddings.shape[0]:
-                    logger.warning(f"Index out of range for repo {repo_id}: {idx}, skipping")
+
+                try:
+                    idx_int = int(idx)
+                except (TypeError, ValueError):
+                    logger.warning(f"Invalid index for repo {repo_id}: {idx}, skipping")
                     continue
 
-                vector = embeddings[int(idx)].tolist()
+                if idx_int < 0 or idx_int >= embeddings.shape[0]:
+                    logger.warning(f"Index out of range for repo {repo_id}: {idx_int}, skipping")
+                    continue
 
+                vector = embeddings[idx_int].tolist()
                 point = {
                     "id": repo_id,
                     "vector": vector,
