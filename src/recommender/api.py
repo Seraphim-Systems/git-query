@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 import logging
 import time
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -73,11 +73,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS
+# CORS — allow_origins=["*"] and allow_credentials=True cannot be combined
+# (browsers reject it per the CORS spec). For a public API, omit credentials.
+# To support credentialed requests, replace ["*"] with explicit origin list.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -92,7 +94,7 @@ async def health_check():
         "status": "healthy",
         "service": "recommender",
         "version": "1.0.0",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 

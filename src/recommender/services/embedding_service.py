@@ -66,7 +66,7 @@ class EmbeddingService:
             List of floats representing the embedding
         """
         # Run in thread pool to avoid blocking
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         embedding = await loop.run_in_executor(None, self._embed_sync, text)
         return embedding.tolist()
 
@@ -85,7 +85,7 @@ class EmbeddingService:
         Returns:
             List of embeddings
         """
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         embeddings = await loop.run_in_executor(None, self._embed_batch_sync, texts)
         return embeddings.tolist()
 

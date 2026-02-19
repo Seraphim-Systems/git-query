@@ -72,10 +72,15 @@ class HybridRetrievalEngine(RecommendationEngine):
         # Get query embedding
         query_embedding = await self.embedding_service.embed_text(request.query)
 
-        # Search in Qdrant
-        results = db_manager.vector_search(
-            query_vector=query_embedding,
-            top_k=settings.hybrid_search_top_k,
+        # Search in Qdrant — run_in_executor keeps the event loop unblocked
+        # while the synchronous Qdrant client does its network I/O.
+        loop = asyncio.get_running_loop()
+        results = await loop.run_in_executor(
+            None,
+            lambda: db_manager.vector_search(
+                query_vector=query_embedding,
+                top_k=settings.hybrid_search_top_k,
+            ),
         )
 
         return [
