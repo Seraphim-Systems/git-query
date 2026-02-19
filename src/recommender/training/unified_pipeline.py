@@ -234,29 +234,33 @@ class UnifiedTrainingPipeline:
 
     def check_for_new_data(self, repositories: List[Dict]) -> Tuple[bool, List[Dict]]:
         """Check if there's new data compared to last training run."""
-        metadata_path = self.models_dir / "metadata" / "training_metadata_latest.json"
+        # Prefer comparing sets of stable ids from latest mapping to detect
+        # additions/removals reliably rather than using counts only.
+        latest_mapping = self.models_dir / "metadata" / "repo_mapping_latest.json"
 
-        if not metadata_path.exists():
-            logger.info("No previous training found - this is the first run")
+        if not latest_mapping.exists():
+            logger.info("No previous mapping found - this is the first run")
             return True, repositories
 
         try:
-            with open(metadata_path, 'r') as f:
-                metadata = json.load(f)
+            with open(latest_mapping, 'r') as f:
+                mapping_list = json.load(f)
 
-            previous_count = metadata.get("num_repos", 0)
-            current_count = len(repositories)
+            prev_ids = {m.get("repo_id") for m in mapping_list if m.get("repo_id")}
+            current_ids = {self._stable_id(r) for r in repositories}
 
-            if current_count > previous_count:
-                new_count = current_count - previous_count
-                logger.info(f"Found {new_count} new repositories since last training")
+            added = current_ids - prev_ids
+            removed = prev_ids - current_ids
+
+            if added or removed:
+                logger.info(f"Detected {len(added)} added, {len(removed)} removed repositories since last training")
                 return True, repositories
             else:
-                logger.info("No new repositories found")
+                logger.info("No repository set changes detected")
                 return False, []
 
         except Exception as e:
-            logger.warning(f"Could not read previous metadata: {e}")
+            logger.warning(f"Could not read previous mapping: {e}")
             return True, repositories
 
     def save_data_cache(self, repositories: List[Dict]):
@@ -304,12 +308,21 @@ class UnifiedTrainingPipeline:
         logger.info("Preparing repository texts...")
         texts = []
         repo_ids = []
+        repo_hashes = []
 
         for repo in repositories:
             text = self.prepare_repo_text(repo)
             texts.append(text)
             repo_id = self._stable_id(repo)
             repo_ids.append(repo_id)
+
+            # Compute lightweight content hash for change detection
+            try:
+                import hashlib as _hashlib
+                h = _hashlib.sha256(text.encode("utf-8")).hexdigest()
+            except Exception:
+                h = ""
+            repo_hashes.append(h)
 
         logger.info(f"✓ Prepared {len(texts)} texts")
 
@@ -342,6 +355,9 @@ class UnifiedTrainingPipeline:
             "normalized": True
         }
 
+        # Include per-repo hashes in metadata for convenient access
+        metadata["repo_hashes"] = repo_hashes
+
         return embeddings, repo_ids, metadata
 
     def save_model(
@@ -367,17 +383,29 @@ class UnifiedTrainingPipeline:
         np.save(latest_path, embeddings)
         logger.info(f"✓ Saved latest: {latest_path}")
 
-        # Save mapping (repo_id -> index)
-        mapping = {repo_id: idx for idx, repo_id in enumerate(repo_ids)}
+        # Save mapping as an explicit list of records [{repo_id, index, hash, full_name}]
+        # This avoids relying on list order and makes uploads resilient.
+        repo_hashes = metadata.get("repo_hashes") or [""] * len(repo_ids)
+        mapping_list = []
+        for idx, repo_id in enumerate(repo_ids):
+            mapping_list.append({
+                "repo_id": repo_id,
+                "index": idx,
+                "hash": repo_hashes[idx] if idx < len(repo_hashes) else "",
+                "full_name": None
+            })
+
         mapping_path = self.models_dir / "metadata" / f"repo_mapping_{timestamp}.json"
         with open(mapping_path, 'w') as f:
-            json.dump(mapping, f, indent=2)
-        logger.info(f"✓ Saved mapping: {mapping_path}")
+            json.dump(mapping_list, f, indent=2)
+        logger.info(f"✓ Saved mapping list: {mapping_path}")
 
-        # Save latest mapping
+        # Save latest mapping atomically
         latest_mapping_path = self.models_dir / "metadata" / "repo_mapping_latest.json"
-        with open(latest_mapping_path, 'w') as f:
-            json.dump(mapping, f, indent=2)
+        tmp_latest = latest_mapping_path.with_suffix('.json.tmp')
+        with open(tmp_latest, 'w') as f:
+            json.dump(mapping_list, f, indent=2)
+        os.replace(tmp_latest, latest_mapping_path)
 
         # Save metadata
         metadata_path = self.models_dir / "metadata" / f"training_metadata_{timestamp}.json"
@@ -385,10 +413,12 @@ class UnifiedTrainingPipeline:
             json.dump(metadata, f, indent=2)
         logger.info(f"✓ Saved metadata: {metadata_path}")
 
-        # Save latest metadata
+        # Save latest metadata atomically
         latest_metadata_path = self.models_dir / "metadata" / "training_metadata_latest.json"
-        with open(latest_metadata_path, 'w') as f:
+        tmp_meta = latest_metadata_path.with_suffix('.json.tmp')
+        with open(tmp_meta, 'w') as f:
             json.dump(metadata, f, indent=2)
+        os.replace(tmp_meta, latest_metadata_path)
 
         logger.info("=" * 60)
         logger.info("✓ MODEL SAVED SUCCESSFULLY")
