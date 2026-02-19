@@ -13,6 +13,7 @@ import time
 import requests
 import torch
 import numpy as np
+import hashlib
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 from datetime import datetime
@@ -108,6 +109,47 @@ class UnifiedTrainingPipeline:
 
         logger.info(f"✓ Total fetched: {len(all_repos)} repositories")
         return all_repos
+
+    def _stable_id(self, doc: Dict) -> str:
+        """Compute a small stable id for a repository document.
+
+        Uses existing identifiers where possible (`_id`, `id`, `full_name`),
+        falls back to owner/name and finally a content hash.
+        """
+        if not doc:
+            return ""
+
+        if doc.get("_id"):
+            return str(doc["_id"])
+
+        for key in ("nameWithOwner", "full_name", "repo_id", "id"):
+            if doc.get(key):
+                return str(doc[key])
+
+        owner = doc.get("owner") or doc.get("owner_login")
+        name = doc.get("name")
+        if owner and name:
+            return f"{owner}/{name}"
+
+        # Fallback: deterministic hash of the doc
+        payload = json.dumps(doc, sort_keys=True, default=str).encode("utf-8")
+        return hashlib.md5(payload).hexdigest()
+
+    def _dedupe_repositories(self, repositories: List[Dict]) -> List[Dict]:
+        """Remove duplicates by stable id, preserving first occurrence."""
+        seen = set()
+        unique = []
+        for r in repositories:
+            sid = self._stable_id(r)
+            if not sid:
+                # keep items without an id
+                unique.append(r)
+                continue
+            if sid in seen:
+                continue
+            seen.add(sid)
+            unique.append(r)
+        return unique
 
     def _get_total_count(self) -> int:
         """Get total number of repositories."""
@@ -266,7 +308,7 @@ class UnifiedTrainingPipeline:
         for repo in repositories:
             text = self.prepare_repo_text(repo)
             texts.append(text)
-            repo_id = str(repo.get("_id", repo.get("id", "")))
+            repo_id = self._stable_id(repo)
             repo_ids.append(repo_id)
 
         logger.info(f"✓ Prepared {len(texts)} texts")
@@ -485,6 +527,13 @@ class UnifiedTrainingPipeline:
             if not repositories:
                 logger.error("❌ No repositories fetched - cannot train!")
                 return
+
+            # Deduplicate fetched repositories (avoid page/pull duplicates)
+            before_count = len(repositories)
+            repositories = self._dedupe_repositories(repositories)
+            removed = before_count - len(repositories)
+            if removed:
+                logger.info(f"Removed {removed} duplicate repositories before training")
 
             # Step 2: Check for new data
             if skip_if_no_new_data:
