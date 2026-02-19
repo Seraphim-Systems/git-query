@@ -1,0 +1,55 @@
+# Client + MCP Server stack for local testing
+# Connects to the online DBs via env vars in your .env
+#
+# Usage (from repo root):
+#   docker-compose -f infrastructure/docker/docker-compose.base.yml -f infrastructure/docker/docker-compose.client.yml up --build
+
+services:
+  mcp-server:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.mcp
+    container_name: git-query-mcp
+    env_file:
+      - ../../.env
+    environment:
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=8090
+      - LOG_LEVEL=${SVC_LOG_LEVEL:-DEBUG}
+      - RECOMMENDER_URL=${RECOMMENDER_URL:-http://recommender:8095}
+    ports:
+      - "8090:8090"
+    networks:
+      - client-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  client:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.client
+    container_name: git-query-client
+    env_file:
+      - ../../.env
+    environment:
+      - MCP_SERVER_URL=http://mcp-server:8090
+      - LOG_LEVEL=${SVC_LOG_LEVEL:-INFO}
+    depends_on:
+      mcp-server:
+        condition: service_healthy
+    networks:
+      - client-network
+    # Keep stdin/tty open for the interactive CLI
+    stdin_open: true
+    tty: true
+    restart: "no"
+
+networks:
+  client-network:
+    name: git-query-client-network
+    driver: bridge
