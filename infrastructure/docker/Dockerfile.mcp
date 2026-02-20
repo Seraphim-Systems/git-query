@@ -2,17 +2,15 @@
 FROM python:3.11-slim AS base
 WORKDIR /app
 
-FROM base AS builder
 # Install build deps and create venv (use BuildKit caches)
-RUN --mount=type=cache,target=/var/cache/apt/archives \
-  apt-get update && apt-get install -y --no-install-recommends curl python3-venv && rm -rf /var/lib/apt/lists/*
+FROM base AS builder
+RUN apt-get update && apt-get install -y --no-install-recommends curl python3-venv && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /app/requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
   python -m venv /app/.venv && /app/.venv/bin/pip install --upgrade pip && /app/.venv/bin/pip install --no-cache-dir -r /app/requirements.txt
 
 FROM base AS final
-# Install curl for health checks
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/.venv /app/.venv
@@ -27,6 +25,5 @@ EXPOSE 8090
 # Health check
 HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=5 \
   CMD curl -f http://localhost:8090/health || exit 1
-
 # Run the MCP server
 CMD ["python", "-m", "uvicorn", "src.mcp.server:app", "--host", "0.0.0.0", "--port", "8090"]

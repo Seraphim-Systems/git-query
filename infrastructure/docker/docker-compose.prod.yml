@@ -34,6 +34,7 @@ services:
       QDRANT_API_KEY: "${DB_QDRANT_API_KEY:-}"
       MCP_API_KEY: "${APIKEY_MCP}"
       OPENAI_API_KEY: "${APP_OPENAI_API_KEY}"
+      RECOMMENDER_URL: "http://recommender:8095"
 
   gateway:
     # Do not publish host port 80; only expose container port so reverse proxy

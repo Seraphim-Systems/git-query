@@ -15,6 +15,12 @@ services:
     ports:
       - "6379:6379"
 
+  recommender:
+    ports:
+      - "8095:8095"
+    environment:
+      LOG_LEVEL: DEBUG
+
   mcp-server:
     ports:
       - "8090:8090"
@@ -27,6 +33,7 @@ services:
       QDRANT_API_KEY: "${DB_QDRANT_API_KEY:-}"
       MCP_API_KEY: "${APIKEY_MCP}"
       OPENAI_API_KEY: "${APP_OPENAI_API_KEY}"
+      RECOMMENDER_URL: "http://recommender:8095"
 
   gateway:
     ports:

@@ -3,14 +3,15 @@ FROM python:3.11-slim AS base
 WORKDIR /app
 
 FROM base AS builder
-RUN --mount=type=cache,target=/var/cache/apt/archives \
-  apt-get update && apt-get install -y --no-install-recommends curl python3-venv && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends curl python3-venv && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt /app/requirements.txt
+# Use the recommender-specific requirements (includes torch, sentence-transformers, etc.)
+COPY src/recommender/requirements.txt /app/requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
   python -m venv /app/.venv && /app/.venv/bin/pip install --upgrade pip && /app/.venv/bin/pip install --no-cache-dir -r /app/requirements.txt
 
 FROM base AS final
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 
@@ -26,9 +27,9 @@ ENV PYTHONPATH=/app
 
 EXPOSE 8095
 
-# Health check
+#Health Check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD curl -f http://localhost:8095/health || exit 1
 
-# Run recommender service
+# Run the recommender server
 CMD ["python", "-m", "recommender"]
