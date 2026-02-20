@@ -17,8 +17,8 @@ services:
       - MCP_PORT=8090
       - LOG_LEVEL=${SVC_LOG_LEVEL:-DEBUG}
       - RECOMMENDER_URL=${RECOMMENDER_URL:-http://recommender:8095}
-    ports:
-      - "8090:8090"
+    expose:
+      - "8090"
     networks:
       - client-network
     restart: unless-stopped

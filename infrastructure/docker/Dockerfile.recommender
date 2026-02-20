@@ -15,16 +15,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf 
 COPY --from=builder /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 
+# Copy recommender code
 COPY src/recommender /app/recommender
 COPY src/shared /app/shared
 
+# Create directories
 RUN mkdir -p /app/models
 
+# Set Python path
 ENV PYTHONPATH=/app
 
 EXPOSE 8095
 
+#Health Check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD curl -f http://localhost:8095/health || exit 1
 
+# Run the recommender server
 CMD ["python", "-m", "recommender"]
