@@ -35,6 +35,7 @@ services:
 
     # No network needed - training only connects to external API via internet
     restart: "no"  # Run once, don't restart
+    shm_size: '2gb'  # PyTorch multiprocessing needs shared memory for model weights
     volumes:
       # Persist trained models
       - training-models:/app/models

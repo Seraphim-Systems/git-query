@@ -8,7 +8,9 @@ This script:
 """
 
 import json
+import math
 import os
+import sys
 import time
 import requests
 import torch
@@ -16,8 +18,9 @@ import numpy as np
 import hashlib
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
-from datetime import datetime
+from datetime import datetime, timedelta
 from sentence_transformers import SentenceTransformer
+from tqdm import tqdm
 import logging
 
 try:
@@ -192,13 +195,13 @@ class UnifiedTrainingPipeline:
                 if actual_docs > count:
                     logger.info(f"Found {actual_docs} repos (count API was wrong)")
                     # Return a large number to force fetching all
-                    return 999999
+                    return 10_000_000
 
             return count
         except Exception as e:
             logger.error(f"Error getting count: {e}")
             # Return large number to try fetching anyway
-            return 999999
+            return 10_000_000
 
     def _fetch_batch(
         self,
@@ -213,7 +216,7 @@ class UnifiedTrainingPipeline:
             "filter": filters or {},
             "limit": limit,
             "skip": skip,
-            "sort": {"stars": -1}
+            "sort": {"_id": 1}
         }
 
         try:
@@ -602,15 +605,15 @@ class UnifiedTrainingPipeline:
             3. Cross-run: prev_ids from repo_mapping_latest.json skips already-indexed repos.
         """
         logger.info("")
-        logger.info("=" * 60)
-        logger.info("UNIFIED TRAINING PIPELINE (CHUNKED MODE)")
-        logger.info("=" * 60)
-        logger.info(f"API:        {self.api_base_url}")
-        logger.info(f"Model:      {model_name}")
-        logger.info(f"Chunk size: {chunk_size:,} repos")
-        logger.info(f"CPU workers:{n_workers}")
-        logger.info(f"Max repos:  {max_repos or 'all'}")
-        logger.info("=" * 60)
+        print(f"\n{'═' * 60}", flush=True)
+        print(f"  UNIFIED TRAINING PIPELINE  ·  chunked mode", flush=True)
+        print(f"{'═' * 60}", flush=True)
+        print(f"  API        {self.api_base_url}", flush=True)
+        print(f"  Model      {model_name}", flush=True)
+        print(f"  Chunk size {chunk_size:,} repos", flush=True)
+        print(f"  Workers    {n_workers}", flush=True)
+        print(f"  Max repos  {max_repos or 'all'}", flush=True)
+        print(f"{'═' * 60}\n", flush=True)
 
         start_time = time.time()
         run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -633,7 +636,9 @@ class UnifiedTrainingPipeline:
         total_repos = self._get_total_count()
         if max_repos:
             total_repos = min(total_repos, max_repos)
+        total_chunks = math.ceil(total_repos / chunk_size)
         logger.info(f"Total repositories to process: {total_repos:,}")
+        print(f"  Total repos  {total_repos:,}  ·  {total_chunks} chunks\n", flush=True)
 
         # --- Set up uploader (direct RAM → Qdrant, no disk round-trip) ---
         qdrant_api_key = os.getenv("APIKEY_QDRANT", self.api_key)
@@ -668,14 +673,29 @@ class UnifiedTrainingPipeline:
         chunk_num = 0
         offset = 0
 
+        # Overall progress bar
+        overall_bar = tqdm(
+            total=total_repos,
+            desc="  Overall",
+            unit="repo",
+            dynamic_ncols=True,
+            bar_format=(
+                "  {desc}: {percentage:5.1f}%  [{bar:30}]  "
+                "{n_fmt}/{total_fmt}  elapsed {elapsed}  eta {remaining}"
+            ),
+            file=sys.stdout,
+        )
+
         try:
             while offset < total_repos:
                 chunk_num += 1
                 fetch_limit = min(chunk_size, total_repos - offset)
 
-                logger.info(f"\n{'='*60}")
-                logger.info(f"CHUNK {chunk_num} — repos {offset+1:,}–{offset+fetch_limit:,}")
-                logger.info(f"{'='*60}")
+                overall_bar.write(
+                    f"\n  ── Chunk {chunk_num}/{total_chunks}  "
+                    f"repos {offset+1:,}–{offset+fetch_limit:,} ──"
+                )
+                logger.info(f"CHUNK {chunk_num}/{total_chunks} — repos {offset+1:,}–{offset+fetch_limit:,}")
 
                 # Fetch chunk in sub-batches (keeps individual requests small)
                 chunk_repos: List[Dict] = []
@@ -738,11 +758,13 @@ class UnifiedTrainingPipeline:
                     pool=pool,
                 )
                 embed_elapsed = time.time() - embed_start
+                embed_speed = len(embeddings) / embed_elapsed
                 logger.info(
                     f"✓ {len(embeddings):,} embeddings in {embed_elapsed:.1f}s "
-                    f"({len(embeddings)/embed_elapsed:.0f} repos/sec)"
+                    f"({embed_speed:.0f} repos/sec)"
                 )
                 total_embedded += len(embeddings)
+                overall_bar.update(len(embeddings))
 
                 # 5. Upload direct from RAM (no disk write for this chunk)
                 if not skip_qdrant:
@@ -772,10 +794,17 @@ class UnifiedTrainingPipeline:
                             logger.error(f"Upload batch failed: {result.get('error')}")
 
                     upload_elapsed = time.time() - upload_start
+                    upload_speed = chunk_uploaded / upload_elapsed if upload_elapsed > 0 else 0
                     logger.info(
                         f"✓ Uploaded {chunk_uploaded:,}/{len(embeddings):,} in {upload_elapsed:.1f}s"
                     )
                     total_uploaded += chunk_uploaded
+                    overall_bar.write(
+                        f"  ✓ chunk {chunk_num}/{total_chunks}  "
+                        f"embed {embed_speed:.0f} r/s  ·  "
+                        f"upload {upload_speed:.0f} pts/s  ·  "
+                        f"total embedded {total_embedded:,}"
+                    )
                 else:
                     logger.info("Skipping Qdrant upload (SKIP_QDRANT_UPLOAD=true)")
 
@@ -795,6 +824,7 @@ class UnifiedTrainingPipeline:
                 offset += fetch_limit
 
         finally:
+            overall_bar.close()
             if pool is not None:
                 model.stop_multi_process_pool(pool)
                 logger.info("Multi-process pool stopped")
@@ -804,16 +834,19 @@ class UnifiedTrainingPipeline:
             self._save_mapping(mapping_accumulator, run_timestamp)
 
         total_time = time.time() - start_time
-        logger.info("")
-        logger.info("=" * 60)
-        logger.info("✓ CHUNKED PIPELINE COMPLETED SUCCESSFULLY")
-        logger.info("=" * 60)
-        logger.info(f"Total time:  {total_time / 60:.2f} minutes")
-        logger.info(f"Chunks:      {chunk_num}")
-        logger.info(f"Fetched:     {total_fetched:,}")
-        logger.info(f"Embedded:    {total_embedded:,}")
-        logger.info(f"Uploaded:    {total_uploaded:,}")
-        logger.info("=" * 60)
+        elapsed_str = str(timedelta(seconds=int(total_time)))
+        avg_speed = total_embedded / total_time if total_time > 0 else 0
+
+        print(f"\n{'═' * 60}", flush=True)
+        print(f"  ✓ PIPELINE COMPLETE", flush=True)
+        print(f"{'═' * 60}", flush=True)
+        print(f"  Time       {elapsed_str}", flush=True)
+        print(f"  Chunks     {chunk_num}/{total_chunks}", flush=True)
+        print(f"  Fetched    {total_fetched:,}", flush=True)
+        print(f"  Embedded   {total_embedded:,}  ({avg_speed:.0f} repos/sec avg)", flush=True)
+        print(f"  Uploaded   {total_uploaded:,}", flush=True)
+        print(f"{'═' * 60}\n", flush=True)
+        logger.info(f"Chunked pipeline done — {total_embedded:,} embedded, {total_uploaded:,} uploaded in {elapsed_str}")
 
     def run(
         self,
@@ -928,10 +961,15 @@ def main():
     n_workers = os.getenv("N_WORKERS")
     n_workers = int(n_workers) if n_workers else (os.cpu_count() or 1)
 
+    models_dir = os.getenv("MODELS_DIR", "./models")
+    data_cache_dir = os.getenv("DATA_CACHE_DIR", "./training_data")
+
     # Initialize pipeline
     pipeline = UnifiedTrainingPipeline(
         api_base_url=api_base_url,
-        api_key=api_key
+        api_key=api_key,
+        models_dir=models_dir,
+        data_cache_dir=data_cache_dir,
     )
 
     # Route to chunked or original pipeline
