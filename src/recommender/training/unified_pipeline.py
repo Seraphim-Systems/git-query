@@ -818,6 +818,9 @@ class UnifiedTrainingPipeline:
                         "full_name": None,
                     })
 
+                # Checkpoint after every chunk so a crash doesn't lose progress
+                self._save_mapping(mapping_accumulator, run_timestamp)
+
                 # 7. Free chunk memory before next iteration
                 del embeddings, texts, chunk_repos
 

@@ -28,7 +28,7 @@ services:
       # Chunked Pipeline Configuration
       - USE_CHUNKED_PIPELINE=${USE_CHUNKED_PIPELINE:-true}
       - CHUNK_SIZE=${CHUNK_SIZE:-100000}
-      - N_WORKERS=${N_WORKERS:-}
+      - N_WORKERS=${N_WORKERS:-6}
 
       # Logging
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
