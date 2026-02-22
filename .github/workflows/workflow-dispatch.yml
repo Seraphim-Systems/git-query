@@ -1,0 +1,148 @@
+name: Workflow Dispatch for Database Population
+
+permissions:
+  contents: read
+
+concurrency:
+  group: db-population-${{ github.ref }}
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+    inputs:
+      database:
+        description: 'Target backend: both (default), mongo-only, or qdrant-only (placeholder)'
+        required: true
+        type: choice
+        options:
+          - both
+          - mongo
+          - qdrant
+        default: 'both'
+      dataset:
+        description: 'Kaggle dataset slug in owner/dataset format (example: arshkon/linkedin-job-postings)'
+        required: true
+        type: string
+      file:
+        description: 'Optional JSON path inside the downloaded dataset (use when dataset has multiple JSON files)'
+        required: false
+        type: string
+      collection:
+        description: 'Mongo collection to write into'
+        required: false
+        type: string
+        default: 'repositories'
+      database_name:
+        description: 'Mongo database name used by gateway insert endpoint'
+        required: false
+        type: string
+        default: 'gitquery'
+      batch_size:
+        description: 'Number of documents per write batch (larger is faster, but heavier)'
+        required: false
+        type: string
+        default: '1000'
+      id_field:
+        description: 'Preferred source field for document _id generation before fallback logic'
+        required: false
+        type: string
+        default: 'nameWithOwner'
+      max_records:
+        description: 'Optional cap on processed records (empty = process full dataset)'
+        required: false
+        type: string
+      progress_every:
+        description: 'Print progress every N records (set 0 to disable periodic progress logs)'
+        required: false
+        type: string
+        default: '5000'
+      dry_run:
+        description: 'Validate/parse dataset without writing to MongoDB'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  populate-mongo:
+    name: Populate MongoDB
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.database == 'mongo' || github.event.inputs.database == 'both' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Populate MongoDB from Kaggle
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+          GATEWAY_URL: ${{ secrets.GATEWAY_URL }}
+          INFRA_HETZNER_HOST: ${{ secrets.INFRA_HETZNER_HOST }}
+          APIKEY_MONGODB: ${{ secrets.APIKEY_MONGODB }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${KAGGLE_USERNAME:-}" ] || [ -z "${KAGGLE_KEY:-}" ]; then
+            echo "❌ Missing Kaggle credentials. Set KAGGLE_USERNAME and KAGGLE_KEY secrets."
+            exit 1
+          fi
+
+          if [ -z "${GATEWAY_URL:-}" ]; then
+            if [ -n "${INFRA_HETZNER_HOST:-}" ]; then
+              GATEWAY_URL="http://${INFRA_HETZNER_HOST}"
+              echo "ℹ️ GATEWAY_URL not set; using INFRA_HETZNER_HOST-derived URL: $GATEWAY_URL"
+            else
+              echo "❌ Missing gateway target. Set either GATEWAY_URL or INFRA_HETZNER_HOST secret."
+              exit 1
+            fi
+          fi
+
+          cmd=(python src/processing/scripts/kaggle_to_mongo.py
+            --dataset "${{ github.event.inputs.dataset }}"
+            --collection "${{ github.event.inputs.collection }}"
+            --database "${{ github.event.inputs.database_name }}"
+            --target mongodb
+            --batch-size "${{ github.event.inputs.batch_size }}"
+            --id-field "${{ github.event.inputs.id_field }}"
+            --progress-every "${{ github.event.inputs.progress_every }}"
+            --gateway-url "$GATEWAY_URL"
+            --gateway-mongo-mode insert
+          )
+
+          if [ -n "${{ github.event.inputs.file }}" ]; then
+            cmd+=(--file "${{ github.event.inputs.file }}")
+          fi
+
+          if [ -n "${{ github.event.inputs.max_records }}" ]; then
+            cmd+=(--max-records "${{ github.event.inputs.max_records }}")
+          fi
+
+          if [ -n "${APIKEY_MONGODB:-}" ]; then
+            cmd+=(--api-key "$APIKEY_MONGODB")
+          fi
+
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            cmd+=(--dry-run)
+          fi
+
+          echo "▶️ Running: ${cmd[*]}"
+          "${cmd[@]}"
+
+  qdrant-not-implemented:
+    name: Qdrant Population (Draft Placeholder)
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.database == 'qdrant' || github.event.inputs.database == 'both' }}
+    steps:
+      - name: Placeholder
+        run: |
+          echo "ℹ️ Qdrant population is not implemented in this first draft."
+          echo "ℹ️ Mongo population has been executed when database='both'."
