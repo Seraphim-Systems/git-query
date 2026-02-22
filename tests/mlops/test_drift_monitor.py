@@ -66,12 +66,13 @@ class TestDriftMonitor:
         if EVIDENTLY_AVAILABLE:
             pytest.skip("Evidently is available, testing unavailable case")
 
-        monitor = DriftMonitor()
-        ref_emb = np.random.randn(100, 384)
-        cur_emb = np.random.randn(100, 384)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            monitor = DriftMonitor(report_dir=tmpdir)
+            ref_emb = np.random.randn(100, 384)
+            cur_emb = np.random.randn(100, 384)
 
-        result = monitor.check_embedding_drift(ref_emb, cur_emb)
-        assert result is None
+            result = monitor.check_embedding_drift(ref_emb, cur_emb)
+            assert result is None
 
     @pytest.mark.skipif(
         not os.getenv("EVIDENTLY_AVAILABLE", "false").lower() == "true", reason="Evidently not available"
@@ -106,38 +107,41 @@ class TestDriftMonitor:
         if EVIDENTLY_AVAILABLE:
             pytest.skip("Evidently is available, testing unavailable case")
 
-        monitor = DriftMonitor()
-        ref_scores = [0.8, 0.7, 0.6, 0.9]
-        cur_scores = [0.75, 0.65, 0.55, 0.85]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            monitor = DriftMonitor(report_dir=tmpdir)
+            ref_scores = [0.8, 0.7, 0.6, 0.9]
+            cur_scores = [0.75, 0.65, 0.55, 0.85]
 
-        result = monitor.check_prediction_drift(ref_scores, cur_scores)
-        assert result is None
+            result = monitor.check_prediction_drift(ref_scores, cur_scores)
+            assert result is None
 
     def test_extract_drift_status_true(self):
         """Test drift status extraction when drift is detected."""
         from src.recommender.mlops.drift_monitor import DriftMonitor
 
-        monitor = DriftMonitor()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            monitor = DriftMonitor(report_dir=tmpdir)
 
-        # Test with dataset_drift
-        result_with_drift = {"metrics": [{"result": {"dataset_drift": True}}]}
-        assert monitor._extract_drift_status(result_with_drift) is True
+            # Test with dataset_drift
+            result_with_drift = {"metrics": [{"result": {"dataset_drift": True}}]}
+            assert monitor._extract_drift_status(result_with_drift) is True
 
-        # Test with drift_detected
-        result_with_detected = {"metrics": [{"result": {"drift_detected": True}}]}
-        assert monitor._extract_drift_status(result_with_detected) is True
+            # Test with drift_detected
+            result_with_detected = {"metrics": [{"result": {"drift_detected": True}}]}
+            assert monitor._extract_drift_status(result_with_detected) is True
 
     def test_extract_drift_status_false(self):
         """Test drift status extraction when no drift."""
         from src.recommender.mlops.drift_monitor import DriftMonitor
 
-        monitor = DriftMonitor()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            monitor = DriftMonitor(report_dir=tmpdir)
 
-        result_no_drift = {"metrics": [{"result": {"dataset_drift": False}}]}
-        assert monitor._extract_drift_status(result_no_drift) is False
+            result_no_drift = {"metrics": [{"result": {"dataset_drift": False}}]}
+            assert monitor._extract_drift_status(result_no_drift) is False
 
-        result_empty = {"metrics": []}
-        assert monitor._extract_drift_status(result_empty) is False
+            result_empty = {"metrics": []}
+            assert monitor._extract_drift_status(result_empty) is False
 
     def test_run_full_drift_check_with_none_data(self):
         """Test full drift check handles None inputs gracefully."""
