@@ -4,7 +4,8 @@ This script:
 1. Fetches repository data from MongoDB API (only new/updated repos)
 2. Trains embedding model using sentence-transformers
 3. Saves trained embeddings and metadata to models directory
-4. Designed to run in Docker container
+4. Logs experiments to MLflow for tracking
+5. Designed to run in Docker container
 """
 
 import json
@@ -18,6 +19,13 @@ from typing import List, Dict, Optional, Tuple
 from datetime import datetime
 from sentence_transformers import SentenceTransformer
 import logging
+
+# MLflow integration (optional)
+try:
+    from recommender.mlops.mlflow_tracker import MLflowTracker, MLFLOW_AVAILABLE
+except ImportError:
+    MLFLOW_AVAILABLE = False
+    MLflowTracker = None
 
 logging.basicConfig(
     level=logging.INFO,
@@ -34,7 +42,8 @@ class UnifiedTrainingPipeline:
         api_base_url: str,
         api_key: str,
         models_dir: str = "/app/models",
-        data_cache_dir: str = "/app/training_data"
+        data_cache_dir: str = "/app/training_data",
+        enable_mlflow: bool = True
     ):
         self.api_base_url = api_base_url.rstrip('/')
         self.api_key = api_key
@@ -55,6 +64,17 @@ class UnifiedTrainingPipeline:
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         logger.info(f"Using device: {self.device}")
+
+        # Initialize MLflow tracker
+        self.mlflow_tracker = None
+        if enable_mlflow and MLFLOW_AVAILABLE and MLflowTracker:
+            try:
+                self.mlflow_tracker = MLflowTracker(
+                    experiment_name=os.getenv("MLFLOW_EXPERIMENT_NAME", "git-query-recommender")
+                )
+                logger.info("MLflow tracking enabled")
+            except Exception as e:
+                logger.warning(f"Failed to initialize MLflow: {e}")
 
     def fetch_repositories(
         self,
@@ -433,7 +453,8 @@ class UnifiedTrainingPipeline:
 
         start_time = time.time()
 
-        try:
+        # Define the training logic
+        def _execute_training():
             # Step 1: Fetch data
             repositories = self.fetch_repositories(
                 batch_size=fetch_batch_size,
@@ -449,7 +470,19 @@ class UnifiedTrainingPipeline:
                 has_new_data, _ = self.check_for_new_data(repositories)
                 if not has_new_data:
                     logger.info("⏭ Skipping training - no new data")
+                    if self.mlflow_tracker:
+                        self.mlflow_tracker.set_tag("skipped", "no_new_data")
                     return
+
+            # Log params to MLflow
+            if self.mlflow_tracker:
+                self.mlflow_tracker.log_params({
+                    "model_name": model_name,
+                    "batch_size": batch_size,
+                    "fetch_batch_size": fetch_batch_size,
+                    "max_repos": max_repos or "all",
+                    "device": self.device,
+                })
 
             # Step 3: Cache data
             self.save_data_cache(repositories)
@@ -461,13 +494,40 @@ class UnifiedTrainingPipeline:
                 batch_size=batch_size
             )
 
+            # Log training metrics to MLflow
+            if self.mlflow_tracker:
+                self.mlflow_tracker.log_model_info(metadata)
+                self.mlflow_tracker.log_metrics({
+                    "num_repositories": len(repositories),
+                    "embedding_dimension": int(embeddings.shape[1]),
+                    "training_time_seconds": metadata.get("training_time_seconds", 0),
+                })
+
             # Step 5: Save model
             self.save_model(embeddings, repo_ids, metadata)
+
+            # Log artifacts to MLflow
+            if self.mlflow_tracker:
+                try:
+                    metadata_path = self.models_dir / "metadata" / "training_metadata_latest.json"
+                    if metadata_path.exists():
+                        self.mlflow_tracker.log_artifact(str(metadata_path))
+                except Exception as e:
+                    logger.warning(f"Failed to log artifact to MLflow: {e}")
 
             # Step 6: Print summary
             self.print_summary(repositories, metadata)
 
             total_time = time.time() - start_time
+
+            # Log final metrics
+            if self.mlflow_tracker:
+                self.mlflow_tracker.log_metrics({
+                    "total_pipeline_time_seconds": total_time,
+                    "repos_per_second": len(repositories) / total_time if total_time > 0 else 0,
+                })
+                self.mlflow_tracker.set_tag("status", "success")
+
             logger.info("")
             logger.info("=" * 60)
             logger.info("✓ PIPELINE COMPLETED SUCCESSFULLY")
@@ -478,7 +538,18 @@ class UnifiedTrainingPipeline:
             logger.info("=" * 60)
             logger.info("")
 
+        # Execute with or without MLflow tracking
+        try:
+            if self.mlflow_tracker:
+                run_name = f"training-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+                with self.mlflow_tracker.start_run(run_name=run_name, tags={"pipeline": "unified"}):
+                    _execute_training()
+            else:
+                _execute_training()
         except Exception as e:
+            if self.mlflow_tracker:
+                self.mlflow_tracker.set_tag("status", "failed")
+                self.mlflow_tracker.set_tag("error", str(e)[:250])
             logger.error(f"❌ Pipeline failed: {e}", exc_info=True)
             raise
 
@@ -501,11 +572,13 @@ def main():
     max_repos = os.getenv("MAX_REPOS")
     max_repos = int(max_repos) if max_repos else None
     skip_if_no_new_data = os.getenv("SKIP_IF_NO_NEW_DATA", "true").lower() == "true"
+    enable_mlflow = os.getenv("ENABLE_MLFLOW", "true").lower() == "true"
 
     # Initialize pipeline
     pipeline = UnifiedTrainingPipeline(
         api_base_url=api_base_url,
-        api_key=api_key
+        api_key=api_key,
+        enable_mlflow=enable_mlflow
     )
 
     # Run pipeline

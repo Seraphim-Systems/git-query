@@ -19,10 +19,19 @@ services:
       - MAX_REPOS=${MAX_REPOS:-}
       - SKIP_IF_NO_NEW_DATA=${SKIP_IF_NO_NEW_DATA:-true}
 
+      # MLflow Configuration
+      - ENABLE_MLFLOW=${ENABLE_MLFLOW:-true}
+      - MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI:-http://mlflow:5000}
+      - MLFLOW_EXPERIMENT_NAME=${MLFLOW_EXPERIMENT_NAME:-git-query-recommender}
+
+      # Drift Monitoring
+      - EVIDENTLY_REPORT_PATH=/app/drift_reports
+
       # Logging
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
 
-    # No network needed - training only connects to external API via internet
+    networks:
+      - web-network
     restart: "no"  # Run once, don't restart
     volumes:
       # Persist trained models
@@ -31,6 +40,8 @@ services:
       - training-data:/app/training_data
       # Logs
       - training-logs:/app/logs
+      # Drift reports
+      - drift-reports:/app/drift_reports
 
 volumes:
   training-models:
@@ -39,3 +50,9 @@ volumes:
     name: git-query-training-data
   training-logs:
     name: git-query-training-logs
+  drift-reports:
+    name: git-query-drift-reports
+
+networks:
+  web-network:
+    external: true

@@ -38,3 +38,40 @@ def test_services_imports():
         )
     except ImportError as e:
         pytest.fail(f"Failed to import services: {e}")
+
+
+def test_mlops_imports():
+    """
+    Verify that MLOps modules can be imported.
+    """
+    try:
+        from src.recommender.mlops import MLflowTracker, DriftMonitor
+    except ImportError as e:
+        pytest.fail(f"Failed to import MLOps components: {e}")
+
+
+def test_mlflow_tracker_creation():
+    """
+    Verify that MLflowTracker can be instantiated.
+    """
+    try:
+        from src.recommender.mlops.mlflow_tracker import MLflowTracker
+        tracker = MLflowTracker(experiment_name="smoke-test")
+        assert tracker is not None
+        assert tracker.experiment_name == "smoke-test"
+    except Exception as e:
+        pytest.fail(f"Failed to create MLflowTracker: {e}")
+
+
+def test_drift_monitor_creation():
+    """
+    Verify that DriftMonitor can be instantiated.
+    """
+    import tempfile
+    try:
+        from src.recommender.mlops.drift_monitor import DriftMonitor
+        with tempfile.TemporaryDirectory() as tmpdir:
+            monitor = DriftMonitor(report_dir=tmpdir)
+            assert monitor is not None
+    except Exception as e:
+        pytest.fail(f"Failed to create DriftMonitor: {e}")

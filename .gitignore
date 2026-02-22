@@ -212,3 +212,17 @@ __marimo__/
 
 # gemini
 .gemini
+
+# MLflow
+mlruns/
+*_mlruns/
+*.mlflow
+
+# Claude Code
+.claude/
+
+# IDE
+.idea/
+
+# Drift reports (generated)
+drift_reports/

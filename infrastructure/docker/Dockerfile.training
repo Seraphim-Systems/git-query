@@ -29,14 +29,20 @@ FROM base AS final
 COPY --from=builder /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Copy training code
+# Copy training code and MLOps modules
 COPY src/recommender/training /app/training
+COPY src/recommender/mlops /app/recommender/mlops
 COPY src/shared /app/shared
 
-# Create directories for models and data
+# Create __init__.py for recommender package
+RUN mkdir -p /app/recommender && \
+    echo "" > /app/recommender/__init__.py
+
+# Create directories for models, data, and reports
 RUN mkdir -p /app/models/vectors /app/models/metadata /app/models/checkpoints && \
     mkdir -p /app/training_data && \
-    mkdir -p /app/logs
+    mkdir -p /app/logs && \
+    mkdir -p /app/drift_reports
 
 # Set Python path
 ENV PYTHONPATH=/app
