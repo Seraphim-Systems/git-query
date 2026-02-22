@@ -224,3 +224,4 @@ CLAUDE.md
 .swarm
 
 models/
+*.parquet

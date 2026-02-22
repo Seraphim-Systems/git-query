@@ -43,7 +43,7 @@ class RepoDataset:
         url: str,
         api_key: str,
         max_repos: Optional[int] = None,
-        batch_size: int = 100,
+        batch_size: int = 500,
     ) -> "RepoDataset":
         """Fetch repositories from the gateway API.
 
@@ -231,23 +231,31 @@ class RepoDataset:
         p.parent.mkdir(parents=True, exist_ok=True)
 
         if ext == ".json":
+            if not self.repos:
+                print("[RepoDataset] Dataset is empty, nothing to save.")
+                return
             with open(p, "w", encoding="utf-8") as fh:
                 json.dump(self.repos, fh, indent=2, default=str)
             print(f"[RepoDataset] Saved {len(self.repos)} repos to {p}")
             return
 
         if ext == ".parquet":
-            df = self.to_dataframe()
-            # Drop list columns that parquet cannot serialise natively
-            parquet_df = df.copy()
-            for col in parquet_df.columns:
-                if parquet_df[col].apply(lambda v: isinstance(v, list)).any():
-                    parquet_df[col] = parquet_df[col].apply(
-                        lambda v: json.dumps(v, default=str)
-                        if isinstance(v, list)
-                        else v
-                    )
-            parquet_df.to_parquet(p, index=False)
+            if not self.repos:
+                print("[RepoDataset] Dataset is empty, nothing to save.")
+                return
+            import io as _io
+            import pyarrow.json as _pa_json
+            import pyarrow.parquet as _pa_pq
+
+            rows = [
+                {k: json.dumps(v, default=str) if isinstance(v, (list, dict)) else v
+                 for k, v in repo.items()}
+                for repo in self.repos
+            ]
+            jsonl = "\n".join(json.dumps(row, default=str) for row in rows)
+            buf = _io.BytesIO(jsonl.encode())
+            table = _pa_json.read_json(buf)
+            _pa_pq.write_table(table, str(p))
             print(f"[RepoDataset] Saved {len(self.repos)} repos to {p}")
             return
 
@@ -344,8 +352,8 @@ class RepoDataset:
         """Query the gateway for the total document count.
 
         Handles the known count-API bug: when the reported count is <= 1
-        we set the target to 999999 and rely on empty-batch detection to
-        stop pagination.
+        we return float("inf") and rely on empty-batch detection to stop
+        pagination — no arbitrary ceiling needed.
         """
         import requests
 
@@ -370,7 +378,7 @@ class RepoDataset:
                     f"[RepoDataset] Count API returned {count} -- "
                     "using fallback (will stop on empty batch)."
                 )
-                return 999999
+                return float("inf")
 
             return count
 
