@@ -88,7 +88,7 @@ class RerankerService:
             pairs.append([query, repo_text])
 
         # Run reranking in thread pool
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         scores = await loop.run_in_executor(None, self._score_pairs, pairs)
 
         # Attach scores and sort

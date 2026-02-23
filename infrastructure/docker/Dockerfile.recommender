@@ -15,9 +15,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf 
 COPY --from=builder /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Copy recommender code
+# Copy recommender code and its dependencies
 COPY src/recommender /app/recommender
 COPY src/shared /app/shared
+COPY src/db /app/src/db
+COPY src/shared /app/src/shared
+RUN touch /app/src/__init__.py
 
 # Create directories
 RUN mkdir -p /app/models

@@ -1,7 +1,7 @@
 """Personalized recommendation engine."""
 
 from typing import List, Dict, Any
-from ..models import RecommendationRequest, RepositoryResult, InteractionType
+from ..models import RecommendationRequest, RepositoryResult
 from ..database import db_manager
 from ..config import settings
 from .hybrid import HybridRetrievalEngine
