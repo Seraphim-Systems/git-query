@@ -20,33 +20,33 @@ jobs:
 
       - name: Clone or Update Repository
         run: |
-          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
           set -e
 
           REPO_PATH="/home/${{ secrets.INFRA_HETZNER_USER }}/git-query"
 
-          if [ -d "\$REPO_PATH" ]; then
-            if [ -d "\$REPO_PATH/.git" ]; then
+          if [ -d "$REPO_PATH" ]; then
+            if [ -d "$REPO_PATH/.git" ]; then
               echo "✅ Valid git repository found"
-              cd "\$REPO_PATH"
+              cd "$REPO_PATH"
               git fetch origin
               git checkout ${{ github.ref_name }}
               git pull origin ${{ github.ref_name }}
             else
               echo "⚠️  Directory exists but is not a git repository. Removing and re-cloning..."
-              rm -rf "\$REPO_PATH"
-              git clone https://github.com/Seraphim-Systems/git-query.git "\$REPO_PATH"
-              cd "\$REPO_PATH"
+              rm -rf "$REPO_PATH"
+              git clone https://github.com/Seraphim-Systems/git-query.git "$REPO_PATH"
+              cd "$REPO_PATH"
               git checkout ${{ github.ref_name }}
             fi
           else
             echo "📦 Cloning repository..."
-            git clone https://github.com/Seraphim-Systems/git-query.git "\$REPO_PATH"
-            cd "\$REPO_PATH"
+            git clone https://github.com/Seraphim-Systems/git-query.git "$REPO_PATH"
+            cd "$REPO_PATH"
             git checkout ${{ github.ref_name }}
           fi
 
-          echo "✅ Repository ready at \$REPO_PATH"
+          echo "✅ Repository ready at $REPO_PATH"
           ENDSSH
 
   # ─────────────────────────────────────────────
@@ -66,7 +66,7 @@ jobs:
 
       - name: Create Environment File
         run: |
-          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
           set -e
 
           cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query
@@ -108,9 +108,9 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Deploy MCP Server
+      - name: Deploy and Verify MCP Server
         run: |
-          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
           set -e
 
           cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query/infrastructure/docker
@@ -123,29 +123,26 @@ jobs:
           docker-compose -f docker-compose.base.yml -f docker-compose.mcp.yml up -d --build
 
           echo ""
-          echo "📦 MCP Container:"
-          docker ps --filter "name=git-query-mcp"
-          ENDSSH
-
-      - name: Health Check MCP
-        run: |
-          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
-          set -e
-
           echo "🔍 Waiting for MCP to become healthy..."
-          for i in \$(seq 1 12); do
-            STATUS=\$(docker inspect --format='{{.State.Health.Status}}' git-query-mcp 2>/dev/null || echo "missing")
-            echo "  attempt \$i/12 — status: \$STATUS"
-            if [ "\$STATUS" = "healthy" ]; then
+          for i in $(seq 1 12); do
+            STATUS=$(docker inspect --format='{{.State.Health.Status}}' git-query-mcp 2>/dev/null || echo "missing")
+            echo "  attempt $i/12 — status: $STATUS"
+            if [ "$STATUS" = "healthy" ]; then
               echo "✅ MCP Server is healthy"
-              exit 0
+              break
             fi
             sleep 5
           done
 
-          echo "❌ MCP Server did not become healthy in time"
-          docker logs git-query-mcp --tail 30
-          exit 1
+          if [ "$STATUS" != "healthy" ]; then
+            echo "❌ MCP Server did not become healthy in time"
+            docker logs git-query-mcp --tail 30
+            exit 1
+          fi
+
+          echo ""
+          echo "📦 All running containers:"
+          docker ps --filter "name=git-query"
           ENDSSH
 
   # ─────────────────────────────────────────────
@@ -165,7 +162,7 @@ jobs:
 
       - name: Build and Verify Client
         run: |
-          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
           set -e
 
           cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query
@@ -187,7 +184,7 @@ jobs:
 
           echo "✅ Client successfully connected to MCP"
           echo ""
-          echo "📦 Running containers:"
+          echo "📦 All git-query containers:"
           docker ps --filter "name=git-query"
           ENDSSH
 
@@ -208,7 +205,7 @@ jobs:
 
       - name: Verify Services
         run: |
-          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
           set -e
 
           cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query/infrastructure/docker
@@ -220,11 +217,11 @@ jobs:
           echo ""
           echo "🔍 MCP Server:"
           if docker ps | grep -q "git-query-mcp"; then
-            STATUS=\$(docker inspect --format='{{.State.Health.Status}}' git-query-mcp 2>/dev/null || echo "unknown")
-            echo "  ✅ Running — health: \$STATUS"
+            STATUS=$(docker inspect --format='{{.State.Health.Status}}' git-query-mcp 2>/dev/null || echo "unknown")
+            echo "  ✅ Running — health: $STATUS"
             docker logs git-query-mcp --tail 10
           else
-            echo "  ⚠️  Not running (may have been skipped)"
+            echo "  ⚠️  Not running"
           fi
 
           echo ""
@@ -232,7 +229,7 @@ jobs:
           if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "client"; then
             docker images --filter "reference=*client*" --format "  ✅ {{.Repository}}:{{.Tag}} — built {{.CreatedAt}} ({{.Size}})"
           else
-            echo "  ⚠️  Image not found (may have been skipped)"
+            echo "  ⚠️  Image not found"
           fi
 
           echo ""
