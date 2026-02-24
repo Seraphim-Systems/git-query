@@ -131,9 +131,11 @@ jobs:
 
           # Ensure proxy network exists and redeploy gateway
           # docker-compose v1.29 has a bug with newer BuildKit images (missing ContainerConfig).
-          # Removing the container first forces a clean create instead of a recreate, bypassing the bug.
+          # Use compose's own rm (matches by label, not just name) so the next up does a clean
+          # create instead of a recreate, bypassing the bug entirely.
           docker network inspect proxy >/dev/null 2>&1 || docker network create proxy || true
-          docker rm -f git-query-gateway 2>/dev/null || true
+          docker-compose -f docker-compose.base.yml -f docker-compose.db.yml stop gateway 2>/dev/null || true
+          docker-compose -f docker-compose.base.yml -f docker-compose.db.yml rm -f gateway 2>/dev/null || true
           docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d --build --no-deps gateway
 
           echo ""
@@ -147,8 +149,8 @@ jobs:
           set -e
 
           echo "🔍 Waiting for MCP to become healthy..."
-          for i in $(seq 1 12); do
-            STATUS=$(docker inspect --format='{{.State.Health.Status}}' git-query-mcp 2>/dev/null || echo "missing")
+          for i in \$(seq 1 12); do
+            STATUS=\$(docker inspect --format='{{.State.Health.Status}}' git-query-mcp 2>/dev/null || echo "missing")
             echo "  attempt \$i/12 — status: \$STATUS"
             if [ "\$STATUS" = "healthy" ]; then
               echo "✅ MCP Server is healthy"
@@ -199,7 +201,7 @@ jobs:
             exit 1
           fi
 
-          STATUS=$(docker inspect --format='{{.State.Health.Status}}' git-query-mcp 2>/dev/null || echo "unknown")
+          STATUS=\$(docker inspect --format='{{.State.Health.Status}}' git-query-mcp 2>/dev/null || echo "unknown")
           echo "  MCP health status: \$STATUS"
           if [ "\$STATUS" != "healthy" ]; then
             echo "⚠️  MCP server exists but is not healthy yet — proceeding anyway"
@@ -269,7 +271,7 @@ jobs:
           echo ""
           echo "🔍 MCP Server:"
           if docker ps | grep -q "git-query-mcp"; then
-            STATUS=$(docker inspect --format='{{.State.Health.Status}}' git-query-mcp 2>/dev/null || echo "unknown")
+            STATUS=\$(docker inspect --format='{{.State.Health.Status}}' git-query-mcp 2>/dev/null || echo "unknown")
             echo "  ✅ Running — health: \$STATUS"
             docker logs git-query-mcp --tail 10
           else
