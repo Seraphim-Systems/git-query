@@ -127,6 +127,10 @@ jobs:
           cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query/infrastructure/docker
 
           echo "🚀 Deploying MCP Server..."
+          # docker-compose v1.29 has a bug with newer BuildKit images (missing ContainerConfig).
+          # Removing the container before up forces a clean create instead of recreate, bypassing the bug.
+          echo "Removing any existing MCP containers..."
+          docker ps -aq --filter "name=git-query-mcp" | xargs -r docker rm -f
           docker-compose -f docker-compose.base.yml -f docker-compose.mcp.yml up -d --build
 
           # Ensure proxy network exists and redeploy gateway
