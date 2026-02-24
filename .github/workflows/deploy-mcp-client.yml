@@ -205,21 +205,29 @@ jobs:
           echo "✅ MCP server check passed"
           ENDSSH
 
-      - name: Build Client Image
+      - name: Build and Verify Client
         run: |
           ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
           set -e
 
-          cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query/infrastructure/docker
+          cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query
 
           echo "🚀 Building Client image..."
 
           # Remove old container if present
           docker rm -f git-query-client 2>/dev/null || true
 
-          # Build fresh image (client is interactive CLI — not started as daemon here)
-          docker-compose -f docker-compose.base.yml -f docker-compose.client.yml build --no-cache client
+          # Build with an explicit tag so we can reference it in the smoke test
+          docker build --no-cache -t git-query-client:latest -f infrastructure/docker/Dockerfile.client .
 
+          echo ""
+          echo "🔍 Verifying client can reach MCP server..."
+          docker run --rm \
+            --network git-query-web-network \
+            git-query-client:latest \
+            python -c "import urllib.request,sys; resp=urllib.request.urlopen('http://git-query-mcp:8090/health',timeout=10); print('MCP health:', resp.read().decode()); sys.exit(0 if resp.status==200 else 1)"
+
+          echo "✅ Client successfully connected to MCP"
           echo ""
           echo "📦 Running containers:"
           docker ps --filter "name=git-query"
@@ -279,7 +287,7 @@ jobs:
 
           echo ""
           echo "💡 To start the interactive client:"
-          echo "   docker-compose -f docker-compose.base.yml -f docker-compose.client.yml run --rm client"
+          echo "   docker run --rm -it --network git-query-web-network -e MCP_SERVER_URL=http://git-query-mcp:8090 --env-file /home/${{ secrets.INFRA_HETZNER_USER }}/git-query/.env git-query-client:latest"
 
           echo ""
           echo "✅ Verification complete"
