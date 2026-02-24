@@ -131,12 +131,11 @@ jobs:
 
           # Ensure proxy network exists and redeploy gateway
           # docker-compose v1.29 has a bug with newer BuildKit images (missing ContainerConfig).
-          # Find the container by its compose service label (handles any container naming — the
-          # container may be named 'git-query-gateway' or 'docker_gateway_1' depending on whether
-          # container_name: was set when it was first created). Removing by ID forces a clean
-          # create instead of a recreate, bypassing the bug entirely.
+          # The gateway container may have been deployed from the repo root (project=git-query) or
+          # from infrastructure/docker (project=docker), so we can't filter by project name.
+          # Find by service label only, remove by ID, forcing a clean create instead of a recreate.
           docker network inspect proxy >/dev/null 2>&1 || docker network create proxy || true
-          GATEWAY_ID=\$(docker ps -aq --filter "label=com.docker.compose.service=gateway" --filter "label=com.docker.compose.project=docker")
+          GATEWAY_ID=\$(docker ps -aq --filter "label=com.docker.compose.service=gateway")
           if [ -n "\$GATEWAY_ID" ]; then
             echo "Removing existing gateway container \$GATEWAY_ID..."
             docker rm -f "\$GATEWAY_ID"
