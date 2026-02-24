@@ -140,6 +140,7 @@ class QdrantAdapter(VectorRepository):
                         query_vector=vector,
                         limit=limit,
                         query_filter=filter or {},
+                        with_payload=True,
                     )
                 elif hasattr(self.client, "search_points"):
                     res = self.client.search_points(
@@ -147,6 +148,7 @@ class QdrantAdapter(VectorRepository):
                         query_vector=vector,
                         limit=limit,
                         query_filter=filter or {},
+                        with_payload=True,
                     )
                 else:
                     raise AttributeError("No supported search method on qdrant client")

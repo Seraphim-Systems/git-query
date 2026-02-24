@@ -18,6 +18,13 @@ class RecommenderSettings(BaseSettings):
     qdrant_url: str = "http://localhost:6333"
     qdrant_api_key: Optional[str] = None
 
+    # Gateway mode — route all DB calls through the REST gateway instead of
+    # connecting to native Qdrant/MongoDB/Redis.  Set USE_GATEWAY=true and
+    # supply API_BASE_URL + APIKEY_QDRANT to use the public gateway endpoint.
+    use_gateway: bool = False
+    api_base_url: str = ""
+    apikey_qdrant: Optional[str] = None  # env: APIKEY_QDRANT
+
     # API Keys
     embedding_api_key: Optional[str] = None
 
@@ -53,6 +60,7 @@ class RecommenderSettings(BaseSettings):
 
     # Collections
     repos_collection: str = "repositories"
+    raw_repos_collection: str = "raw_repositories"
     interactions_collection: str = "user_interactions"
     user_prefs_collection: str = "user_preferences"
     models_collection: str = "ml_models"
