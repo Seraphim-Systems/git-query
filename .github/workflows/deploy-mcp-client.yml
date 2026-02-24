@@ -119,23 +119,12 @@ jobs:
           # docker-compose v1.29 has a bug with newer BuildKit images (missing ContainerConfig).
           # Removing the container before up forces a clean create instead of recreate, bypassing the bug.
           echo "Removing any existing MCP containers..."
-          docker ps -aq --filter "name=git-query-mcp" | xargs -r docker rm -f
+          docker ps -aq --filter "name=git-query-mcp" | xargs -r docker rm -f || true
           docker-compose -f docker-compose.base.yml -f docker-compose.mcp.yml up -d --build
 
-          # Ensure proxy network exists and redeploy gateway
-          # docker-compose v1.29 has a bug with newer BuildKit images (missing ContainerConfig).
-          # The container may have any name (git-query-gateway, 6018380a_git-query-gateway, etc.)
-          # depending on how it was first created. Docker name filter does substring matching so
-          # --filter name=git-query-gateway catches all variants. Removing before up forces a
-          # clean create instead of a recreate, bypassing the bug entirely.
-          docker network inspect proxy >/dev/null 2>&1 || docker network create proxy || true
-          echo "Removing any existing gateway containers..."
-          docker ps -aq --filter "name=git-query-gateway" | xargs -r docker rm -f
-          docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d --build --no-deps gateway
-
           echo ""
-          echo "📦 Running containers:"
-          docker ps --filter "name=git-query"
+          echo "📦 MCP Container:"
+          docker ps --filter "name=git-query-mcp"
           ENDSSH
 
       - name: Health Check MCP
