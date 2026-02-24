@@ -19,9 +19,6 @@ services:
       - MCP_API_KEY=${APIKEY_MCP}
       - OPENAI_API_KEY=${APP_OPENAI_API_KEY}
       - RECOMMENDER_URL=http://recommender:8095
-    depends_on:
-      recommender:
-        condition: service_healthy
     networks:
       - db-network
       - web-network

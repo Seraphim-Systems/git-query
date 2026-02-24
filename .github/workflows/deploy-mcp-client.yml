@@ -119,28 +119,6 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Check Database Dependencies
-        run: |
-          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
-          set -e
-
-          echo "🔍 Checking database dependencies..."
-          if ! docker ps | grep -q "git-query-mongodb"; then
-            echo "❌ MongoDB is not running. Please deploy infrastructure first."
-            exit 1
-          fi
-          if ! docker ps | grep -q "git-query-redis"; then
-            echo "❌ Redis is not running. Please deploy infrastructure first."
-            exit 1
-          fi
-          if ! docker ps | grep -q "git-query-qdrant"; then
-            echo "❌ Qdrant is not running. Please deploy infrastructure first."
-            exit 1
-          fi
-
-          echo "✅ Database dependencies verified"
-          ENDSSH
-
       - name: Deploy MCP Server
         run: |
           ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
