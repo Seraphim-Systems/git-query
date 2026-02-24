@@ -2,16 +2,6 @@ name: Deploy MCP + Client
 
 on:
   workflow_dispatch:
-    inputs:
-      deploy_target:
-        description: "Which services to deploy?"
-        required: true
-        default: "both"
-        type: choice
-        options:
-          - both
-          - mcp-only
-          - client-only
 
 jobs:
   # ─────────────────────────────────────────────
@@ -104,13 +94,12 @@ jobs:
           ENDSSH
 
   # ─────────────────────────────────────────────
-  # 3a. Deploy MCP (skipped when client-only)
+  # 3a. Deploy MCP
   # ─────────────────────────────────────────────
   deploy-mcp:
     name: Deploy MCP Server
     runs-on: ubuntu-latest
     needs: configure
-    if: ${{ github.event.inputs.deploy_target == 'both' || github.event.inputs.deploy_target == 'mcp-only' }}
     steps:
       - name: Setup SSH
         run: |
@@ -171,23 +160,12 @@ jobs:
           ENDSSH
 
   # ─────────────────────────────────────────────
-  # 3b. Deploy Client (skipped when mcp-only)
+  # 3b. Deploy Client
   # ─────────────────────────────────────────────
   deploy-client:
     name: Deploy Client
     runs-on: ubuntu-latest
-    # When deploying both, wait for MCP to be healthy first.
-    # When client-only, only needs configure (MCP must already be running).
-    needs:
-      - configure
-      - deploy-mcp
-    if: |
-      always() &&
-      needs.configure.result == 'success' &&
-      (
-        github.event.inputs.deploy_target == 'client-only' ||
-        (github.event.inputs.deploy_target == 'both' && needs.deploy-mcp.result == 'success')
-      )
+    needs: deploy-mcp
     steps:
       - name: Setup SSH
         run: |
@@ -195,26 +173,6 @@ jobs:
           echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts
-
-      - name: Check MCP Dependency
-        run: |
-          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
-          set -e
-
-          echo "🔍 Checking MCP server dependency..."
-          if ! docker ps | grep -q "git-query-mcp"; then
-            echo "❌ MCP server is not running. Deploy MCP first (or choose 'both')."
-            exit 1
-          fi
-
-          STATUS=\$(docker inspect --format='{{.State.Health.Status}}' git-query-mcp 2>/dev/null || echo "unknown")
-          echo "  MCP health status: \$STATUS"
-          if [ "\$STATUS" != "healthy" ]; then
-            echo "⚠️  MCP server exists but is not healthy yet — proceeding anyway"
-          fi
-
-          echo "✅ MCP server check passed"
-          ENDSSH
 
       - name: Build and Verify Client
         run: |
@@ -250,10 +208,7 @@ jobs:
   verify:
     name: Verify Deployment
     runs-on: ubuntu-latest
-    needs:
-      - deploy-mcp
-      - deploy-client
-    if: always() && (needs.deploy-mcp.result == 'success' || needs.deploy-mcp.result == 'skipped') && (needs.deploy-client.result == 'success' || needs.deploy-client.result == 'skipped')
+    needs: deploy-client
     steps:
       - name: Setup SSH
         run: |
@@ -271,7 +226,6 @@ jobs:
 
           echo "══════════════════════════════════════"
           echo "  DEPLOYMENT SUMMARY"
-          echo "  Target: ${{ github.event.inputs.deploy_target }}"
           echo "══════════════════════════════════════"
 
           echo ""
