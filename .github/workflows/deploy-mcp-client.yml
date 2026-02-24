@@ -129,9 +129,12 @@ jobs:
           echo "🚀 Deploying MCP Server..."
           docker-compose -f docker-compose.base.yml -f docker-compose.mcp.yml up -d --build
 
-          # Ensure proxy network exists and gateway is connected
+          # Ensure proxy network exists and redeploy gateway
+          # docker-compose v1.29 has a bug with newer BuildKit images (missing ContainerConfig).
+          # Removing the container first forces a clean create instead of a recreate, bypassing the bug.
           docker network inspect proxy >/dev/null 2>&1 || docker network create proxy || true
-          docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d --build --no-deps gateway || true
+          docker rm -f git-query-gateway 2>/dev/null || true
+          docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d --build --no-deps gateway
 
           echo ""
           echo "📦 Running containers:"
