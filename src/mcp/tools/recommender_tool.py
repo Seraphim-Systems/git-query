@@ -79,15 +79,18 @@ async def recommend_repositories(
             for repo in data.get("results", []):
                 results.append(
                     {
-                        "rank": repo.get("rank"),
-                        "name": repo.get("full_name") or repo.get("name"),
+                        "repo_id": repo.get("repo_id"),
+                        "name": repo.get("name"),
+                        "full_name": repo.get("full_name"),
                         "description": repo.get("description"),
-                        "url": repo.get("url"),
                         "language": repo.get("language"),
                         "stars": repo.get("stars"),
                         "forks": repo.get("forks"),
+                        "url": repo.get("url"),
                         "license": repo.get("license"),
                         "score": round(repo.get("score", 0.0), 4),
+                        "rank": repo.get("rank"),
+                        "explanation": repo.get("explanation"),
                     }
                 )
 
@@ -103,7 +106,10 @@ async def recommend_repositories(
 
         except httpx.HTTPStatusError as e:
             logger.error("Recommender returned HTTP error: %s", e)
-            return {"error": f"Recommender service error: {e.response.status_code}", "detail": e.response.text}
+            return {
+                "error": f"Recommender service error: {e.response.status_code}",
+                "detail": e.response.text,
+            }
         except httpx.RequestError as e:
             logger.error("Could not reach recommender service: %s", e)
             return {"error": "Recommender service is unreachable", "detail": str(e)}
@@ -156,8 +162,13 @@ async def log_repository_interaction(
             response.raise_for_status()
             return response.json()
         except httpx.HTTPStatusError as e:
-            logger.error("Recommender returned HTTP error while logging interaction: %s", e)
-            return {"error": f"Recommender service error: {e.response.status_code}", "detail": e.response.text}
+            logger.error(
+                "Recommender returned HTTP error while logging interaction: %s", e
+            )
+            return {
+                "error": f"Recommender service error: {e.response.status_code}",
+                "detail": e.response.text,
+            }
         except httpx.RequestError as e:
             logger.error("Could not reach recommender service: %s", e)
             return {"error": "Recommender service is unreachable", "detail": str(e)}
@@ -183,9 +194,15 @@ async def get_user_preferences(user_id: str) -> dict[str, Any]:
             return response.json()
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:
-                return {"user_id": user_id, "message": "No preference profile found for this user yet."}
+                return {
+                    "user_id": user_id,
+                    "message": "No preference profile found for this user yet.",
+                }
             logger.error("Recommender returned HTTP error fetching preferences: %s", e)
-            return {"error": f"Recommender service error: {e.response.status_code}", "detail": e.response.text}
+            return {
+                "error": f"Recommender service error: {e.response.status_code}",
+                "detail": e.response.text,
+            }
         except httpx.RequestError as e:
             logger.error("Could not reach recommender service: %s", e)
             return {"error": "Recommender service is unreachable", "detail": str(e)}
@@ -204,15 +221,62 @@ TOOL_DEFINITIONS = [
             "personalisation for a specific user."
         ),
         "parameters": [
-            {"name": "query", "type": "string", "description": "Natural-language description of what to find", "required": True},
-            {"name": "user_id", "type": "string", "description": "User identifier for personalised results", "required": False},
-            {"name": "language", "type": "string", "description": "Filter by programming language (e.g. Python)", "required": False},
-            {"name": "min_stars", "type": "integer", "description": "Minimum number of GitHub stars", "required": False},
-            {"name": "license", "type": "string", "description": "Filter by licence (e.g. MIT)", "required": False},
-            {"name": "max_age_days", "type": "integer", "description": "Exclude repos not updated in this many days", "required": False},
-            {"name": "top_k", "type": "integer", "description": "Number of results (1–50, default 10)", "required": False, "default": 10},
-            {"name": "enable_personalization", "type": "boolean", "description": "Apply user-preference personalisation", "required": False, "default": True},
-            {"name": "variant", "type": "string", "description": "A/B variant: baseline | hybrid | personalized", "required": False},
+            {
+                "name": "query",
+                "type": "string",
+                "description": "Natural-language description of what to find",
+                "required": True,
+            },
+            {
+                "name": "user_id",
+                "type": "string",
+                "description": "User identifier for personalised results",
+                "required": False,
+            },
+            {
+                "name": "language",
+                "type": "string",
+                "description": "Filter by programming language (e.g. Python)",
+                "required": False,
+            },
+            {
+                "name": "min_stars",
+                "type": "integer",
+                "description": "Minimum number of GitHub stars",
+                "required": False,
+            },
+            {
+                "name": "license",
+                "type": "string",
+                "description": "Filter by licence (e.g. MIT)",
+                "required": False,
+            },
+            {
+                "name": "max_age_days",
+                "type": "integer",
+                "description": "Exclude repos not updated in this many days",
+                "required": False,
+            },
+            {
+                "name": "top_k",
+                "type": "integer",
+                "description": "Number of results (1–50, default 10)",
+                "required": False,
+                "default": 10,
+            },
+            {
+                "name": "enable_personalization",
+                "type": "boolean",
+                "description": "Apply user-preference personalisation",
+                "required": False,
+                "default": True,
+            },
+            {
+                "name": "variant",
+                "type": "string",
+                "description": "A/B variant: baseline | hybrid | personalized",
+                "required": False,
+            },
         ],
     },
     {
@@ -222,12 +286,43 @@ TOOL_DEFINITIONS = [
             "repository. This feedback improves future personalised recommendations."
         ),
         "parameters": [
-            {"name": "user_id", "type": "string", "description": "The user who interacted", "required": True},
-            {"name": "query", "type": "string", "description": "The original search query", "required": True},
-            {"name": "repo_id", "type": "string", "description": "The repository ID", "required": True},
-            {"name": "interaction_type", "type": "string", "description": "One of: click, save, dismiss, thumbs_up, thumbs_down, view", "required": True},
-            {"name": "position_in_results", "type": "integer", "description": "0-based position of repo in result list", "required": False},
-            {"name": "variant", "type": "string", "description": "Which recommendation variant was shown", "required": False, "default": "baseline"},
+            {
+                "name": "user_id",
+                "type": "string",
+                "description": "The user who interacted",
+                "required": True,
+            },
+            {
+                "name": "query",
+                "type": "string",
+                "description": "The original search query",
+                "required": True,
+            },
+            {
+                "name": "repo_id",
+                "type": "string",
+                "description": "The repository ID",
+                "required": True,
+            },
+            {
+                "name": "interaction_type",
+                "type": "string",
+                "description": "One of: click, save, dismiss, thumbs_up, thumbs_down, view",
+                "required": True,
+            },
+            {
+                "name": "position_in_results",
+                "type": "integer",
+                "description": "0-based position of repo in result list",
+                "required": False,
+            },
+            {
+                "name": "variant",
+                "type": "string",
+                "description": "Which recommendation variant was shown",
+                "required": False,
+                "default": "baseline",
+            },
         ],
     },
     {
@@ -237,8 +332,12 @@ TOOL_DEFINITIONS = [
             "they tend to be interested in, derived from their interaction history."
         ),
         "parameters": [
-            {"name": "user_id", "type": "string", "description": "The user whose preferences to fetch", "required": True},
+            {
+                "name": "user_id",
+                "type": "string",
+                "description": "The user whose preferences to fetch",
+                "required": True,
+            },
         ],
     },
 ]
-
