@@ -104,13 +104,13 @@ class HybridRetrievalEngine(RecommendationEngine):
         # This enriches results even when Qdrant payloads lack name/stars/etc.
         ids_needing_enrichment = [
             r["repo_id"] for r in out
-            if "/" in r["repo_id"] and not r["payload"].get("name")
+            if "/" in r["repo_id"] and not r["payload"].get("stars")
         ]
         if ids_needing_enrichment:
             meta_map = await db_manager.get_repositories_by_repo_ids(ids_needing_enrichment)
             if meta_map:
                 for r in out:
-                    if r["repo_id"] in meta_map and not r["payload"].get("name"):
+                    if r["repo_id"] in meta_map and not r["payload"].get("stars"):
                         r["payload"] = {**r["payload"], **meta_map[r["repo_id"]]}
 
         return out
