@@ -39,8 +39,8 @@ jobs:
               echo "✅ Valid git repository found"
               cd "\$REPO_PATH"
               git fetch origin
-              git checkout ${{ github.ref_name }}
-              git pull origin ${{ github.ref_name }}
+              git reset --hard origin/${{ github.ref_name }}
+              git clean -fd
             else
               echo "⚠️  Directory exists but is not a git repository. Removing and re-cloning..."
               rm -rf "\$REPO_PATH"
