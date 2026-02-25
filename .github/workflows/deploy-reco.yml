@@ -122,16 +122,12 @@ jobs:
         run: |
           ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
           set -e
-          
-          cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query/infrastructure/docker
-          
-          echo "🚀 Deploying Recommendation Engine..."
-          docker-compose -f docker-compose.base.yml -f docker-compose.reco.yml up -d
 
-          # Ensure proxy network exists and API gateway is running and connected to proxy/internal networks
-          docker network inspect proxy >/dev/null 2>&1 || docker network create proxy || true
-          docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d --build --no-deps gateway || true
-          
+          cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query/infrastructure/docker
+
+          echo "🚀 Deploying Recommendation Engine..."
+          docker-compose -f docker-compose.base.yml -f docker-compose.reco.yml up -d --build
+
           echo ""
           echo "📦 Running containers:"
           docker ps --filter "name=git-query"
@@ -153,12 +149,17 @@ jobs:
         run: |
           ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
           set -e
-          
-          cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query/infrastructure/docker
-          
-          echo "🔍 Checking Recommendation Engine health..."
-          docker logs git-query-recommender --tail 20 && echo "✅ Recommender running" || echo "❌ Recommender failed"
-          
-          echo ""
-          echo "✅ Deployment verification complete"
+
+          echo "⏳ Waiting for recommender to be ready (up to 90s)..."
+          timeout 90 bash -c '
+            until docker inspect -f "{{.State.Health.Status}}" git-query-recommender 2>/dev/null | grep -q "healthy"; do
+              echo "  still starting..."
+              sleep 5
+            done
+          '
+
+          echo "🔍 Running health check..."
+          docker exec git-query-recommender curl -sf http://localhost:8095/health
+
+          echo "✅ Recommender is damn healthy"
           ENDSSH

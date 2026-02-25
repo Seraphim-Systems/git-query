@@ -178,6 +178,7 @@ class DatabaseManager:
                 ],
                 name="repo_text_search",
                 weights={"name": 10, "topics": 5, "description": 1},
+                language_override="text_language",
             )
 
         # Qdrant collection
