@@ -126,7 +126,7 @@ jobs:
           cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query/infrastructure/docker
 
           echo "🚀 Deploying Recommendation Engine..."
-          docker-compose -f docker-compose.base.yml -f docker-compose.reco.yml up -d --build
+          docker compose -f docker-compose.base.yml -f docker-compose.reco.yml up -d --build
 
           echo ""
           echo "📦 Running containers:"
