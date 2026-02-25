@@ -150,8 +150,8 @@ jobs:
           ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
           set -e
 
-          echo "⏳ Waiting for recommender to be ready (up to 90s)..."
-          timeout 90 bash -c '
+          echo "⏳ Waiting for recommender to be ready (up to 180s)..."
+          timeout 180 bash -c '
             until docker inspect -f "{{.State.Health.Status}}" git-query-recommender 2>/dev/null | grep -q "healthy"; do
               echo "  still starting..."
               sleep 5
