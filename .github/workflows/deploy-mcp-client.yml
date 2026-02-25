@@ -2,16 +2,6 @@ name: Deploy MCP + Client
 
 on:
   workflow_dispatch:
-    inputs:
-      deploy_target:
-        description: "Which services to deploy?"
-        required: true
-        default: "both"
-        type: choice
-        options:
-          - both
-          - mcp-only
-          - client-only
 
 jobs:
   # ─────────────────────────────────────────────
@@ -30,33 +20,33 @@ jobs:
 
       - name: Clone or Update Repository
         run: |
-          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
           set -e
 
           REPO_PATH="/home/${{ secrets.INFRA_HETZNER_USER }}/git-query"
 
-          if [ -d "\$REPO_PATH" ]; then
-            if [ -d "\$REPO_PATH/.git" ]; then
+          if [ -d "$REPO_PATH" ]; then
+            if [ -d "$REPO_PATH/.git" ]; then
               echo "✅ Valid git repository found"
-              cd "\$REPO_PATH"
+              cd "$REPO_PATH"
               git fetch origin
               git reset --hard origin/${{ github.ref_name }}
               git clean -fd
             else
               echo "⚠️  Directory exists but is not a git repository. Removing and re-cloning..."
-              rm -rf "\$REPO_PATH"
-              git clone https://github.com/Seraphim-Systems/git-query.git "\$REPO_PATH"
-              cd "\$REPO_PATH"
+              rm -rf "$REPO_PATH"
+              git clone https://github.com/Seraphim-Systems/git-query.git "$REPO_PATH"
+              cd "$REPO_PATH"
               git checkout ${{ github.ref_name }}
             fi
           else
             echo "📦 Cloning repository..."
-            git clone https://github.com/Seraphim-Systems/git-query.git "\$REPO_PATH"
-            cd "\$REPO_PATH"
+            git clone https://github.com/Seraphim-Systems/git-query.git "$REPO_PATH"
+            cd "$REPO_PATH"
             git checkout ${{ github.ref_name }}
           fi
 
-          echo "✅ Repository ready at \$REPO_PATH"
+          echo "✅ Repository ready at $REPO_PATH"
           ENDSSH
 
   # ─────────────────────────────────────────────
@@ -76,7 +66,7 @@ jobs:
 
       - name: Create Environment File
         run: |
-          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
           set -e
 
           cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query
@@ -104,13 +94,12 @@ jobs:
           ENDSSH
 
   # ─────────────────────────────────────────────
-  # 3a. Deploy MCP (skipped when client-only)
+  # 3a. Deploy MCP
   # ─────────────────────────────────────────────
   deploy-mcp:
     name: Deploy MCP Server
     runs-on: ubuntu-latest
     needs: configure
-    if: ${{ github.event.inputs.deploy_target == 'both' || github.event.inputs.deploy_target == 'mcp-only' }}
     steps:
       - name: Setup SSH
         run: |
@@ -119,71 +108,50 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Deploy MCP Server
+      - name: Deploy and Verify MCP Server
         run: |
-          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
           set -e
 
           cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query/infrastructure/docker
 
           echo "🚀 Deploying MCP Server..."
+          # docker-compose v1.29 has a bug with newer BuildKit images (missing ContainerConfig).
+          # Removing the container before up forces a clean create instead of recreate, bypassing the bug.
+          echo "Removing any existing MCP containers..."
+          docker ps -aq --filter "name=git-query-mcp" | xargs -r docker rm -f || true
           docker-compose -f docker-compose.base.yml -f docker-compose.mcp.yml up -d --build
 
-          # Ensure proxy network exists and redeploy gateway
-          # docker-compose v1.29 has a bug with newer BuildKit images (missing ContainerConfig).
-          # The container may have any name (git-query-gateway, 6018380a_git-query-gateway, etc.)
-          # depending on how it was first created. Docker name filter does substring matching so
-          # --filter name=git-query-gateway catches all variants. Removing before up forces a
-          # clean create instead of a recreate, bypassing the bug entirely.
-          docker network inspect proxy >/dev/null 2>&1 || docker network create proxy || true
-          echo "Removing any existing gateway containers..."
-          docker ps -aq --filter "name=git-query-gateway" | xargs -r docker rm -f
-          docker-compose -f docker-compose.base.yml -f docker-compose.db.yml up -d --build --no-deps gateway
-
           echo ""
-          echo "📦 Running containers:"
-          docker ps --filter "name=git-query"
-          ENDSSH
-
-      - name: Health Check MCP
-        run: |
-          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
-          set -e
-
           echo "🔍 Waiting for MCP to become healthy..."
-          for i in \$(seq 1 12); do
-            STATUS=\$(docker inspect --format='{{.State.Health.Status}}' git-query-mcp 2>/dev/null || echo "missing")
-            echo "  attempt \$i/12 — status: \$STATUS"
-            if [ "\$STATUS" = "healthy" ]; then
+          for i in $(seq 1 12); do
+            STATUS=$(docker inspect --format='{{.State.Health.Status}}' git-query-mcp 2>/dev/null || echo "missing")
+            echo "  attempt $i/12 — status: $STATUS"
+            if [ "$STATUS" = "healthy" ]; then
               echo "✅ MCP Server is healthy"
-              exit 0
+              break
             fi
             sleep 5
           done
 
-          echo "❌ MCP Server did not become healthy in time"
-          docker logs git-query-mcp --tail 30
-          exit 1
+          if [ "$STATUS" != "healthy" ]; then
+            echo "❌ MCP Server did not become healthy in time"
+            docker logs git-query-mcp --tail 30
+            exit 1
+          fi
+
+          echo ""
+          echo "📦 All running containers:"
+          docker ps --filter "name=git-query"
           ENDSSH
 
   # ─────────────────────────────────────────────
-  # 3b. Deploy Client (skipped when mcp-only)
+  # 3b. Deploy Client
   # ─────────────────────────────────────────────
   deploy-client:
     name: Deploy Client
     runs-on: ubuntu-latest
-    # When deploying both, wait for MCP to be healthy first.
-    # When client-only, only needs configure (MCP must already be running).
-    needs:
-      - configure
-      - deploy-mcp
-    if: |
-      always() &&
-      needs.configure.result == 'success' &&
-      (
-        github.event.inputs.deploy_target == 'client-only' ||
-        (github.event.inputs.deploy_target == 'both' && needs.deploy-mcp.result == 'success')
-      )
+    needs: deploy-mcp
     steps:
       - name: Setup SSH
         run: |
@@ -192,29 +160,9 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Check MCP Dependency
-        run: |
-          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
-          set -e
-
-          echo "🔍 Checking MCP server dependency..."
-          if ! docker ps | grep -q "git-query-mcp"; then
-            echo "❌ MCP server is not running. Deploy MCP first (or choose 'both')."
-            exit 1
-          fi
-
-          STATUS=\$(docker inspect --format='{{.State.Health.Status}}' git-query-mcp 2>/dev/null || echo "unknown")
-          echo "  MCP health status: \$STATUS"
-          if [ "\$STATUS" != "healthy" ]; then
-            echo "⚠️  MCP server exists but is not healthy yet — proceeding anyway"
-          fi
-
-          echo "✅ MCP server check passed"
-          ENDSSH
-
       - name: Build and Verify Client
         run: |
-          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
           set -e
 
           cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query
@@ -236,7 +184,7 @@ jobs:
 
           echo "✅ Client successfully connected to MCP"
           echo ""
-          echo "📦 Running containers:"
+          echo "📦 All git-query containers:"
           docker ps --filter "name=git-query"
           ENDSSH
 
@@ -246,10 +194,7 @@ jobs:
   verify:
     name: Verify Deployment
     runs-on: ubuntu-latest
-    needs:
-      - deploy-mcp
-      - deploy-client
-    if: always() && (needs.deploy-mcp.result == 'success' || needs.deploy-mcp.result == 'skipped') && (needs.deploy-client.result == 'success' || needs.deploy-client.result == 'skipped')
+    needs: deploy-client
     steps:
       - name: Setup SSH
         run: |
@@ -260,24 +205,23 @@ jobs:
 
       - name: Verify Services
         run: |
-          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
           set -e
 
           cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query/infrastructure/docker
 
           echo "══════════════════════════════════════"
           echo "  DEPLOYMENT SUMMARY"
-          echo "  Target: ${{ github.event.inputs.deploy_target }}"
           echo "══════════════════════════════════════"
 
           echo ""
           echo "🔍 MCP Server:"
           if docker ps | grep -q "git-query-mcp"; then
-            STATUS=\$(docker inspect --format='{{.State.Health.Status}}' git-query-mcp 2>/dev/null || echo "unknown")
-            echo "  ✅ Running — health: \$STATUS"
+            STATUS=$(docker inspect --format='{{.State.Health.Status}}' git-query-mcp 2>/dev/null || echo "unknown")
+            echo "  ✅ Running — health: $STATUS"
             docker logs git-query-mcp --tail 10
           else
-            echo "  ⚠️  Not running (may have been skipped)"
+            echo "  ⚠️  Not running"
           fi
 
           echo ""
@@ -285,7 +229,7 @@ jobs:
           if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "client"; then
             docker images --filter "reference=*client*" --format "  ✅ {{.Repository}}:{{.Tag}} — built {{.CreatedAt}} ({{.Size}})"
           else
-            echo "  ⚠️  Image not found (may have been skipped)"
+            echo "  ⚠️  Image not found"
           fi
 
           echo ""
@@ -299,4 +243,3 @@ jobs:
           echo ""
           echo "✅ Verification complete"
           ENDSSH
-
