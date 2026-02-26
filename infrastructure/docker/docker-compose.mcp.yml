@@ -26,7 +26,7 @@ services:
       retries: 5
       start_period: 20s
     networks:
-      - git-query-internal-network
+      - internal-network
 
   client:
     build:
@@ -47,5 +47,5 @@ services:
     tty: true
     restart: "no"
     networks:
-      - git-query-internal-network
+      - internal-network
 

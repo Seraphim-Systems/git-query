@@ -32,18 +32,13 @@ services:
         QDRANT_API_KEY: "${DB_QDRANT_API_KEY:-}"
         MCP_API_KEY: "${APIKEY_MCP}"
         OPENAI_API_KEY: "${APP_OPENAI_API_KEY}"
-      RECOMMENDER_URL: "http://recommender:8095"
+        RECOMMENDER_URL: "http://recommender:8095"
 
   gateway:
       ports:
         - "80:80"
       environment:
         LOG_LEVEL: DEBUG
-        REDIS_URL: "redis://:${DB_REDIS_PASSWORD:-redispass}@redis:6379"
-        MONGODB_URL: "mongodb://${DB_MONGODB_USER:-admin}:${DB_MONGODB_PASSWORD:-mongopass}@mongodb:27017/${DB_MONGODB_DATABASE:-gitquery}?authSource=admin"
-        QDRANT_HOST: "${QDRANT_HOST:-qdrant}"
-        QDRANT_HTTP_PORT: "${QDRANT_HTTP_PORT:-6333}"
-      # In development, do not attach the gateway to the external `proxy` network.
 
   web:
     build:
