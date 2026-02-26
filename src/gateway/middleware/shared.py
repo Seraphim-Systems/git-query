@@ -11,3 +11,12 @@ PUBLIC_PATHS = [
     "/auth/login",
     "/auth/register",
 ]
+
+# Session-authenticated paths: these are user-facing routes that use cookie
+# sessions rather than service API keys.  The API-key middleware must skip
+# these so the session middleware can handle authentication instead.
+SESSION_PATHS = [
+    "/chat",
+    "/recommend",
+    "/user",
+]

@@ -1,5 +1,5 @@
 const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-const API_BASE = isLocalhost ? 'http://localhost:80' : '';
+const API_BASE = isLocalhost ? 'http://localhost:8080' : '';
 
 // Health monitoring functionality
 class HealthMonitor {

@@ -72,17 +72,16 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (response.ok) {
                 showMessage('Login successful! Redirecting...', 'success');
-                // Create temporary session for demo (will be replaced with real session from gateway)
-                const tempUsername = emailInput.value.trim().split('@')[0];
-                localStorage.setItem('sessionId', 'session_' + Date.now());
-                localStorage.setItem('userId', emailInput.value.trim());
-                localStorage.setItem('username', tempUsername);
+                // Store real session info from gateway response
+                localStorage.setItem('sessionId', data.session_id || ('session_' + Date.now()));
+                localStorage.setItem('userId', data.user_id || emailInput.value.trim());
+                localStorage.setItem('username', data.username || emailInput.value.trim().split('@')[0]);
                 // Redirect to home page
                 setTimeout(() => {
                     window.location.href = '/home.html';
                 }, 1000);
             } else {
-                showMessage(data.message || 'Login failed. Please try again.', 'error');
+                showMessage(data.detail || data.message || 'Login failed. Please try again.', 'error');
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Sign In';
             }

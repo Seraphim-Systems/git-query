@@ -98,6 +98,9 @@ services:
       # successfully connect at startup.
       - QDRANT_HOST=${QDRANT_HOST:-qdrant}
       - QDRANT_HTTP_PORT=${QDRANT_HTTP_PORT:-6333}
+      # Backend service URLs for chat and recommendations
+      - MCP_SERVER_URL=http://mcp-server:8090
+      - RECOMMENDER_URL=http://recommender:8095
       # Cosmos DB removed
     expose:
       - "80"

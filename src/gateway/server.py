@@ -15,6 +15,7 @@ from src.gateway.services.session_manager import SessionManager
 from src.gateway.services.user_service import UserService
 from src.gateway.middleware.rate_limit import RateLimitMiddleware
 from src.gateway.middleware.api_key import APIKeyMiddleware
+from src.gateway.middleware.session import SessionMiddleware
 from src.gateway.routers import auth, chat, recommendations, user, health
 
 
@@ -179,8 +180,9 @@ app.add_middleware(
 )
 
 # Add custom middleware
-# Enforce API key auth for non-public endpoints. Session-based auth removed
-# in favor of API-key-only access for all guarded routes.
+# Enforce API key auth for non-public endpoints. Session middleware handles
+# user-facing routes (/chat, /recommend, /user).
+app.add_middleware(SessionMiddleware)
 app.add_middleware(APIKeyMiddleware)
 app.add_middleware(
     RateLimitMiddleware,

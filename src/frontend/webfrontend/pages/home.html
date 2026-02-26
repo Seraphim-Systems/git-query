@@ -11,10 +11,31 @@
     <div class="container">
         <!-- Sidebar -->
         <aside class="sidebar">
-            <button id="newChatBtn" class="new-chat-btn">+ New chat</button>
+            <!-- Chats Section -->
+            <div class="sidebar-section">
+                <div class="section-header">Chats</div>
+                <button id="newChatBtn" class="section-add-btn">+ New chat</button>
+                <div id="chatHistory" class="section-list">
+                    <!-- Chat history items will be populated by JavaScript -->
+                </div>
+            </div>
             
-            <div id="chatHistory" class="chat-history">
-                <!-- Chat history items will be populated by JavaScript -->
+            <!-- Favorite Repos Section -->
+            <div class="sidebar-section">
+                <div class="section-header">Favorite Repos</div>
+                <button id="placeRepoBtn" class="section-add-btn">Place Repo</button>
+                <div id="favoriteRepos" class="section-list">
+                    <!-- Favorite repos will be populated by JavaScript -->
+                </div>
+            </div>
+            
+            <!-- Folders Section -->
+            <div class="sidebar-section">
+                <div class="section-header">Folders</div>
+                <button id="newFolderBtn" class="section-add-btn">+ New Folder</button>
+                <div id="foldersList" class="section-list">
+                    <!-- Folders will be populated by JavaScript -->
+                </div>
             </div>
             
             <div class="sidebar-footer">
@@ -22,11 +43,24 @@
                     <div id="userAvatar" class="user-avatar">U</div>
                     <div id="userName" class="user-name">User</div>
                 </div>
+                <button id="themeToggle" class="theme-toggle" aria-label="Toggle theme">
+                    <span class="theme-icon">🌙</span>
+                </button>
             </div>
+            
+            <!-- Resize Handle -->
+            <div class="sidebar-resize-handle"></div>
         </aside>
         
         <!-- Main Content -->
         <main class="main-content">
+            <!-- Search Bar at Top -->
+            <div class="top-search-bar">
+                <input type="text" id="repoSearchInput" class="top-search-input" placeholder="Search for repositories...">
+                <span class="search-icon">🔍</span>
+                <button id="closeRepoView" class="close-repo-btn" style="display: none;" title="Back to chat">&times;</button>
+            </div>
+            
             <div class="chat-container">
                 <!-- Welcome Screen -->
                 <div id="welcomeScreen" class="welcome-screen">
@@ -48,6 +82,15 @@
                         <div class="suggestion-card">
                             <div class="suggestion-title">⭐ Trending</div>
                             <div class="suggestion-text">Check out what's popular in open source</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Repository Recommendations View -->
+                <div id="repoRecommendations" class="repo-recommendations" style="display: none;">
+                    <div class="repo-grid-container">
+                        <div id="repoGrid" class="repo-grid">
+                            <!-- Repos will be populated by JavaScript -->
                         </div>
                     </div>
                 </div>
@@ -74,6 +117,25 @@
                 </div>
             </div>
         </main>
+    </div>
+    
+    <!-- Modal Overlay -->
+    <div id="modalOverlay" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle" class="modal-title"></h3>
+                <button id="modalClose" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="modalInput" class="modal-input" placeholder="" style="display: none;">
+                <div id="modalList" class="modal-list" style="display: none;"></div>
+                <p id="modalMessage" class="modal-message" style="display: none;"></p>
+            </div>
+            <div class="modal-footer">
+                <button id="modalCancel" class="modal-btn modal-btn-cancel">Cancel</button>
+                <button id="modalConfirm" class="modal-btn modal-btn-confirm" style="display: none;">Confirm</button>
+            </div>
+        </div>
     </div>
     
     <script src="/src/health.js"></script>

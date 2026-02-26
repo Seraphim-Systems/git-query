@@ -1,0 +1,216 @@
+name: Deploy Webserver (Frontend)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup:
+    name: Setup Repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Clone or Update Repository
+        run: |
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
+          set -e
+          
+          REPO_PATH="/home/${{ secrets.INFRA_HETZNER_USER }}/git-query"
+          
+          # Check if directory exists and is a valid git repo
+          if [ -d "\$REPO_PATH" ]; then
+            if [ -d "\$REPO_PATH/.git" ]; then
+              echo "✅ Valid git repository found"
+              cd "\$REPO_PATH"
+              git fetch origin
+              git reset --hard origin/${{ github.ref_name }}
+              git clean -fd
+            else
+              echo "⚠️  Directory exists but is not a git repository. Removing and re-cloning..."
+              rm -rf "\$REPO_PATH"
+              git clone https://github.com/Seraphim-Systems/git-query.git "\$REPO_PATH"
+              cd "\$REPO_PATH"
+              git checkout ${{ github.ref_name }}
+            fi
+          else
+            echo "📦 Cloning repository..."
+            git clone https://github.com/Seraphim-Systems/git-query.git "\$REPO_PATH"
+            cd "\$REPO_PATH"
+            git checkout ${{ github.ref_name }}
+          fi
+          
+          echo "✅ Repository ready at \$REPO_PATH"
+          ENDSSH
+
+  configure:
+    name: Configure Environment
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Create Environment File
+        run: |
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
+          set -e
+          
+          cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query
+          
+          cat > .env << EOF
+          DB_MONGODB_USER=${{ secrets.DB_MONGODB_USER }}
+          DB_MONGODB_PASSWORD=${{ secrets.DB_MONGODB_PASSWORD }}
+          DB_MONGODB_DATABASE=${{ secrets.DB_MONGODB_DATABASE }}
+          DB_REDIS_PASSWORD=${{ secrets.DB_REDIS_PASSWORD }}
+          DB_QDRANT_API_KEY=${{ secrets.DB_QDRANT_API_KEY }}
+          APIKEY_MONGODB=${{ secrets.APIKEY_MONGODB }}
+          APIKEY_REDIS=${{ secrets.APIKEY_REDIS }}
+          APIKEY_QDRANT=${{ secrets.APIKEY_QDRANT }}
+          APIKEY_MCP=${{ secrets.APIKEY_MCP }}
+          APP_OPENAI_API_KEY=${{ secrets.APP_OPENAI_API_KEY }}
+          APP_SESSION_SECRET=${{ secrets.APP_SESSION_SECRET }}
+          APP_JWT_SECRET=${{ secrets.APP_JWT_SECRET }}
+          SVC_LOG_LEVEL=${{ secrets.SVC_LOG_LEVEL }}
+          SVC_QDRANT_LOG_LEVEL=${{ secrets.SVC_QDRANT_LOG_LEVEL }}
+          EOF
+          
+          # Copy .env to docker directory where compose is run
+          cp .env infrastructure/docker/.env
+          
+          echo "✅ Environment configured"
+          ENDSSH
+
+  deploy:
+    name: Deploy Webserver and Gateway
+    runs-on: ubuntu-latest
+    needs: configure
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Check Dependencies
+        run: |
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
+          set -e
+          
+          echo "🔍 Checking dependencies..."
+          
+          # Check databases
+          if ! docker ps | grep -q "git-query-mongodb"; then
+            echo "❌ MongoDB is not running. Please deploy infrastructure first."
+            exit 1
+          fi
+          if ! docker ps | grep -q "git-query-redis"; then
+            echo "❌ Redis is not running. Please deploy infrastructure first."
+            exit 1
+          fi
+          if ! docker ps | grep -q "git-query-qdrant"; then
+            echo "❌ Qdrant is not running. Please deploy infrastructure first."
+            exit 1
+          fi
+          
+          # Check backend services
+          if ! docker ps | grep -q "git-query-mcp"; then
+            echo "❌ MCP Server is not running. Please deploy MCP first."
+            exit 1
+          fi
+          if ! docker ps | grep -q "git-query-recommender"; then
+            echo "❌ Recommender is not running. Please deploy recommender first."
+            exit 1
+          fi
+          
+          echo "✅ All dependencies verified"
+          ENDSSH
+
+      - name: Deploy Webserver and Gateway
+        run: |
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
+          set -e
+          
+          cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query/infrastructure/docker
+          
+          # Ensure proxy network exists (external network for reverse proxy)
+          echo "🔌 Ensuring proxy network exists..."
+          docker network inspect proxy >/dev/null 2>&1 || docker network create proxy
+          
+          # Deploy gateway (connects to proxy network for external access)
+          echo "🚀 Deploying gateway..."
+          docker compose -f docker-compose.base.yml -f docker-compose.db.yml up -d --build --no-deps gateway
+          
+          # Deploy webserver (connected to web-network only, no host port binding)
+          echo "🚀 Deploying webserver..."
+          docker compose -f docker-compose.base.yml -f docker-compose.frontend.yml up -d --build webserver
+          
+          echo ""
+          echo "📦 Running containers:"
+          docker ps --filter "name=git-query"
+          
+          echo ""
+          echo "🌐 Network connections:"
+          echo "Gateway networks:"
+          docker inspect git-query-gateway --format='{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}'
+          echo "Webserver networks:"
+          docker inspect git-query-webserver --format='{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}'
+          ENDSSH
+
+  verify:
+    name: Verify Deployment
+    runs-on: ubuntu-latest
+    needs: deploy
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Health Check Services
+        run: |
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
+          set -e
+          
+          cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query/infrastructure/docker
+          
+          echo "🔍 Checking service health..."
+          
+          # Check webserver health (internal only)
+          if docker exec git-query-webserver curl -f http://localhost:80/health >/dev/null 2>&1; then
+            echo "✅ Webserver healthy (internal port 80)"
+          else
+            echo "❌ Webserver health check failed"
+            exit 1
+          fi
+          
+          # Check gateway health (internal only)
+          if docker exec git-query-gateway curl -f http://localhost:8000/api/health >/dev/null 2>&1; then
+            echo "✅ Gateway healthy (internal port 8000)"
+          else
+            echo "❌ Gateway health check failed"
+            exit 1
+          fi
+          
+          echo ""
+          echo "✅ Deployment verification complete"
+          echo ""
+          echo "📋 Deployment Summary:"
+          echo "  - Webserver: Listening on internal port 80 (no host binding)"
+          echo "  - Gateway: Listening on internal port 8000, connected to 'proxy' network"
+          echo "  - Traffic flow: External proxy → Gateway (8000) → Webserver (80)"
+          echo ""
+          echo "⚠️  Note: To access the frontend externally, configure your reverse proxy"
+          echo "          (e.g., nginx) to forward traffic to the gateway container on the 'proxy' network."
+          ENDSSH
