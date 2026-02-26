@@ -2,8 +2,10 @@
 
 from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from contextlib import asynccontextmanager
 import logging
+import os
 import time
 from typing import Optional
 from datetime import datetime, timezone
@@ -83,6 +85,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ===== Root Redirect =====
+
+@app.get("/")
+async def root():
+    """Redirect to frontend webserver."""
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:8080")
+    return RedirectResponse(url=frontend_url)
 
 
 # ===== Health Check =====

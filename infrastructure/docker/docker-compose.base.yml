@@ -24,6 +24,8 @@ volumes:
     name: git-query-training-data
   training-logs:
     name: git-query-training-logs
+  huggingface-cache:
+    name: git-query-huggingface-cache
 
 networks:
   db-network:

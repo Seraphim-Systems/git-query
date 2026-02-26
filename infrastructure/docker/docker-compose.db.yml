@@ -101,6 +101,7 @@ services:
       # Backend service URLs for chat and recommendations
       - MCP_SERVER_URL=http://mcp-server:8090
       - RECOMMENDER_URL=http://recommender:8095
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:8080}
       # Cosmos DB removed
     expose:
       - "80"

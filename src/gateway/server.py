@@ -2,6 +2,7 @@
 
 import logging
 from contextlib import asynccontextmanager
+import os
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -175,8 +176,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins_list,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
+    expose_headers=["Set-Cookie"],
 )
 
 # Add custom middleware
@@ -252,6 +254,16 @@ app.include_router(user.router, prefix="/user", tags=["User"])
 app.include_router(mongodb_router.router, prefix="/api")
 app.include_router(redis_router.router, prefix="/api")
 app.include_router(qdrant_router.router, prefix="/api")
+
+
+# Root endpoint - redirect to frontend
+@app.get("/")
+async def root():
+    """Redirect to frontend webserver."""
+    from fastapi.responses import RedirectResponse
+    # In dev: redirect to localhost:8080, in prod: use relative path or configured frontend URL
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:8080")
+    return RedirectResponse(url=frontend_url)
 
 
 # Health check
