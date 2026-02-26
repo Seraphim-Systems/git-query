@@ -54,9 +54,6 @@ services:
 
   web:
     ports: []
-    networks:
-      - internal-network
-      - proxy
 
   training:
     volumes:

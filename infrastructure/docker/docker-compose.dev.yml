@@ -51,8 +51,7 @@ services:
       SVC_NGINX_SERVER_NAME: ""
     # In development, do not attach the gateway to the external `proxy` network.
     networks:
-      - db-network
-      - web-network
+      - internal-network
 
   web:
     ports:
