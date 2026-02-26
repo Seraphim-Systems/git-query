@@ -1,5 +1,6 @@
 const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-const API_BASE = isLocalhost ? 'http://localhost:8080' : '';
+// Use empty string for same-origin (works in both dev and production)
+const API_BASE = '';
 
 // Health monitoring functionality
 class HealthMonitor {
