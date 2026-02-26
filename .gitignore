@@ -228,3 +228,4 @@ CLAUDE.md
 
 models/
 *.parquet
+pytest.ini

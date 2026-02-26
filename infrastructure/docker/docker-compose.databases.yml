@@ -1,0 +1,76 @@
+# Database services only - MongoDB, Redis, Qdrant
+# This follows Single Responsibility: only database infrastructure
+# Usage: docker-compose -f docker-compose.base.yml -f docker-compose.databases.yml up
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: git-query-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${DB_MONGODB_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${DB_MONGODB_PASSWORD:-mongopass}
+      MONGO_INITDB_DATABASE: ${DB_MONGODB_DATABASE:-gitquery}
+    volumes:
+      - mongodb-data:/data/db
+      - mongodb-config:/data/configdb
+      - ../../src/db/inits/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    networks:
+      - internal-network
+    restart: unless-stopped
+    command: mongod --auth
+    expose:
+      - "27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: git-query-redis
+    command: redis-server --requirepass ${DB_REDIS_PASSWORD:-redispass}
+    volumes:
+      - redis-data:/data
+    networks:
+      - internal-network
+    restart: unless-stopped
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  qdrant:
+    image: qdrant/qdrant:v1.7.4
+    container_name: git-query-qdrant
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: 6334
+      QDRANT__LOG_LEVEL: ${SVC_QDRANT_LOG_LEVEL:-INFO}
+    volumes:
+      - qdrant-storage:/qdrant/storage
+      - qdrant-snapshots:/qdrant/snapshots
+    networks:
+      - internal-network
+    restart: unless-stopped
+    expose:
+      - "6333"
+      - "6334"
+
+  qdrant-init:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.qdrant-init
+    container_name: git-query-qdrant-init
+    depends_on:
+      - qdrant
+    environment:
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+    networks:
+      - internal-network
+    restart: "no"

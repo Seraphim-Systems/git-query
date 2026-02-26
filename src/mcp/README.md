@@ -11,7 +11,8 @@ Default port: **8090** (Docker service name: `mcp-server`)
 ```sh
 docker-compose \
   -f infrastructure/docker/docker-compose.base.yml \
-  -f infrastructure/docker/docker-compose.mcp.yml \
+  -f infrastructure/docker/docker-compose.databases.yml \\
+  -f infrastructure/docker/docker-compose.app.yml \\
   up --build
 ```
 

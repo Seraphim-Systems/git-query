@@ -1,5 +1,8 @@
-# MCP (Model Context Protocol) Servers
-# Usage: docker-compose -f docker-compose.base.yml -f docker-compose.mcp.yml up
+# MCP Server + Client stack for local testing
+# Connects to the online DBs via env vars in your .env
+#
+# Usage (from repo root):
+#   docker-compose -f infrastructure/docker/docker-compose.base.yml -f infrastructure/docker/docker-compose.mcp.yml up --build
 
 services:
   mcp-server:
@@ -7,34 +10,46 @@ services:
       context: ../..
       dockerfile: infrastructure/docker/Dockerfile.mcp
     container_name: git-query-mcp
+    env_file:
+      - ../../.env
     environment:
       - MCP_HOST=0.0.0.0
       - MCP_PORT=8090
-      - LOG_LEVEL=${SVC_LOG_LEVEL:-INFO}
-      - MONGODB_URL=mongodb://${DB_MONGODB_USER:-admin}:${DB_MONGODB_PASSWORD:-mongopass}@mongodb:27017/gitquery?authSource=admin
-      - QDRANT_HOST=qdrant
-      - QDRANT_PORT=6333
-      - QDRANT_API_KEY=${DB_QDRANT_API_KEY:-}
-      - REDIS_URL=redis://:${DB_REDIS_PASSWORD:-redispass}@redis:6379
-      - MCP_API_KEY=${APIKEY_MCP}
-      - OPENAI_API_KEY=${APP_OPENAI_API_KEY}
-      - RECOMMENDER_URL=http://recommender:8095
-      - SVC_NGINX_SERVER_NAME=${SVC_NGINX_SERVER_NAME:-}
-    networks:
-      - db-network
-      - web-network
-    restart: unless-stopped
+      - LOG_LEVEL=${SVC_LOG_LEVEL:-DEBUG}
+      - RECOMMENDER_URL=${RECOMMENDER_URL:-http://recommender:8095}
     expose:
       - "8090"
+    networks:
+      - client-network
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 30s
+      start_period: 20s
+
+  client:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.client
+    container_name: git-query-client
+    env_file:
+      - ../../.env
+    environment:
+      - MCP_SERVER_URL=http://mcp-server:8090
+      - LOG_LEVEL=${SVC_LOG_LEVEL:-INFO}
+    depends_on:
+      mcp-server:
+        condition: service_healthy
+    networks:
+      - client-network
+    # Keep stdin/tty open for the interactive CLI
+    stdin_open: true
+    tty: true
+    restart: "no"
 
 networks:
-  db-network:
-    name: git-query-db-network
-  web-network:
-    name: git-query-web-network
+  client-network:
+    name: git-query-client-network
+    driver: bridge
