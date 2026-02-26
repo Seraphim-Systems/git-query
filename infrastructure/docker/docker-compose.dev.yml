@@ -54,6 +54,9 @@ services:
       - internal-network
 
   web:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.web
     ports:
       - "8080:8080"
     environment:
