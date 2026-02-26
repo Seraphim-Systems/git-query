@@ -10,6 +10,8 @@ networks:
 services:
   mongodb:
     ports: []
+    expose:
+      - "27017"
     volumes:
       - ../../volumes/mongodb/data:/data/db
       - ../../volumes/mongodb/config:/data/configdb
@@ -19,6 +21,8 @@ services:
 
   redis:
     ports: []
+    expose:
+      - "6379"
     volumes:
       - ../../volumes/redis/data:/data
     environment:
@@ -26,6 +30,9 @@ services:
 
   qdrant:
     ports: []
+    expose:
+      - "6333"
+      - "6334"
     volumes:
       - ../../volumes/qdrant/storage:/qdrant/storage
       - ../../volumes/qdrant/snapshots:/qdrant/snapshots
@@ -37,7 +44,6 @@ services:
     expose:
       - "80"
     networks:
-      - internal-network
       - proxy
     environment:
       LOG_LEVEL: INFO
@@ -46,11 +52,15 @@ services:
     ports: []
     environment:
       LOG_LEVEL: INFO
+    expose:
+      - "8090"
 
-  mcp-server:
+  api-server:
     ports: []
     environment:
       LOG_LEVEL: INFO
+    expose:
+      - "8080"
 
   web:
     ports: []
