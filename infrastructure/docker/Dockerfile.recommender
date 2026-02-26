@@ -15,18 +15,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf 
 COPY --from=builder /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Set HuggingFace cache directory to use persistent volume
-ENV HF_HOME=/app/.cache/huggingface
-ENV TRANSFORMERS_CACHE=/app/.cache/huggingface
-
-# Models will be downloaded on first run and cached in the volume
-# This avoids re-downloading models on every build (saves 5-10 minutes)
+# Pre-download models at build time so the container starts immediately.
+# Both models use the default HuggingFace cache (~/.cache/huggingface/hub/)
+# which is separate from the /app/models volume (used for custom fine-tuned models).
+RUN python -c "\
+  from sentence_transformers import SentenceTransformer, CrossEncoder; \
+  SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2'); \
+  CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')"
 
 # Copy recommender code and its dependencies
 COPY src/recommender /app/recommender
 COPY src/shared /app/shared
 COPY src/db /app/src/db
-COPY src/shared /app/src/shared
 RUN touch /app/src/__init__.py
 
 # Create directories
@@ -43,14 +43,14 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 
 # Create startup script that downloads models on first run
 RUN printf '#!/bin/bash\n\
-set -e\n\
-if [ ! -f /app/.cache/huggingface/.models_downloaded ]; then\n\
+  set -e\n\
+  if [ ! -f /app/.cache/huggingface/.models_downloaded ]; then\n\
   echo "Downloading ML models (first run only)..."\n\
   python -c "from sentence_transformers import SentenceTransformer, CrossEncoder; SentenceTransformer('"'"'sentence-transformers/all-MiniLM-L6-v2'"'"'); CrossEncoder('"'"'cross-encoder/ms-marco-MiniLM-L-6-v2'"'"')"\n\
   touch /app/.cache/huggingface/.models_downloaded\n\
   echo "Models downloaded and cached"\n\
-fi\n\
-exec python -m recommender\n' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
+  fi\n\
+  exec python -m recommender\n' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 
 # Run via entrypoint script
 CMD ["/app/entrypoint.sh"]

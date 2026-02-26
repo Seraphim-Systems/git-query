@@ -5,7 +5,7 @@ services:
   web:
     build:
       context: ../..
-      dockerfile: infrastructure/docker/Dockerfile.webserver
+      dockerfile: infrastructure/docker/Dockerfile.web
     container_name: git-query-web
     environment:
       WEBSERVER_HOST: 0.0.0.0
