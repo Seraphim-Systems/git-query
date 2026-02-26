@@ -7,6 +7,7 @@ services:
       context: ../..
       dockerfile: infrastructure/docker/Dockerfile.web
     container_name: git-query-web
+    image: git-query-web:latest
     environment:
       WEBSERVER_HOST: 0.0.0.0
       WEBSERVER_PORT: 8080
@@ -16,14 +17,12 @@ services:
       REDIS_URL: redis://:${DB_REDIS_PASSWORD:-redispass}@redis:6379
       QDRANT_HOST: ${QDRANT_HOST:-qdrant}
       QDRANT_PORT: ${QDRANT_HTTP_PORT:-6333}
-    networks:
-      - internal-network
     restart: unless-stopped
-    expose:
-      - "8080"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+    networks:
+      - git-query-internal-network

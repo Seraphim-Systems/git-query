@@ -10,17 +10,14 @@ services:
       context: ../..
       dockerfile: infrastructure/docker/Dockerfile.mcp
     container_name: git-query-mcp
+    image: git-query-mcp-server:latest
     env_file:
-      - ../../.env
+      - .env
     environment:
       - MCP_HOST=0.0.0.0
       - MCP_PORT=8090
       - LOG_LEVEL=${SVC_LOG_LEVEL:-DEBUG}
       - RECOMMENDER_URL=${RECOMMENDER_URL:-http://recommender:8095}
-    expose:
-      - "8090"
-    networks:
-      - client-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
@@ -28,28 +25,27 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+    networks:
+      - git-query-internal-network
 
   client:
     build:
       context: ../..
       dockerfile: infrastructure/docker/Dockerfile.client
     container_name: git-query-client
+    image: git-query-mcp-client:latest
     env_file:
-      - ../../.env
+      - .env
     environment:
       - MCP_SERVER_URL=http://mcp-server:8090
       - LOG_LEVEL=${SVC_LOG_LEVEL:-INFO}
     depends_on:
       mcp-server:
         condition: service_healthy
-    networks:
-      - client-network
     # Keep stdin/tty open for the interactive CLI
     stdin_open: true
     tty: true
     restart: "no"
+    networks:
+      - git-query-internal-network
 
-networks:
-  client-network:
-    name: git-query-client-network
-    driver: bridge
