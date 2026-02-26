@@ -7,6 +7,7 @@ services:
       context: ../..
       dockerfile: infrastructure/docker/Dockerfile.recommender
     container_name: git-query-recommender
+    image: git-query-recommender:latest
     environment:
       RECOMMENDER_HOST: 0.0.0.0
       RECOMMENDER_PORT: 8095
