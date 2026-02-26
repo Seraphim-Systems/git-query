@@ -45,7 +45,7 @@ services:
       # Logs
       - training-logs:/app/logs
     networks:
-      - git-query-internal-network
+      - internal-network
 
 volumes:
   training-models:

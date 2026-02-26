@@ -15,7 +15,7 @@ services:
       - mongodb-config:/data/configdb
       - ../../src/db/inits/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
     networks:
-      - git-query-internal-network
+      - internal-network
     restart: unless-stopped
     command: mongod --auth
     healthcheck:
@@ -32,7 +32,7 @@ services:
     volumes:
       - redis-data:/data
     networks:
-      - git-query-internal-network
+      - internal-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -52,7 +52,7 @@ services:
       - qdrant-snapshots:/qdrant/snapshots
     restart: unless-stopped
     networks:
-      - git-query-internal-network
+      - internal-network
 
   qdrant-init:
     build:
@@ -67,4 +67,4 @@ services:
       QDRANT_PORT: 6333
     restart: "no"
     networks:
-      - git-query-internal-network
+      - internal-network
