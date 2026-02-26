@@ -1,9 +1,8 @@
 name: Deploy to Production
 
-# This workflow deploys the entire application stack to the production server
-# Triggered by: Push to 'prod' branch
-# Deploys: Infrastructure services defined in docker-compose.db.yml
-# Note: Use individual service workflows for pipelines, MCP, reco, and training
+# Single Responsibility: Deploy to production with all services
+# Triggered: Push to 'prod' branch
+# Services: Full stack with persistent volumes and prod overrides
 
 on:
   push:
@@ -11,94 +10,9 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Create .env file from secrets
-        run: |
-          cat > .env.prod <<EOF
-          # Database Credentials
-          DB_MONGODB_USER=${{ secrets.DB_MONGODB_USER }}
-          DB_MONGODB_PASSWORD=${{ secrets.DB_MONGODB_PASSWORD }}
-          DB_MONGODB_DATABASE=${{ secrets.DB_MONGODB_DATABASE }}
-          DB_REDIS_PASSWORD=${{ secrets.DB_REDIS_PASSWORD }}
-          DB_QDRANT_API_KEY=${{ secrets.DB_QDRANT_API_KEY }}
-          # Application Secrets
-          APP_SESSION_SECRET=${{ secrets.APP_SESSION_SECRET }}
-          APP_JWT_SECRET=${{ secrets.APP_JWT_SECRET }}
-          APP_OPENAI_API_KEY=${{ secrets.APP_OPENAI_API_KEY }}
-          # API Keys
-          APIKEY_MONGODB=${{ secrets.APIKEY_MONGODB }}
-          APIKEY_REDIS=${{ secrets.APIKEY_REDIS }}
-          APIKEY_QDRANT=${{ secrets.APIKEY_QDRANT }}
-          # Service Configuration
-          SVC_NGINX_SERVER_NAME=${{ secrets.SVC_NGINX_SERVER_NAME }}
-          SVC_QDRANT_LOG_LEVEL=${{ secrets.SVC_QDRANT_LOG_LEVEL }}
-          SVC_LOG_LEVEL=${{ secrets.SVC_LOG_LEVEL }}
-          EOF
-
-      - name: Copy files to production server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.INFRA_HETZNER_HOST }}
-          username: ${{ secrets.INFRA_HETZNER_USER }}
-          key: ${{ secrets.INFRA_HETZNER_SSH_KEY }}
-          source: ".,.env.prod"
-          target: "/home/${{ secrets.INFRA_HETZNER_USER }}/git-query"
-          strip_components: 0
-          rm: true
-
-      - name: Deploy to production server
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.INFRA_HETZNER_HOST }}
-          username: ${{ secrets.INFRA_HETZNER_USER }}
-          key: ${{ secrets.INFRA_HETZNER_SSH_KEY }}
-          script: |
-            # Clone repository if it doesn't exist
-            if [ ! -d "/home/${{ secrets.INFRA_HETZNER_USER }}/git-query" ]; then
-              git clone https://github.com/Seraphim-Systems/git-query.git /home/${{ secrets.INFRA_HETZNER_USER }}/git-query
-            fi
-            
-            cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query
-            
-            # Move environment file
-            mv .env.prod .env
-            
-            # Stop existing services
-            docker-compose -f infrastructure/docker/docker-compose.base.yml -f infrastructure/docker/docker-compose.db.yml down
-            
-            # Build and start services
-            docker-compose -f infrastructure/docker/docker-compose.base.yml -f infrastructure/docker/docker-compose.db.yml up -d --build
-            
-            # Wait for services to start
-            sleep 10
-            
-            # Show status
-            docker-compose -f infrastructure/docker/docker-compose.base.yml -f infrastructure/docker/docker-compose.db.yml ps
-            
-            # Clean up old images
-            docker system prune -af --volumes=false
-
-      - name: Verify deployment
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.INFRA_HETZNER_HOST }}
-          username: ${{ secrets.INFRA_HETZNER_USER }}
-          key: ${{ secrets.INFRA_HETZNER_SSH_KEY }}
-          script: |
-            cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query
-            echo "Checking service health..."
-            docker-compose -f infrastructure/docker/docker-compose.base.yml -f infrastructure/docker/docker-compose.db.yml ps
-            
-            # Test endpoint
-            curl -f http://localhost/health || exit 1
-            echo "Deployment successful!"
-
-      - name: Clean up
-        if: always()
-        run: rm -f .env.prod
+    uses: ./.github/workflows/reusable-deploy.yml
+    with:
+      compose_files: "-f docker-compose.base.yml -f docker-compose.databases.yml -f docker-compose.gateway.yml -f docker-compose.app.yml -f docker-compose.prod.yml"
+      services: ""
+      health_check_url: "http://localhost/health"
+    secrets: inherit

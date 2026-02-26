@@ -18,16 +18,29 @@ ENV PATH="/app/.venv/bin:$PATH"
 # Pre-download models at build time so the container starts immediately.
 # Both models use the default HuggingFace cache (~/.cache/huggingface/hub/)
 # which is separate from the /app/models volume (used for custom fine-tuned models).
-RUN python -c "\
-from sentence_transformers import SentenceTransformer, CrossEncoder; \
-SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2'); \
-CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')"
+RUN --mount=type=cache,target=/root/.cache/huggingface \
+  --mount=type=cache,target=/root/.cache/pip \
+  python -c "\
+  import sys; \
+  from sentence_transformers import SentenceTransformer, CrossEncoder; \
+  try: \
+  print('Downloading SentenceTransformer model...'); \
+  SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2'); \
+  print('SentenceTransformer model downloaded successfully'); \
+  except Exception as e: \
+  print(f'Warning: Failed to download SentenceTransformer: {e}', file=sys.stderr); \
+  try: \
+  print('Downloading CrossEncoder model...'); \
+  CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2'); \
+  print('CrossEncoder model downloaded successfully'); \
+  except Exception as e: \
+  print(f'Warning: Failed to download CrossEncoder: {e}', file=sys.stderr)" || \
+  echo "Model download warnings are non-fatal - they will be downloaded on first use"
 
 # Copy recommender code and its dependencies
 COPY src/recommender /app/recommender
 COPY src/shared /app/shared
 COPY src/db /app/src/db
-COPY src/shared /app/src/shared
 RUN touch /app/src/__init__.py
 
 # Create directories

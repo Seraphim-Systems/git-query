@@ -7,6 +7,7 @@ services:
       context: ../..
       dockerfile: infrastructure/docker/Dockerfile.training
     container_name: git-query-training
+    image: git-query-training:latest
     environment:
       # API Configuration - REQUIRED in .env file
       - API_BASE_URL=${API_BASE_URL}
@@ -43,6 +44,8 @@ services:
       - training-data:/app/training_data
       # Logs
       - training-logs:/app/logs
+    networks:
+      - internal-network
 
 volumes:
   training-models:

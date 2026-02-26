@@ -45,25 +45,49 @@ Key components (brief)
 
 Running locally (Docker)
 ------------------------
-Recommended: use Docker Compose stacks under `infrastructure/docker`. Compose fragments are split so you can bring up specific groups of services.
+Recommended: use Docker Compose stacks under `infrastructure/docker`. The refactored structure follows SOLID principles:
 
-Example: start MCP + Recommender (development build):
+**Key files:**
+- `docker-compose.base.yml` - shared volumes and networks
+- `docker-compose.databases.yml` - MongoDB, Redis, Qdrant
+- `docker-compose.app.yml` - Gateway, Recommender, MCP Server, Web UI
+- `docker-compose.dev.yml` - development overrides (port bindings, debug logging)
+- `docker-compose.prod.yml` - production overrides (no ports, persistent volumes)
 
-```cmd
-REM from repository root (Windows cmd.exe)
-docker-compose -f infrastructure\docker\docker-compose.base.yml -f infrastructure\docker\docker-compose.reco.yml -f infrastructure\docker\docker-compose.mcp.yml up --build
+**Examples:**
+
+Start full stack (dev):
+```bash
+docker-compose \
+  -f infrastructure/docker/docker-compose.base.yml \
+  -f infrastructure/docker/docker-compose.databases.yml \
+  -f infrastructure/docker/docker-compose.app.yml \
+  -f infrastructure/docker/docker-compose.dev.yml \
+  up
 ```
 
-Example: start MCP + Client (interactive):
-
-```cmd
-docker-compose -f infrastructure\docker\docker-compose.base.yml -f infrastructure\docker\docker-compose.client.yml up --build
+Start MCP Server (with client for interactive testing):
+```bash
+docker-compose \
+  -f infrastructure/docker/docker-compose.base.yml \
+  -f infrastructure/docker/docker-compose.mcp.yml \
+  up --build
 ```
 
-Notes:
+Start recommender only:
+```bash
+docker-compose \
+  -f infrastructure/docker/docker-compose.base.yml \
+  -f infrastructure/docker/docker-compose.databases.yml \
+  -f infrastructure/docker/docker-compose.app.yml \
+  up recommender
+```
+
+**Notes:**
 - Compose files read environment variables from `.env` (or the OS env). Do not commit secrets.
-- The `recommender` service listens on port 8095; `mcp-server` listens on 8090.
-- Compose uses named Docker volumes (e.g., `model-artifacts`) by default. For development it can be helpful to bind-mount a host folder so you can inspect trained models directly.
+- Services communicate over `git-query-internal-network`
+- Development mode exposes ports to host; production mode requires reverse proxy
+- Default ports: Gateway (80), Recommender (8095), MCP Server (8090), Web UI (8080)
 
 
 Training pipeline (fetch → embed → upload)
