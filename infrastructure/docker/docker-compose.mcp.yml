@@ -19,7 +19,7 @@ services:
       - MCP_API_KEY=${APIKEY_MCP}
       - OPENAI_API_KEY=${APP_OPENAI_API_KEY}
       - RECOMMENDER_URL=http://recommender:8095
-      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:8080}
+      - SVC_NGINX_SERVER_NAME=${SVC_NGINX_SERVER_NAME:-}
     networks:
       - db-network
       - web-network

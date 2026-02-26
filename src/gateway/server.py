@@ -17,7 +17,7 @@ from src.gateway.services.user_service import UserService
 from src.gateway.middleware.rate_limit import RateLimitMiddleware
 from src.gateway.middleware.api_key import APIKeyMiddleware
 from src.gateway.middleware.session import SessionMiddleware
-from src.gateway.routers import auth, chat, recommendations, user, health
+from src.gateway.routers import auth, chat, recommendations, user, health, repos
 
 
 # Include DB routers directly in the Gateway so the Gateway serves DB endpoints
@@ -254,15 +254,29 @@ app.include_router(user.router, prefix="/user", tags=["User"])
 app.include_router(mongodb_router.router, prefix="/api")
 app.include_router(redis_router.router, prefix="/api")
 app.include_router(qdrant_router.router, prefix="/api")
+app.include_router(repos.router, prefix="/api")
 
 
-# Root endpoint - redirect to frontend
+# Root endpoint - redirect to frontend (nginx server)
 @app.get("/")
 async def root():
-    """Redirect to frontend webserver."""
+    """Redirect to frontend nginx server.
+    
+    In production: Uses SVC_NGINX_SERVER_NAME from GitHub secrets (e.g., yourdomain.com)
+    In development: Defaults to localhost:8080
+    """
     from fastapi.responses import RedirectResponse
-    # In dev: redirect to localhost:8080, in prod: use relative path or configured frontend URL
-    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:8080")
+    
+    # Get nginx server name from environment (GitHub secret in production)
+    nginx_server = os.getenv("SVC_NGINX_SERVER_NAME", "")
+    
+    if nginx_server:
+        # Production: redirect to nginx server (https assumed)
+        frontend_url = f"https://{nginx_server}"
+    else:
+        # Development: redirect to localhost webserver
+        frontend_url = "http://localhost:8080"
+    
     return RedirectResponse(url=frontend_url)
 
 

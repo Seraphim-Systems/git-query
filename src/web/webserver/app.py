@@ -181,6 +181,14 @@ def api_recommend_feedback():
     return _proxy_to_gateway('/recommend/feedback')
 
 
+@app.route('/api/repos/lookup', methods=['POST', 'OPTIONS'])
+def api_repos_lookup():
+    """Proxy repo ID lookup to the gateway."""
+    if request.method == 'OPTIONS':
+        return '', 204
+    return _proxy_to_gateway('/api/repos/lookup')
+
+
 # ── User endpoints ────────────────────────────────────────────────────────────
 
 @app.route('/api/user/profile', methods=['GET', 'OPTIONS'])

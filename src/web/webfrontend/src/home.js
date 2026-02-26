@@ -226,6 +226,80 @@ document.addEventListener('DOMContentLoaded', () => {
         sendBtn.disabled = true;
     }
     
+    // Detect if a message is asking for repo recommendations
+    function isRecommendationRequest(message) {
+        const lower = message.toLowerCase();
+        const hasRecommendWord = /\b(recommend|suggest|find|show|give me|list|search for|looking for|can you|could you|what are)\b/.test(lower);
+        const hasRepoWord = /\b(repo(s|sitories?)?|project(s)?|librar(y|ies)|package(s)?|tool(s)?|framework(s)?|resource(s)?)\b/.test(lower);
+        return hasRecommendWord && hasRepoWord;
+    }
+
+    // Add AI message that includes inline repo cards
+    function addMessageWithReposToUI(text, topRepos, moreRepos) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message assistant';
+
+        const avatar = document.createElement('div');
+        avatar.className = 'message-avatar';
+        avatar.textContent = 'AI';
+
+        const contentWrapper = document.createElement('div');
+        contentWrapper.className = 'message-content';
+
+        // Text part
+        const textEl = document.createElement('div');
+        textEl.textContent = text;
+        contentWrapper.appendChild(textEl);
+
+        // Top-3 repo cards
+        if (topRepos.length > 0) {
+            const reposSection = document.createElement('div');
+            reposSection.className = 'message-repos';
+
+            const topGrid = document.createElement('div');
+            topGrid.className = 'message-repo-grid';
+            topRepos.forEach(repo => topGrid.appendChild(createRepoCard(repo)));
+            reposSection.appendChild(topGrid);
+
+            // Remaining repos — hidden until user expands
+            if (moreRepos.length > 0) {
+                const moreGrid = document.createElement('div');
+                moreGrid.className = 'message-repos-more';
+                moreRepos.forEach(repo => moreGrid.appendChild(createRepoCard(repo)));
+                reposSection.appendChild(moreGrid);
+
+                const expandBtn = document.createElement('button');
+                expandBtn.className = 'message-repos-expand-btn';
+                expandBtn.textContent = `▼  Show ${moreRepos.length} more results`;
+                let expanded = false;
+                expandBtn.addEventListener('click', () => {
+                    expanded = !expanded;
+                    moreGrid.classList.toggle('visible', expanded);
+                    expandBtn.textContent = expanded
+                        ? `▲  Hide additional results`
+                        : `▼  Show ${moreRepos.length} more results`;
+                    if (expanded) {
+                        moreGrid.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }
+                });
+                reposSection.appendChild(expandBtn);
+            }
+
+            contentWrapper.appendChild(reposSection);
+        }
+
+        messageDiv.appendChild(avatar);
+        messageDiv.appendChild(contentWrapper);
+        messagesContainer.appendChild(messageDiv);
+
+        // Persist text only to chat history (cards are loaded fresh each time)
+        if (currentChatId) {
+            saveChatMessage(currentChatId, text, 'assistant');
+        }
+
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
     // Send message
     async function sendMessage() {
         const message = messageInput.value.trim();
@@ -249,33 +323,71 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!currentChatId) {
             currentChatId = Date.now().toString();
         }
+
+        const isRecoRequest = isRecommendationRequest(message);
         
         try {
-            // Send message to API
-            const response = await fetch(`${API_BASE}/api/chat`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                credentials: 'include',
-                body: JSON.stringify({
-                    message: message,
-                    context: {
-                        chatId: currentChatId
-                    }
-                })
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                const aiResponse = data.response || 'I received your message!';
-                // Add assistant response to UI
-                addMessageToUI(aiResponse, 'assistant');
-                
-                // Update chat history with AI response as title
+            if (isRecoRequest) {
+                // Fire chat + recommendation APIs in parallel
+                const [chatRes, recoRes] = await Promise.all([
+                    fetch(`${API_BASE}/api/chat`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ message, context: { chatId: currentChatId } })
+                    }),
+                    fetch(`${API_BASE}/api/recommend`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({
+                            query: message,
+                            user_id: userId || null,
+                            top_k: 50,
+                            enable_personalization: true,
+                        })
+                    })
+                ]);
+
+                const aiResponse = chatRes.ok
+                    ? ((await chatRes.json()).response || 'Here are some repositories I found:')
+                    : 'Here are some repositories I found:';
+
+                let allRepos = [];
+                if (recoRes.ok) {
+                    const recoData = await recoRes.json();
+                    allRepos = await enrichRepoIds(recoData.recommendations || recoData.results || []);
+                }
+
+                addMessageWithReposToUI(aiResponse, allRepos.slice(0, 3), allRepos.slice(3));
                 updateChatHistory(currentChatId, aiResponse);
+
+                // Fire-and-forget view signal
+                if (userId) {
+                    fetch(`${API_BASE}/api/recommend/feedback`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ repo_id: `search:${message}`, action: 'view' })
+                    }).catch(() => {});
+                }
             } else {
-                addMessageToUI('Sorry, I encountered an error. Please try again.', 'assistant');
+                // Regular chat — no repo results
+                const response = await fetch(`${API_BASE}/api/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ message, context: { chatId: currentChatId } })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const aiResponse = data.response || 'I received your message!';
+                    addMessageToUI(aiResponse, 'assistant');
+                    updateChatHistory(currentChatId, aiResponse);
+                } else {
+                    addMessageToUI('Sorry, I encountered an error. Please try again.', 'assistant');
+                }
             }
         } catch (error) {
             console.error('Error sending message:', error);
@@ -708,6 +820,39 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // Repo Search
+    // Fetch repo_ids from raw_{recommend} result, look them up in MongoDB,
+    // and return fully-normalised repo objects ready for createRepoCard().
+    // Falls back to local field mapping if the lookup endpoint is unavailable.
+    async function enrichRepoIds(rawItems) {
+        const ids = rawItems.map(r => r.repo_id || r.id).filter(Boolean);
+        if (ids.length === 0) return [];
+        try {
+            const res = await fetch(`${API_BASE}/api/repos/lookup`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ repo_ids: ids })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.repos && data.repos.length > 0) return data.repos;
+            }
+        } catch (e) {
+            console.error('Repo enrichment lookup failed:', e);
+        }
+        // Fallback — use whatever the recommend API returned directly
+        return rawItems.map(r => ({
+            id: r.repo_id || r.id || `repo-${Math.random()}`,
+            name: r.name || r.full_name?.split('/')[1] || 'Unknown',
+            owner: r.full_name?.split('/')[0] || r.owner || 'Unknown',
+            description: r.description || 'No description available',
+            stars: r.stars || 0,
+            forks: r.forks || 0,
+            language: r.language || 'Unknown',
+            url: r.url || `https://github.com/${r.full_name || ''}`
+        }));
+    }
+
     async function searchRepos() {
         const query = repoSearchInput.value.trim();
         if (!query) return;
@@ -737,16 +882,9 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (response.ok) {
                 const data = await response.json();
-                const repos = (data.recommendations || data.results || []).map(r => ({
-                    id: r.repo_id || r.id || `repo-${Math.random()}`,
-                    name: r.name || r.full_name?.split('/')[1] || 'Unknown',
-                    owner: r.full_name?.split('/')[0] || r.owner || 'Unknown',
-                    description: r.description || 'No description available',
-                    stars: r.stars || 0,
-                    forks: r.forks || 0,
-                    language: r.language || 'Unknown',
-                    url: r.url || `https://github.com/${r.full_name || ''}`
-                }));
+                console.debug('[search] /api/recommend raw response:', data);
+                const repos = await enrichRepoIds(data.recommendations || data.results || []);
+                console.debug('[search] enriched repos:', repos);
                 
                 if (repos.length > 0) {
                     displayRepos(repos);

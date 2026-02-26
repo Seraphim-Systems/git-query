@@ -26,8 +26,12 @@ import logging
 try:
     from ..scripts.upload_embeddings import EmbeddingUploader
 except ImportError:
-    # When run as `python -m training.unified_pipeline` inside Docker,
-    # the scripts package lives at /app/scripts (sibling directory).
+    # When run directly (e.g. `python unified_pipeline.py`) the parent
+    # package is unknown.  Add the recommender root (parent of training/)
+    # so that `scripts/` is importable as a top-level package.
+    _recommender_root = Path(__file__).resolve().parents[1]
+    if str(_recommender_root) not in sys.path:
+        sys.path.insert(0, str(_recommender_root))
     from scripts.upload_embeddings import EmbeddingUploader
 
 logging.basicConfig(
@@ -283,7 +287,10 @@ class UnifiedTrainingPipeline:
 
     def prepare_repo_text(self, repo: Dict) -> str:
         """Prepare repository text for embedding."""
-        from .utils import prepare_repo_text as _prepare_repo_text
+        try:
+            from .utils import prepare_repo_text as _prepare_repo_text
+        except ImportError:
+            from training.utils import prepare_repo_text as _prepare_repo_text
         return _prepare_repo_text(repo)
 
     def train_embeddings(
@@ -941,8 +948,27 @@ class UnifiedTrainingPipeline:
 
 def main():
     """Main entry point for containerized training."""
-    # Read from environment variables
-    api_base_url = os.getenv("API_BASE_URL")
+    # Auto-load .env files for local development.
+    # Try repo-root .env first, then infrastructure/docker/.env as fallback.
+    try:
+        from dotenv import load_dotenv
+
+        _script_dir = Path(__file__).resolve()
+        # Walk up looking for infrastructure/docker/.env relative to repo root
+        for _parent in _script_dir.parents:
+            _docker_env = _parent / "infrastructure" / "docker" / ".env"
+            if _docker_env.exists():
+                load_dotenv(_docker_env, override=False)
+                break
+            _root_env = _parent / ".env"
+            if _root_env.exists():
+                load_dotenv(_root_env, override=False)
+                break
+    except ImportError:
+        pass
+
+    # Read from environment variables (with local-dev defaults)
+    api_base_url = os.getenv("API_BASE_URL", "http://localhost")
     api_key = os.getenv("APIKEY_MONGODB")
 
     if not api_base_url or not api_key:

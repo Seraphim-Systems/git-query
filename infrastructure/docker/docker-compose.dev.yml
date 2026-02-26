@@ -20,7 +20,7 @@ services:
       - "8095:8095"
     environment:
       LOG_LEVEL: DEBUG
-      FRONTEND_URL: "http://localhost:8080"
+      SVC_NGINX_SERVER_NAME: ""
 
   mcp-server:
     ports:
@@ -35,7 +35,7 @@ services:
       MCP_API_KEY: "${APIKEY_MCP}"
       OPENAI_API_KEY: "${APP_OPENAI_API_KEY}"
       RECOMMENDER_URL: "http://recommender:8095"
-      FRONTEND_URL: "http://localhost:8080"
+      SVC_NGINX_SERVER_NAME: ""
 
   gateway:
     ports:
@@ -48,7 +48,7 @@ services:
       QDRANT_HTTP_PORT: "${QDRANT_HTTP_PORT:-6333}"
       MCP_SERVER_URL: "http://mcp-server:8090"
       RECOMMENDER_URL: "http://recommender:8095"
-      FRONTEND_URL: "http://localhost:8080"
+      SVC_NGINX_SERVER_NAME: ""
     # In development, do not attach the gateway to the external `proxy` network.
     networks:
       - db-network

@@ -101,7 +101,7 @@ services:
       # Backend service URLs for chat and recommendations
       - MCP_SERVER_URL=http://mcp-server:8090
       - RECOMMENDER_URL=http://recommender:8095
-      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:8080}
+      - SVC_NGINX_SERVER_NAME=${SVC_NGINX_SERVER_NAME:-}
       # Cosmos DB removed
     expose:
       - "80"
@@ -113,7 +113,7 @@ services:
     networks:
       - db-network
       - web-network
-      - proxy
+      # - proxy
     restart: unless-stopped
 
 volumes:
@@ -133,6 +133,6 @@ networks:
     driver: bridge
   web-network:
     driver: bridge
-  proxy:
-    external: true
-    name: proxy
+  # proxy:
+  #   external: true
+  #   name: proxy

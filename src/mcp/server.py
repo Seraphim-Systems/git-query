@@ -50,9 +50,19 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
-    """Redirect to frontend webserver."""
+    """Redirect to frontend nginx server.
+    
+    In production: Uses SVC_NGINX_SERVER_NAME from GitHub secrets
+    In development: Defaults to localhost:8080
+    """
     from fastapi.responses import RedirectResponse
-    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:8080")
+    
+    nginx_server = os.getenv("SVC_NGINX_SERVER_NAME", "")
+    if nginx_server:
+        frontend_url = f"https://{nginx_server}"
+    else:
+        frontend_url = "http://localhost:8080"
+    
     return RedirectResponse(url=frontend_url)
 
 

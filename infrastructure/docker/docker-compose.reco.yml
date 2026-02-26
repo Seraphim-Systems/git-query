@@ -16,7 +16,7 @@ services:
       - QDRANT_PORT=6333
       - QDRANT_API_KEY=${DB_QDRANT_API_KEY:-}
       - REDIS_URL=redis://:${DB_REDIS_PASSWORD:-redispass}@redis:6379
-      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:8080}
+      - SVC_NGINX_SERVER_NAME=${SVC_NGINX_SERVER_NAME:-}
     networks:
       - db-network
       - web-network

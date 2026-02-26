@@ -284,34 +284,49 @@ class DatabaseManager:
         limit: int = 100,
         skip: int = 0,
     ) -> List[Dict[str, Any]]:
-        """Search repositories with filters."""
-        if self._gateway_mode:
-            try:
-                result = await self._run_sync(lambda: self._gw_post(
-                    f"/api/mongodb/collections/{settings.repos_collection}/query",
-                    {"filter": query_filter, "limit": limit, "skip": skip},
-                ))
-                return result.get("documents", [])
-            except Exception as exc:
-                logger.warning("Gateway MongoDB search failed (returning empty): %s", exc)
-                return []
-        cursor = (
-            self.db[settings.repos_collection]
-            .find(query_filter)
-            .skip(skip)
-            .limit(limit)
-        )
+        """Search repositories with filters.
 
-        repos = []
-        async for doc in cursor:
-            doc["_id"] = str(doc["_id"])
-            repos.append(doc)
-        return repos
+        Queries repos_collection first; if empty falls back to
+        raw_repos_collection so Kaggle-imported data is always searchable.
+        """
+        collections_to_try = [settings.repos_collection, settings.raw_repos_collection]
+
+        if self._gateway_mode:
+            for collection_name in collections_to_try:
+                try:
+                    result = await self._run_sync(lambda cn=collection_name: self._gw_post(
+                        f"/api/mongodb/collections/{cn}/query",
+                        {"filter": query_filter, "limit": limit, "skip": skip},
+                    ))
+                    docs = result.get("documents", [])
+                    if docs:
+                        return docs
+                except Exception as exc:
+                    logger.warning("Gateway MongoDB search on %s failed: %s", collection_name, exc)
+            return []
+
+        for collection_name in collections_to_try:
+            cursor = (
+                self.db[collection_name]
+                .find(query_filter)
+                .skip(skip)
+                .limit(limit)
+            )
+            repos = []
+            async for doc in cursor:
+                doc["_id"] = str(doc["_id"])
+                repos.append(doc)
+            if repos:
+                return repos
+        return []
 
     async def get_repositories_by_repo_ids(
         self, repo_ids: List[str]
     ) -> Dict[str, Any]:
-        """Fetch full repo metadata from raw_repositories by owner/name IDs.
+        """Fetch full repo metadata from raw_repositories by repo_id / _id.
+
+        kaggle_to_mongo.py sets ``_id = nameWithOwner`` and adds a ``repo_id``
+        field with the same value, so we query by both to be robust.
 
         Returns a mapping of repo_id → document for any IDs found.
         Falls back gracefully on gateway errors.
@@ -319,16 +334,14 @@ class DatabaseManager:
         if not repo_ids:
             return {}
 
-        # Build OR filter: each repo_id is "owner/name", so split and match.
-        conditions = []
-        for rid in repo_ids:
-            parts = rid.split("/", 1)
-            if len(parts) == 2:
-                conditions.append({"owner": parts[0], "name": parts[1]})
-            else:
-                conditions.append({"name": rid})
-
-        query_filter = {"$or": conditions} if len(conditions) > 1 else conditions[0]
+        # Primary: _id field (= nameWithOwner set by kaggle_to_mongo)
+        # Secondary: repo_id field (also set by kaggle_to_mongo)
+        query_filter = {
+            "$or": [
+                {"_id": {"$in": repo_ids}},
+                {"repo_id": {"$in": repo_ids}},
+            ]
+        }
 
         docs: List[Dict[str, Any]] = []
         try:
@@ -341,17 +354,18 @@ class DatabaseManager:
             else:
                 cursor = self.db[settings.raw_repos_collection].find(query_filter).limit(len(repo_ids))
                 async for doc in cursor:
-                    doc.pop("_id", None)
+                    doc["_id"] = str(doc["_id"])
                     docs.append(doc)
         except Exception as exc:
             logger.warning("raw_repositories lookup failed: %s", exc)
             return {}
 
-        return {
-            f"{d.get('owner', '')}/{d.get('name', '')}": d
-            for d in docs
-            if d.get("owner") and d.get("name")
-        }
+        result_map: Dict[str, Any] = {}
+        for d in docs:
+            key = d.get("repo_id") or d.get("_id") or d.get("nameWithOwner", "")
+            if key:
+                result_map[key] = d
+        return result_map
 
     # ===== Vector Search (Qdrant) =====
 

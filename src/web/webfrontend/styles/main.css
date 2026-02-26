@@ -297,6 +297,62 @@ body {
     max-width: 800px;
     width: 100%;
     margin: 0 auto;
+    /* allow the chat-container to scroll when messages overflow */
+    overflow-anchor: none;
+}
+
+/* Inline repo recommendations inside a chat message */
+.message-repos {
+    margin-top: 16px;
+    width: 100%;
+}
+
+.message-repo-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+/* Scale cards down slightly inside a message bubble */
+.message-repo-grid .repo-card {
+    min-height: 150px;
+    padding: 14px;
+    cursor: pointer;
+}
+
+.message-repo-grid .repo-card-title { font-size: 14px; }
+.message-repo-grid .repo-card-description { font-size: 13px; }
+.message-repo-grid .repo-card-stats { font-size: 12px; }
+
+.message-repos-more {
+    display: none;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.message-repos-more.visible { display: grid; }
+
+.message-repos-expand-btn {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    transition: background-color 0.2s, color 0.2s, border-color 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.message-repos-expand-btn:hover {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    border-color: var(--accent-color);
 }
 
 .message {
