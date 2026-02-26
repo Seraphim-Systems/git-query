@@ -11,7 +11,7 @@ jobs:
   deploy:
     uses: ./.github/workflows/reusable-deploy.yml
     with:
-      compose_files: "-f docker-compose.base.yml -f docker-compose.databases.yml -f docker-compose.app.yml"
+      compose_files: "-f docker-compose.base.yml -f docker-compose.databases.yml -f docker-compose.web.yml"
       services: "web"
       health_check_url: "http://localhost:8080/health"
     secrets: inherit
