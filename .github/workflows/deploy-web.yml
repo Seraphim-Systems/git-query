@@ -1,8 +1,8 @@
-name: Deploy Recommendation Engine
+name: Deploy Web Interface
 
-# Single Responsibility: Deploy only the recommender service
+# Single Responsibility: Deploy only the web interface
 # Triggered: Manual workflow dispatch
-# Services: Recommender (with database dependencies)
+# Services: Web (with database dependencies)
 
 on:
   workflow_dispatch:
@@ -12,6 +12,6 @@ jobs:
     uses: ./.github/workflows/reusable-deploy.yml
     with:
       compose_files: "-f docker-compose.base.yml -f docker-compose.databases.yml -f docker-compose.app.yml"
-      services: "recommender"
-      health_check_url: "http://localhost:8095/health"
+      services: "web"
+      health_check_url: "http://localhost:8080/health"
     secrets: inherit

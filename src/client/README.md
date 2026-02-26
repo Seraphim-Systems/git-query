@@ -15,7 +15,7 @@ User  →  CLI  →  Pydantic AI Agent  →  MCPClient  →  MCP Server (:8090)
 ```sh
 docker-compose \
   -f infrastructure/docker/docker-compose.base.yml \
-  -f infrastructure/docker/docker-compose.client.yml \
+  -f infrastructure/docker/docker-compose.mcp.yml \
   run --rm client
 ```
 

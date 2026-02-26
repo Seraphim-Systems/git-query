@@ -1,72 +1,65 @@
-# Production override - do not bind host ports; only expose internal ports
-# Use this with: -f docker-compose.base.yml -f docker-compose.db.yml -f docker-compose.mcp.yml -f docker-compose.reco.yml -f docker-compose.training.yml -f docker-compose.prod.yml
+# Production overrides - no host port binding, persistent volumes, production logging
+# Services communicate only via internal Docker networks
+# Usage: docker-compose -f docker-compose.base.yml -f docker-compose.databases.yml -f docker-compose.app.yml -f docker-compose.prod.yml up
 
+networks:
+  proxy:
+    external: true
+    name: proxy
 
 services:
-  # Ensure no host ports are published in production; bind volumes into project tree
   mongodb:
     ports: []
     volumes:
       - ../../volumes/mongodb/data:/data/db
       - ../../volumes/mongodb/config:/data/configdb
       - ../../src/db/inits/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
-  # cosmos-db removed from production override
+    environment:
+      LOG_LEVEL: INFO
+
+  redis:
+    ports: []
+    volumes:
+      - ../../volumes/redis/data:/data
+    environment:
+      LOG_LEVEL: INFO
 
   qdrant:
     ports: []
     volumes:
       - ../../volumes/qdrant/storage:/qdrant/storage
       - ../../volumes/qdrant/snapshots:/qdrant/snapshots
+    environment:
+      LOG_LEVEL: INFO
 
-  redis:
+  gateway:
     ports: []
-    volumes:
-      - ../../volumes/redis/data:/data
+    expose:
+      - "80"
+    networks:
+      - internal-network
+      - proxy
+    environment:
+      LOG_LEVEL: INFO
+
+  recommender:
+    ports: []
+    environment:
+      LOG_LEVEL: INFO
 
   mcp-server:
     ports: []
     environment:
-      LOG_LEVEL: ${SVC_LOG_LEVEL:-INFO}
-      MONGODB_URL: "mongodb://${DB_MONGODB_USER:-admin}:${DB_MONGODB_PASSWORD:-mongopass}@mongodb:27017/gitquery?authSource=admin"
-      REDIS_URL: "redis://:${DB_REDIS_PASSWORD:-redispass}@redis:6379"
-      QDRANT_HOST: "${QDRANT_HOST:-qdrant}"
-      QDRANT_PORT: "${QDRANT_HTTP_PORT:-6333}"
-      QDRANT_API_KEY: "${DB_QDRANT_API_KEY:-}"
-      MCP_API_KEY: "${APIKEY_MCP}"
-      OPENAI_API_KEY: "${APP_OPENAI_API_KEY}"
-      RECOMMENDER_URL: "http://recommender:8095"
+      LOG_LEVEL: INFO
 
-  gateway:
-    # Do not publish host port 80; only expose container port so reverse proxy
-    # or host networking handles external access. Gateway listens on 80 internally.
+  web:
     ports: []
-    expose:
-      - "80"
-    environment:
-      LOG_LEVEL: ${SVC_LOG_LEVEL:-INFO}
-      REDIS_URL: "redis://:${DB_REDIS_PASSWORD:-redispass}@redis:6379"
-      MONGODB_URL: "mongodb://${DB_MONGODB_USER:-admin}:${DB_MONGODB_PASSWORD:-mongopass}@mongodb:27017/${DB_MONGODB_DATABASE:-gitquery}?authSource=admin"
-      QDRANT_HOST: "${QDRANT_HOST:-qdrant}"
-      QDRANT_HTTP_PORT: "${QDRANT_HTTP_PORT:-6333}"
     networks:
-      - db-network
+      - internal-network
       - proxy
-
-  recommender:
-    volumes:
-      - ../../volumes/recommender/models:/app/models
 
   training:
     volumes:
       - ../../volumes/training/models:/app/models
       - ../../volumes/training/data:/app/training_data
       - ../../volumes/training/logs:/app/logs
-
-networks:
-  db-network:
-    name: git-query-db-network
-  web-network:
-    name: git-query-web-network
-  proxy:
-    external: true
-    name: proxy
