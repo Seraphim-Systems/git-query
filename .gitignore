@@ -229,3 +229,7 @@ CLAUDE.md
 models/
 *.parquet
 pytest.ini
+package.json
+package-lock.json
+
+node_modules/
