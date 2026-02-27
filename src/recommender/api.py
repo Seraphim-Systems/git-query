@@ -2,8 +2,10 @@
 
 from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from contextlib import asynccontextmanager
 import logging
+import os
 import time
 from typing import Optional
 from datetime import datetime, timezone
@@ -83,6 +85,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ===== Root Redirect =====
+
+@app.get("/")
+async def root():
+    """Redirect to frontend nginx server.
+    
+    In production: Uses SVC_NGINX_SERVER_NAME from GitHub secrets
+    In development: Defaults to localhost:8080
+    """
+    nginx_server = os.getenv("SVC_NGINX_SERVER_NAME", "")
+    if nginx_server:
+        frontend_url = f"https://{nginx_server}"
+    else:
+        frontend_url = "http://localhost:8080"
+    
+    return RedirectResponse(url=frontend_url)
 
 
 # ===== Health Check =====

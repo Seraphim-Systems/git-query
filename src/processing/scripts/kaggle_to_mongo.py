@@ -169,6 +169,36 @@ def _post_gateway_bulk_with_retry(
             "failed_docs": left["failed_docs"] + right["failed_docs"],
             "duplicate_docs": left["duplicate_docs"] + right["duplicate_docs"],
         }
+    except httpx.TransportError as exc:
+        if len(documents) <= 1:
+            bad_id = documents[0].get("_id") if documents else None
+            print(
+                f"Skipping document due to connection error ({exc}), _id={bad_id}",
+                flush=True,
+            )
+            return {
+                "upserted": 0,
+                "modified": 0,
+                "failed_docs": len(documents),
+                "duplicate_docs": 0,
+            }
+        print(
+            f"Connection error ({exc}) on batch of {len(documents)}, splitting and retrying...",
+            flush=True,
+        )
+        mid = len(documents) // 2
+        left = _post_gateway_bulk_with_retry(
+            client, bulk_url, headers, database_name, documents[:mid]
+        )
+        right = _post_gateway_bulk_with_retry(
+            client, bulk_url, headers, database_name, documents[mid:]
+        )
+        return {
+            "upserted": left["upserted"] + right["upserted"],
+            "modified": left["modified"] + right["modified"],
+            "failed_docs": left["failed_docs"] + right["failed_docs"],
+            "duplicate_docs": left["duplicate_docs"] + right["duplicate_docs"],
+        }
 
 
 def _post_gateway_insert_with_retry(
@@ -209,6 +239,36 @@ def _post_gateway_insert_with_retry(
                 "failed_docs": len(documents),
                 "duplicate_docs": 0,
             }
+        mid = len(documents) // 2
+        left = _post_gateway_insert_with_retry(
+            client, insert_url, headers, database_name, collection_name, documents[:mid]
+        )
+        right = _post_gateway_insert_with_retry(
+            client, insert_url, headers, database_name, collection_name, documents[mid:]
+        )
+        return {
+            "upserted": 0,
+            "modified": 0,
+            "failed_docs": left["failed_docs"] + right["failed_docs"],
+            "duplicate_docs": left["duplicate_docs"] + right["duplicate_docs"],
+        }
+    except httpx.TransportError as exc:
+        if len(documents) <= 1:
+            bad_id = documents[0].get("_id") if documents else None
+            print(
+                f"Skipping document due to connection error ({exc}), _id={bad_id}",
+                flush=True,
+            )
+            return {
+                "upserted": 0,
+                "modified": 0,
+                "failed_docs": len(documents),
+                "duplicate_docs": 0,
+            }
+        print(
+            f"Connection error ({exc}) on batch of {len(documents)}, splitting and retrying...",
+            flush=True,
+        )
         mid = len(documents) // 2
         left = _post_gateway_insert_with_retry(
             client, insert_url, headers, database_name, collection_name, documents[:mid]

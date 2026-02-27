@@ -9,7 +9,7 @@ FROM base AS builder
 # Install build deps and create a venv
 RUN apt-get update && apt-get install -y --no-install-recommends curl python3-venv && rm -rf /var/lib/apt/lists/*
 
-COPY src/frontend/webserver/requirements.txt /app/requirements.txt
+COPY src/web/webserver/requirements.txt /app/requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
   python -m venv /app/.venv && /app/.venv/bin/pip install --upgrade pip && /app/.venv/bin/pip install --no-cache-dir -r /app/requirements.txt
 
@@ -21,10 +21,10 @@ COPY --from=builder /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 
 # Copy webserver code
-COPY src/frontend/webserver/ /app/webserver/
+COPY src/web/webserver/ /app/webserver/
 
 # Copy webfrontend static files
-COPY src/frontend/webfrontend/ /app/webfrontend/
+COPY src/web/webfrontend/ /app/webfrontend/
 
 # Set working directory to webserver
 WORKDIR /app/webserver

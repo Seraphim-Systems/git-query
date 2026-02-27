@@ -19,6 +19,7 @@ services:
       - "8095:8095"
     environment:
       LOG_LEVEL: DEBUG
+      SVC_NGINX_SERVER_NAME: ""
 
   mcp-server:
       ports:

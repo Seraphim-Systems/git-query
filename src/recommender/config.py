@@ -56,7 +56,7 @@ class RecommenderSettings(BaseSettings):
 
     # A/B Testing
     ab_test_enabled: bool = True
-    default_variant: str = "baseline"
+    default_variant: str = "hybrid"
 
     # Collections
     repos_collection: str = "repositories"

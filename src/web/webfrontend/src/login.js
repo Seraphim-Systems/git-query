@@ -1,7 +1,8 @@
 // Login functionality
 document.addEventListener('DOMContentLoaded', () => {
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    const API_BASE = isLocalhost ? 'http://localhost:80' : '';
+    // Use empty string for same-origin (webserver proxies API calls to gateway)
+    const API_BASE = '';
     const loginForm = document.getElementById('loginForm');
     const emailInput = document.getElementById('email');
     const passwordInput = document.getElementById('password');
@@ -72,17 +73,16 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (response.ok) {
                 showMessage('Login successful! Redirecting...', 'success');
-                // Create temporary session for demo (will be replaced with real session from gateway)
-                const tempUsername = emailInput.value.trim().split('@')[0];
-                localStorage.setItem('sessionId', 'session_' + Date.now());
-                localStorage.setItem('userId', emailInput.value.trim());
-                localStorage.setItem('username', tempUsername);
+                // Store real session info from gateway response
+                localStorage.setItem('sessionId', data.session_id || ('session_' + Date.now()));
+                localStorage.setItem('userId', data.user_id || emailInput.value.trim());
+                localStorage.setItem('username', data.username || emailInput.value.trim().split('@')[0]);
                 // Redirect to home page
                 setTimeout(() => {
                     window.location.href = '/home.html';
                 }, 1000);
             } else {
-                showMessage(data.message || 'Login failed. Please try again.', 'error');
+                showMessage(data.detail || data.message || 'Login failed. Please try again.', 'error');
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Sign In';
             }
