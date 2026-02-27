@@ -38,8 +38,11 @@ RUN --mount=type=cache,target=/root/.cache/huggingface \
   echo "Model download warnings are non-fatal - they will be downloaded on first use"
 
 # Copy recommender code and its dependencies
+# src/db and src/shared are placed under /app/src/ so that their
+# cross-imports (from src.db.config, from src.shared.config) resolve
+# correctly with PYTHONPATH=/app.
 COPY src/recommender /app/recommender
-COPY src/shared /app/shared
+COPY src/shared /app/src/shared
 COPY src/db /app/src/db
 RUN touch /app/src/__init__.py
 
