@@ -3,7 +3,7 @@
 import logging
 from fastapi import Request, HTTPException, status
 from starlette.middleware.base import BaseHTTPMiddleware
-from src.gateway.middleware.shared import PUBLIC_PATHS
+from src.gateway.middleware.shared import PUBLIC_PATHS, SESSION_PATHS
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +16,11 @@ class SessionMiddleware(BaseHTTPMiddleware):
 
         # Skip auth for public endpoints
         if any(request.url.path.startswith(path) for path in PUBLIC_PATHS):
+            return await call_next(request)
+
+        # Only enforce session authentication for user-facing session paths.
+        # API/DB routes are handled by the API-key middleware.
+        if not any(request.url.path.startswith(path) for path in SESSION_PATHS):
             return await call_next(request)
 
         # If API key middleware has already validated an API key for a

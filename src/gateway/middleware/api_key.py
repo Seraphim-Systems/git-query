@@ -4,7 +4,7 @@ import logging
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
-from src.gateway.middleware.shared import PUBLIC_PATHS
+from src.gateway.middleware.shared import PUBLIC_PATHS, SESSION_PATHS
 from src.shared.config import settings
 import os
 
@@ -20,7 +20,12 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         if any(request.url.path.startswith(path) for path in PUBLIC_PATHS):
             return await call_next(request)
 
-        # Enforce API key for all non-public routes
+        # Skip API key check for user-facing session-authenticated routes.
+        # The SessionMiddleware handles auth for these paths instead.
+        if any(request.url.path.startswith(path) for path in SESSION_PATHS):
+            return await call_next(request)
+
+        # Enforce API key for all other non-public routes
         api_key = self._extract_api_key(request)
 
         if not api_key:

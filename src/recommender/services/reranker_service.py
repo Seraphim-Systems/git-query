@@ -146,6 +146,9 @@ class RerankerService:
             scores = await loop.run_in_executor(None, self.model.predict_from_candidates, query, candidates)
         else:
             scores = await loop.run_in_executor(None, self._score_pairs, pairs)
+        # Run reranking in thread pool
+        loop = asyncio.get_running_loop()
+        scores = await loop.run_in_executor(None, self._score_pairs, pairs)
 
         # Attach scores and sort
         for candidate, score in zip(candidates, scores):

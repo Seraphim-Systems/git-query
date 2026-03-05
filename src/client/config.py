@@ -14,11 +14,12 @@ class Settings(BaseSettings):
     )
 
     # MCP Server
-    mcp_server_url: str = "http://localhost:8000"
+    mcp_server_url: str = "http://localhost:8090"
 
-    # OpenAI
+    # OpenAI - reads OPENAI_API_KEY or APP_OPENAI_API_KEY from env
     openai_api_key: str = ""
-    model_name: str = "gpt-4"
+    app_openai_api_key: str = ""
+    model_name: str = "gpt-4o"
 
     # Databases
     mongodb_url: str = ""
@@ -26,6 +27,11 @@ class Settings(BaseSettings):
 
     # Logging
     log_level: str = "INFO"
+
+    @property
+    def resolved_openai_api_key(self) -> str:
+        """Return whichever OpenAI key is set."""
+        return self.openai_api_key or self.app_openai_api_key
 
 
 settings = Settings()

@@ -2,6 +2,7 @@
 
 import logging
 from contextlib import asynccontextmanager
+import os
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -15,7 +16,8 @@ from src.gateway.services.session_manager import SessionManager
 from src.gateway.services.user_service import UserService
 from src.gateway.middleware.rate_limit import RateLimitMiddleware
 from src.gateway.middleware.api_key import APIKeyMiddleware
-from src.gateway.routers import auth, chat, recommendations, user, health
+from src.gateway.middleware.session import SessionMiddleware
+from src.gateway.routers import auth, chat, recommendations, user, health, repos
 
 
 # Include DB routers directly in the Gateway so the Gateway serves DB endpoints
@@ -174,13 +176,15 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins_list,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
+    expose_headers=["Set-Cookie"],
 )
 
 # Add custom middleware
-# Enforce API key auth for non-public endpoints. Session-based auth removed
-# in favor of API-key-only access for all guarded routes.
+# Enforce API key auth for non-public endpoints. Session middleware handles
+# user-facing routes (/chat, /recommend, /user).
+app.add_middleware(SessionMiddleware)
 app.add_middleware(APIKeyMiddleware)
 app.add_middleware(
     RateLimitMiddleware,
@@ -250,6 +254,30 @@ app.include_router(user.router, prefix="/user", tags=["User"])
 app.include_router(mongodb_router.router, prefix="/api")
 app.include_router(redis_router.router, prefix="/api")
 app.include_router(qdrant_router.router, prefix="/api")
+app.include_router(repos.router, prefix="/api")
+
+
+# Root endpoint - redirect to frontend (nginx server)
+@app.get("/")
+async def root():
+    """Redirect to frontend nginx server.
+    
+    In production: Uses SVC_NGINX_SERVER_NAME from GitHub secrets (e.g., yourdomain.com)
+    In development: Defaults to localhost:8080
+    """
+    from fastapi.responses import RedirectResponse
+    
+    # Get nginx server name from environment (GitHub secret in production)
+    nginx_server = os.getenv("SVC_NGINX_SERVER_NAME", "")
+    
+    if nginx_server:
+        # Production: redirect to nginx server (https assumed)
+        frontend_url = f"https://{nginx_server}"
+    else:
+        # Development: redirect to localhost webserver
+        frontend_url = "http://localhost:8080"
+    
+    return RedirectResponse(url=frontend_url)
 
 
 # Health check

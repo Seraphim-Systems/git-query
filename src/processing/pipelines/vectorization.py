@@ -99,24 +99,47 @@ class DataVectorizer:
             return
         
         try:
+            # Dedupe by repo_id to avoid duplicate points in a single batch
+            seen_ids = set()
+            deduped = []
+            skipped = 0
+            for r in records:
+                rid = r.get("repo_id") or r.get("_id") or r.get("id")
+                if not rid:
+                    # skip records without id
+                    skipped += 1
+                    continue
+                if rid in seen_ids:
+                    skipped += 1
+                    logger.debug(f"Skipping duplicate record in batch: {rid}")
+                    continue
+                seen_ids.add(rid)
+                deduped.append(r)
+
+            if skipped:
+                logger.info(f"Skipped {skipped} duplicate/invalid records in batch")
+
+            if not deduped:
+                return
+
             # Generate all embeddings at once (faster)
-            texts = [self._create_embedding_text(r) for r in records]
+            texts = [self._create_embedding_text(r) for r in deduped]
             embeddings = self.model.encode(texts).tolist()
             
             # Create points
             points = []
-            for record, embedding in zip(records, embeddings):
+            for record, embedding in zip(deduped, embeddings):
                 point_id = self._generate_point_id(record["repo_id"])
-                
+
                 point = PointStruct(
                     id=point_id,
                     vector=embedding,
                     payload={
                         "repo_id": record["repo_id"],
-                        "full_name": record["full_name"],
-                        "description": record["description"],
-                        "language": record["language"],
-                        "stars": record["stars"],
+                        "full_name": record.get("full_name"),
+                        "description": record.get("description"),
+                        "language": record.get("language"),
+                        "stars": record.get("stars"),
                         "topics": record.get("topics", []),
                     }
                 )

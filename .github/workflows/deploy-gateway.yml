@@ -1,0 +1,17 @@
+name: Deploy Gateway
+
+# Single Responsibility: Deploy only the API Gateway service
+# Triggered: Manual workflow dispatch
+# Services: Gateway (with database dependencies)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/reusable-deploy.yml
+    with:
+      compose_files: "-f docker-compose.base.yml -f docker-compose.databases.yml -f docker-compose.gateway.yml"
+      services: "gateway"
+      health_check_url: "http://localhost/health"
+    secrets: inherit

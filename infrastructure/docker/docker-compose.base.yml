@@ -1,7 +1,6 @@
-# Base compose file - defines shared networks and volumes
-# Does not deploy any containers - use with individual service compose files
-# Usage: docker-compose -f docker-compose.base.yml -f docker-compose.mongodb.yml up
-services: {}
+# Base compose configuration - defines shared networks and volumes
+# This is the foundation for all other compose files
+# Usage: docker-compose -f docker-compose.base.yml -f <service-compose>.yml up
 
 volumes:
   mongodb-data:
@@ -24,11 +23,12 @@ volumes:
     name: git-query-training-data
   training-logs:
     name: git-query-training-logs
+  huggingface-cache:
+    name: git-query-huggingface-cache
 
 networks:
-  db-network:
-    name: git-query-db-network
+  internal-network:
+    name: git-query-internal-network
     driver: bridge
-  web-network:
-    name: git-query-web-network
-    driver: bridge
+
+services: {}

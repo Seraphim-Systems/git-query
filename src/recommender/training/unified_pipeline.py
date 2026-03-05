@@ -8,22 +8,30 @@ This script:
 """
 
 import json
+import math
 import os
+import sys
 import time
 import requests
 import torch
 import numpy as np
+import hashlib
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
-from datetime import datetime
+from datetime import datetime, timedelta
 from sentence_transformers import SentenceTransformer
+from tqdm import tqdm
 import logging
 
 try:
     from ..scripts.upload_embeddings import EmbeddingUploader
 except ImportError:
-    # When run as `python -m training.unified_pipeline` inside Docker,
-    # the scripts package lives at /app/scripts (sibling directory).
+    # When run directly (e.g. `python unified_pipeline.py`) the parent
+    # package is unknown.  Add the recommender root (parent of training/)
+    # so that `scripts/` is importable as a top-level package.
+    _recommender_root = Path(__file__).resolve().parents[1]
+    if str(_recommender_root) not in sys.path:
+        sys.path.insert(0, str(_recommender_root))
     from scripts.upload_embeddings import EmbeddingUploader
 
 logging.basicConfig(
@@ -109,6 +117,47 @@ class UnifiedTrainingPipeline:
         logger.info(f"✓ Total fetched: {len(all_repos)} repositories")
         return all_repos
 
+    def _stable_id(self, doc: Dict) -> str:
+        """Compute a small stable id for a repository document.
+
+        Uses existing identifiers where possible (`_id`, `id`, `full_name`),
+        falls back to owner/name and finally a content hash.
+        """
+        if not doc:
+            return ""
+
+        if doc.get("_id"):
+            return str(doc["_id"])
+
+        for key in ("nameWithOwner", "full_name", "repo_id", "id"):
+            if doc.get(key):
+                return str(doc[key])
+
+        owner = doc.get("owner") or doc.get("owner_login")
+        name = doc.get("name")
+        if owner and name:
+            return f"{owner}/{name}"
+
+        # Fallback: deterministic hash of the doc
+        payload = json.dumps(doc, sort_keys=True, default=str).encode("utf-8")
+        return hashlib.md5(payload).hexdigest()
+
+    def _dedupe_repositories(self, repositories: List[Dict]) -> List[Dict]:
+        """Remove duplicates by stable id, preserving first occurrence."""
+        seen = set()
+        unique = []
+        for r in repositories:
+            sid = self._stable_id(r)
+            if not sid:
+                # keep items without an id
+                unique.append(r)
+                continue
+            if sid in seen:
+                continue
+            seen.add(sid)
+            unique.append(r)
+        return unique
+
     def _get_total_count(self) -> int:
         """Get total number of repositories."""
         try:
@@ -150,13 +199,13 @@ class UnifiedTrainingPipeline:
                 if actual_docs > count:
                     logger.info(f"Found {actual_docs} repos (count API was wrong)")
                     # Return a large number to force fetching all
-                    return 999999
+                    return 10_000_000
 
             return count
         except Exception as e:
             logger.error(f"Error getting count: {e}")
             # Return large number to try fetching anyway
-            return 999999
+            return 10_000_000
 
     def _fetch_batch(
         self,
@@ -171,7 +220,7 @@ class UnifiedTrainingPipeline:
             "filter": filters or {},
             "limit": limit,
             "skip": skip,
-            "sort": {"stars": -1}
+            "sort": {"_id": 1}
         }
 
         try:
@@ -192,29 +241,33 @@ class UnifiedTrainingPipeline:
 
     def check_for_new_data(self, repositories: List[Dict]) -> Tuple[bool, List[Dict]]:
         """Check if there's new data compared to last training run."""
-        metadata_path = self.models_dir / "metadata" / "training_metadata_latest.json"
+        # Prefer comparing sets of stable ids from latest mapping to detect
+        # additions/removals reliably rather than using counts only.
+        latest_mapping = self.models_dir / "metadata" / "repo_mapping_latest.json"
 
-        if not metadata_path.exists():
-            logger.info("No previous training found - this is the first run")
+        if not latest_mapping.exists():
+            logger.info("No previous mapping found - this is the first run")
             return True, repositories
 
         try:
-            with open(metadata_path, 'r') as f:
-                metadata = json.load(f)
+            with open(latest_mapping, 'r') as f:
+                mapping_list = json.load(f)
 
-            previous_count = metadata.get("num_repos", 0)
-            current_count = len(repositories)
+            prev_ids = {m.get("repo_id") for m in mapping_list if m.get("repo_id")}
+            current_ids = {self._stable_id(r) for r in repositories}
 
-            if current_count > previous_count:
-                new_count = current_count - previous_count
-                logger.info(f"Found {new_count} new repositories since last training")
+            added = current_ids - prev_ids
+            removed = prev_ids - current_ids
+
+            if added or removed:
+                logger.info(f"Detected {len(added)} added, {len(removed)} removed repositories since last training")
                 return True, repositories
             else:
-                logger.info("No new repositories found")
+                logger.info("No repository set changes detected")
                 return False, []
 
         except Exception as e:
-            logger.warning(f"Could not read previous metadata: {e}")
+            logger.warning(f"Could not read previous mapping: {e}")
             return True, repositories
 
     def save_data_cache(self, repositories: List[Dict]):
@@ -234,7 +287,10 @@ class UnifiedTrainingPipeline:
 
     def prepare_repo_text(self, repo: Dict) -> str:
         """Prepare repository text for embedding."""
-        from .utils import prepare_repo_text as _prepare_repo_text
+        try:
+            from .utils import prepare_repo_text as _prepare_repo_text
+        except ImportError:
+            from training.utils import prepare_repo_text as _prepare_repo_text
         return _prepare_repo_text(repo)
 
     def train_embeddings(
@@ -262,12 +318,21 @@ class UnifiedTrainingPipeline:
         logger.info("Preparing repository texts...")
         texts = []
         repo_ids = []
+        repo_hashes = []
 
         for repo in repositories:
             text = self.prepare_repo_text(repo)
             texts.append(text)
-            repo_id = str(repo.get("_id", repo.get("id", "")))
+            repo_id = self._stable_id(repo)
             repo_ids.append(repo_id)
+
+            # Compute lightweight content hash for change detection
+            try:
+                import hashlib as _hashlib
+                h = _hashlib.sha256(text.encode("utf-8")).hexdigest()
+            except Exception:
+                h = ""
+            repo_hashes.append(h)
 
         logger.info(f"✓ Prepared {len(texts)} texts")
 
@@ -300,6 +365,9 @@ class UnifiedTrainingPipeline:
             "normalized": True
         }
 
+        # Include per-repo hashes in metadata for convenient access
+        metadata["repo_hashes"] = repo_hashes
+
         return embeddings, repo_ids, metadata
 
     def save_model(
@@ -325,17 +393,29 @@ class UnifiedTrainingPipeline:
         np.save(latest_path, embeddings)
         logger.info(f"✓ Saved latest: {latest_path}")
 
-        # Save mapping (repo_id -> index)
-        mapping = {repo_id: idx for idx, repo_id in enumerate(repo_ids)}
+        # Save mapping as an explicit list of records [{repo_id, index, hash, full_name}]
+        # This avoids relying on list order and makes uploads resilient.
+        repo_hashes = metadata.get("repo_hashes") or [""] * len(repo_ids)
+        mapping_list = []
+        for idx, repo_id in enumerate(repo_ids):
+            mapping_list.append({
+                "repo_id": repo_id,
+                "index": idx,
+                "hash": repo_hashes[idx] if idx < len(repo_hashes) else "",
+                "full_name": None
+            })
+
         mapping_path = self.models_dir / "metadata" / f"repo_mapping_{timestamp}.json"
         with open(mapping_path, 'w') as f:
-            json.dump(mapping, f, indent=2)
-        logger.info(f"✓ Saved mapping: {mapping_path}")
+            json.dump(mapping_list, f, indent=2)
+        logger.info(f"✓ Saved mapping list: {mapping_path}")
 
-        # Save latest mapping
+        # Save latest mapping atomically
         latest_mapping_path = self.models_dir / "metadata" / "repo_mapping_latest.json"
-        with open(latest_mapping_path, 'w') as f:
-            json.dump(mapping, f, indent=2)
+        tmp_latest = latest_mapping_path.with_suffix('.json.tmp')
+        with open(tmp_latest, 'w') as f:
+            json.dump(mapping_list, f, indent=2)
+        os.replace(tmp_latest, latest_mapping_path)
 
         # Save metadata
         metadata_path = self.models_dir / "metadata" / f"training_metadata_{timestamp}.json"
@@ -343,10 +423,12 @@ class UnifiedTrainingPipeline:
             json.dump(metadata, f, indent=2)
         logger.info(f"✓ Saved metadata: {metadata_path}")
 
-        # Save latest metadata
+        # Save latest metadata atomically
         latest_metadata_path = self.models_dir / "metadata" / "training_metadata_latest.json"
-        with open(latest_metadata_path, 'w') as f:
+        tmp_meta = latest_metadata_path.with_suffix('.json.tmp')
+        with open(tmp_meta, 'w') as f:
             json.dump(metadata, f, indent=2)
+        os.replace(tmp_meta, latest_metadata_path)
 
         logger.info("=" * 60)
         logger.info("✓ MODEL SAVED SUCCESSFULLY")
@@ -454,6 +536,328 @@ class UnifiedTrainingPipeline:
         logger.info("")
         logger.info("=" * 60)
 
+    def _embed_chunk_parallel(
+        self,
+        texts: List[str],
+        model: "SentenceTransformer",
+        batch_size: int = 32,
+        pool=None,
+    ) -> np.ndarray:
+        """Embed texts using a pre-loaded model, optionally via a multi-process pool.
+
+        Args:
+            texts: List of strings to embed.
+            model: Pre-loaded SentenceTransformer instance (avoid re-loading per chunk).
+            batch_size: Encoding batch size per worker.
+            pool: Optional multiprocessing pool from model.start_multi_process_pool().
+                  When provided, uses encode_multi_process for CPU parallelism.
+
+        Returns:
+            Normalized numpy array of shape (len(texts), embedding_dim).
+        """
+        if pool is not None and len(texts) >= 2000:
+            embeddings = model.encode_multi_process(texts, pool, batch_size=batch_size)
+            # encode_multi_process does not support normalize_embeddings — normalize post-hoc
+            norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+            norms = np.where(norms == 0, 1.0, norms)
+            embeddings = (embeddings / norms).astype(np.float32)
+        else:
+            embeddings = model.encode(
+                texts,
+                batch_size=batch_size,
+                show_progress_bar=True,
+                convert_to_numpy=True,
+                normalize_embeddings=True,
+            )
+        return embeddings
+
+    def _save_mapping(self, mapping_list: List[Dict], timestamp: str):
+        """Persist a mapping list and atomically update repo_mapping_latest.json."""
+        mapping_path = self.models_dir / "metadata" / f"repo_mapping_{timestamp}.json"
+        with open(mapping_path, "w") as f:
+            json.dump(mapping_list, f, indent=2)
+        logger.info(f"✓ Saved mapping: {mapping_path}")
+
+        latest = self.models_dir / "metadata" / "repo_mapping_latest.json"
+        tmp = latest.with_suffix(".json.tmp")
+        with open(tmp, "w") as f:
+            json.dump(mapping_list, f, indent=2)
+        os.replace(tmp, latest)
+        logger.info(f"✓ Updated latest mapping ({len(mapping_list):,} entries)")
+
+    def run_chunked(
+        self,
+        model_name: str = "sentence-transformers/all-MiniLM-L6-v2",
+        batch_size: int = 32,
+        fetch_batch_size: int = 500,
+        chunk_size: int = 100_000,
+        max_repos: Optional[int] = None,
+        skip_if_no_new_data: bool = True,
+        n_workers: int = 1,
+    ):
+        """Streaming chunked pipeline for large-scale embedding generation.
+
+        Processes repos in windows of `chunk_size` to bound peak RAM usage.
+        Each window: fetch → in-chunk dedupe → cross-chunk dedupe → cross-run
+        dedupe → embed → upload direct from RAM → free. The model and its
+        multi-process pool (when n_workers > 1) are initialized once and
+        reused across all chunks.
+
+        Peak RAM: O(chunk_size * embedding_dim * 4 bytes)
+            e.g. 100K chunks → ~150 MB for embeddings, vs ~6.5 GB for all at once.
+
+        Deduplication contract (same as run()):
+            1. In-chunk: _dedupe_repositories() with stable_id — preserves first occurrence.
+            2. Cross-chunk: seen_ids set tracks all repo IDs embedded this run.
+            3. Cross-run: prev_ids from repo_mapping_latest.json skips already-indexed repos.
+        """
+        logger.info("")
+        print(f"\n{'═' * 60}", flush=True)
+        print(f"  UNIFIED TRAINING PIPELINE  ·  chunked mode", flush=True)
+        print(f"{'═' * 60}", flush=True)
+        print(f"  API        {self.api_base_url}", flush=True)
+        print(f"  Model      {model_name}", flush=True)
+        print(f"  Chunk size {chunk_size:,} repos", flush=True)
+        print(f"  Workers    {n_workers}", flush=True)
+        print(f"  Max repos  {max_repos or 'all'}", flush=True)
+        print(f"{'═' * 60}\n", flush=True)
+
+        start_time = time.time()
+        run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # --- Load previous mapping for cross-run dedup (same logic as check_for_new_data) ---
+        prev_ids: set = set()
+        latest_mapping = self.models_dir / "metadata" / "repo_mapping_latest.json"
+        if latest_mapping.exists():
+            try:
+                with open(latest_mapping) as f:
+                    prev_mapping = json.load(f)
+                prev_ids = {m.get("repo_id") for m in prev_mapping if m.get("repo_id")}
+                logger.info(f"Loaded {len(prev_ids):,} previously indexed IDs (cross-run dedup)")
+            except Exception as e:
+                logger.warning(f"Could not load previous mapping: {e}")
+        else:
+            logger.info("No previous mapping — treating as first run")
+
+        # --- Resolve total to process ---
+        total_repos = self._get_total_count()
+        if max_repos:
+            total_repos = min(total_repos, max_repos)
+        total_chunks = math.ceil(total_repos / chunk_size)
+        logger.info(f"Total repositories to process: {total_repos:,}")
+        print(f"  Total repos  {total_repos:,}  ·  {total_chunks} chunks\n", flush=True)
+
+        # --- Set up uploader (direct RAM → Qdrant, no disk round-trip) ---
+        qdrant_api_key = os.getenv("APIKEY_QDRANT", self.api_key)
+        collection = os.getenv("QDRANT_COLLECTION", "repositories_embeddings")
+        upload_batch_size = int(os.getenv("UPLOAD_BATCH_SIZE", "100"))
+        skip_qdrant = os.getenv("SKIP_QDRANT_UPLOAD", "false").lower() == "true"
+
+        uploader = EmbeddingUploader(
+            base_url=self.api_base_url,
+            qdrant_api_key=qdrant_api_key,
+            models_dir=str(self.models_dir),
+        )
+        if not skip_qdrant:
+            uploader.ensure_collection(collection, vector_size=384)
+
+        # --- Load model once; start multi-process pool if requested ---
+        logger.info("Loading embedding model...")
+        model = SentenceTransformer(model_name, device=self.device)
+        logger.info("✓ Model loaded")
+
+        pool = None
+        if n_workers > 1 and self.device == "cpu":
+            logger.info(f"Starting multi-process pool with {n_workers} CPU workers...")
+            pool = model.start_multi_process_pool(["cpu"] * n_workers)
+
+        # --- State across chunks ---
+        seen_ids: set = set()         # Cross-chunk dedup within this run
+        mapping_accumulator: List[Dict] = []
+        total_fetched = 0
+        total_embedded = 0
+        total_uploaded = 0
+        chunk_num = 0
+        offset = 0
+
+        # Overall progress bar
+        overall_bar = tqdm(
+            total=total_repos,
+            desc="  Overall",
+            unit="repo",
+            dynamic_ncols=True,
+            bar_format=(
+                "  {desc}: {percentage:5.1f}%  [{bar:30}]  "
+                "{n_fmt}/{total_fmt}  elapsed {elapsed}  eta {remaining}"
+            ),
+            file=sys.stdout,
+        )
+
+        try:
+            while offset < total_repos:
+                chunk_num += 1
+                fetch_limit = min(chunk_size, total_repos - offset)
+
+                overall_bar.write(
+                    f"\n  ── Chunk {chunk_num}/{total_chunks}  "
+                    f"repos {offset+1:,}–{offset+fetch_limit:,} ──"
+                )
+                logger.info(f"CHUNK {chunk_num}/{total_chunks} — repos {offset+1:,}–{offset+fetch_limit:,}")
+
+                # Fetch chunk in sub-batches (keeps individual requests small)
+                chunk_repos: List[Dict] = []
+                sub_offset = offset
+                while sub_offset < offset + fetch_limit:
+                    sub_limit = min(fetch_batch_size, offset + fetch_limit - sub_offset)
+                    batch = self._fetch_batch(skip=sub_offset, limit=sub_limit)
+                    if not batch:
+                        logger.warning(f"Empty response at offset {sub_offset}, ending chunk early")
+                        break
+                    chunk_repos.extend(batch)
+                    sub_offset += fetch_batch_size
+                    time.sleep(0.05)  # Polite rate limit (vs 0.1 in original)
+
+                total_fetched += len(chunk_repos)
+                logger.info(f"Fetched {len(chunk_repos):,} repos")
+
+                if not chunk_repos:
+                    offset += fetch_limit
+                    continue
+
+                # 1. In-chunk dedup — same _dedupe_repositories() as run()
+                before = len(chunk_repos)
+                chunk_repos = self._dedupe_repositories(chunk_repos)
+                removed = before - len(chunk_repos)
+                if removed:
+                    logger.info(f"Removed {removed:,} in-chunk duplicates")
+
+                # 2. Cross-chunk dedup — exclude repos already embedded in a prior chunk
+                chunk_repos = [r for r in chunk_repos if self._stable_id(r) not in seen_ids]
+                logger.info(f"After cross-chunk dedup: {len(chunk_repos):,} repos remain")
+
+                # 3. Cross-run dedup — skip already-indexed repos (same contract as check_for_new_data)
+                if skip_if_no_new_data and prev_ids:
+                    before_run = len(chunk_repos)
+                    chunk_repos = [r for r in chunk_repos if self._stable_id(r) not in prev_ids]
+                    skipped = before_run - len(chunk_repos)
+                    if skipped:
+                        logger.info(f"Skipped {skipped:,} already-indexed repos (cross-run dedup)")
+
+                # Update seen_ids so later chunks don't re-process these
+                for r in chunk_repos:
+                    seen_ids.add(self._stable_id(r))
+
+                if not chunk_repos:
+                    logger.info(f"Chunk {chunk_num}: nothing new — skipping embed/upload")
+                    offset += fetch_limit
+                    continue
+
+                # 4. Embed
+                texts = [self.prepare_repo_text(r) for r in chunk_repos]
+                repo_ids = [self._stable_id(r) for r in chunk_repos]
+
+                logger.info(f"Embedding {len(texts):,} texts...")
+                embed_start = time.time()
+                embeddings = self._embed_chunk_parallel(
+                    texts=texts,
+                    model=model,
+                    batch_size=batch_size,
+                    pool=pool,
+                )
+                embed_elapsed = time.time() - embed_start
+                embed_speed = len(embeddings) / embed_elapsed
+                logger.info(
+                    f"✓ {len(embeddings):,} embeddings in {embed_elapsed:.1f}s "
+                    f"({embed_speed:.0f} repos/sec)"
+                )
+                total_embedded += len(embeddings)
+                overall_bar.update(len(embeddings))
+
+                # 5. Upload direct from RAM (no disk write for this chunk)
+                if not skip_qdrant:
+                    logger.info(f"Uploading {len(embeddings):,} points to Qdrant...")
+                    upload_start = time.time()
+                    chunk_uploaded = 0
+
+                    for i in range(0, len(embeddings), upload_batch_size):
+                        batch_ids = repo_ids[i:i + upload_batch_size]
+                        batch_vecs = embeddings[i:i + upload_batch_size]
+                        points = [
+                            {
+                                "id": rid,
+                                "vector": batch_vecs[j].tolist(),
+                                "payload": {
+                                    "repo_id": rid,
+                                    "model": model_name,
+                                    "run": run_timestamp,
+                                },
+                            }
+                            for j, rid in enumerate(batch_ids)
+                        ]
+                        result = uploader.upload_batch(collection, points)
+                        if result.get("status") != "error":
+                            chunk_uploaded += len(points)
+                        else:
+                            logger.error(f"Upload batch failed: {result.get('error')}")
+
+                    upload_elapsed = time.time() - upload_start
+                    upload_speed = chunk_uploaded / upload_elapsed if upload_elapsed > 0 else 0
+                    logger.info(
+                        f"✓ Uploaded {chunk_uploaded:,}/{len(embeddings):,} in {upload_elapsed:.1f}s"
+                    )
+                    total_uploaded += chunk_uploaded
+                    overall_bar.write(
+                        f"  ✓ chunk {chunk_num}/{total_chunks}  "
+                        f"embed {embed_speed:.0f} r/s  ·  "
+                        f"upload {upload_speed:.0f} pts/s  ·  "
+                        f"total embedded {total_embedded:,}"
+                    )
+                else:
+                    logger.info("Skipping Qdrant upload (SKIP_QDRANT_UPLOAD=true)")
+
+                # 6. Accumulate mapping (for cross-run dedup on next run)
+                global_base = len(mapping_accumulator)
+                for local_idx, rid in enumerate(repo_ids):
+                    mapping_accumulator.append({
+                        "repo_id": rid,
+                        "index": global_base + local_idx,
+                        "hash": "",
+                        "full_name": None,
+                    })
+
+                # Checkpoint after every chunk so a crash doesn't lose progress
+                self._save_mapping(mapping_accumulator, run_timestamp)
+
+                # 7. Free chunk memory before next iteration
+                del embeddings, texts, chunk_repos
+
+                offset += fetch_limit
+
+        finally:
+            overall_bar.close()
+            if pool is not None:
+                model.stop_multi_process_pool(pool)
+                logger.info("Multi-process pool stopped")
+
+        # --- Persist final mapping so next run can skip these repos ---
+        if mapping_accumulator:
+            self._save_mapping(mapping_accumulator, run_timestamp)
+
+        total_time = time.time() - start_time
+        elapsed_str = str(timedelta(seconds=int(total_time)))
+        avg_speed = total_embedded / total_time if total_time > 0 else 0
+
+        print(f"\n{'═' * 60}", flush=True)
+        print(f"  ✓ PIPELINE COMPLETE", flush=True)
+        print(f"{'═' * 60}", flush=True)
+        print(f"  Time       {elapsed_str}", flush=True)
+        print(f"  Chunks     {chunk_num}/{total_chunks}", flush=True)
+        print(f"  Fetched    {total_fetched:,}", flush=True)
+        print(f"  Embedded   {total_embedded:,}  ({avg_speed:.0f} repos/sec avg)", flush=True)
+        print(f"  Uploaded   {total_uploaded:,}", flush=True)
+        print(f"{'═' * 60}\n", flush=True)
+        logger.info(f"Chunked pipeline done — {total_embedded:,} embedded, {total_uploaded:,} uploaded in {elapsed_str}")
+
     def run(
         self,
         model_name: str = "sentence-transformers/all-MiniLM-L6-v2",
@@ -485,6 +889,13 @@ class UnifiedTrainingPipeline:
             if not repositories:
                 logger.error("❌ No repositories fetched - cannot train!")
                 return
+
+            # Deduplicate fetched repositories (avoid page/pull duplicates)
+            before_count = len(repositories)
+            repositories = self._dedupe_repositories(repositories)
+            removed = before_count - len(repositories)
+            if removed:
+                logger.info(f"Removed {removed} duplicate repositories before training")
 
             # Step 2: Check for new data
             if skip_if_no_new_data:
@@ -537,8 +948,27 @@ class UnifiedTrainingPipeline:
 
 def main():
     """Main entry point for containerized training."""
-    # Read from environment variables
-    api_base_url = os.getenv("API_BASE_URL")
+    # Auto-load .env files for local development.
+    # Try repo-root .env first, then infrastructure/docker/.env as fallback.
+    try:
+        from dotenv import load_dotenv
+
+        _script_dir = Path(__file__).resolve()
+        # Walk up looking for infrastructure/docker/.env relative to repo root
+        for _parent in _script_dir.parents:
+            _docker_env = _parent / "infrastructure" / "docker" / ".env"
+            if _docker_env.exists():
+                load_dotenv(_docker_env, override=False)
+                break
+            _root_env = _parent / ".env"
+            if _root_env.exists():
+                load_dotenv(_root_env, override=False)
+                break
+    except ImportError:
+        pass
+
+    # Read from environment variables (with local-dev defaults)
+    api_base_url = os.getenv("API_BASE_URL", "http://localhost")
     api_key = os.getenv("APIKEY_MONGODB")
 
     if not api_base_url or not api_key:
@@ -554,20 +984,42 @@ def main():
     max_repos = int(max_repos) if max_repos else None
     skip_if_no_new_data = os.getenv("SKIP_IF_NO_NEW_DATA", "true").lower() == "true"
 
+    # Chunked pipeline config
+    use_chunked = os.getenv("USE_CHUNKED_PIPELINE", "true").lower() == "true"
+    chunk_size = int(os.getenv("CHUNK_SIZE", "100000"))
+    n_workers = os.getenv("N_WORKERS")
+    n_workers = int(n_workers) if n_workers else (os.cpu_count() or 1)
+
+    models_dir = os.getenv("MODELS_DIR", "./models")
+    data_cache_dir = os.getenv("DATA_CACHE_DIR", "./training_data")
+
     # Initialize pipeline
     pipeline = UnifiedTrainingPipeline(
         api_base_url=api_base_url,
-        api_key=api_key
+        api_key=api_key,
+        models_dir=models_dir,
+        data_cache_dir=data_cache_dir,
     )
 
-    # Run pipeline
-    pipeline.run(
-        model_name=model_name,
-        batch_size=batch_size,
-        fetch_batch_size=fetch_batch_size,
-        max_repos=max_repos,
-        skip_if_no_new_data=skip_if_no_new_data
-    )
+    # Route to chunked or original pipeline
+    if use_chunked:
+        pipeline.run_chunked(
+            model_name=model_name,
+            batch_size=batch_size,
+            fetch_batch_size=fetch_batch_size,
+            chunk_size=chunk_size,
+            max_repos=max_repos,
+            skip_if_no_new_data=skip_if_no_new_data,
+            n_workers=n_workers,
+        )
+    else:
+        pipeline.run(
+            model_name=model_name,
+            batch_size=batch_size,
+            fetch_batch_size=fetch_batch_size,
+            max_repos=max_repos,
+            skip_if_no_new_data=skip_if_no_new_data,
+        )
 
 
 if __name__ == "__main__":

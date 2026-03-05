@@ -51,7 +51,17 @@ class EmbeddingUploader:
 
         with open(mapping_path, 'r') as f:
             mapping = json.load(f)
-        logger.info(f"Loaded mapping: {len(mapping)} repositories")
+
+        # Support mapping as legacy dict {repo_id: index} or new list format
+        if isinstance(mapping, dict):
+            # convert to list format
+            mapping_list = [{"repo_id": k, "index": int(v), "hash": "", "full_name": None} for k, v in mapping.items()]
+        elif isinstance(mapping, list):
+            mapping_list = mapping
+        else:
+            raise ValueError("Unknown mapping format")
+
+        logger.info(f"Loaded mapping: {len(mapping_list)} repositories")
 
         # Load metadata
         metadata_path = self.models_dir / "metadata" / "training_metadata_latest.json"
@@ -61,7 +71,7 @@ class EmbeddingUploader:
                 metadata = json.load(f)
             logger.info("Loaded metadata")
 
-        return embeddings, mapping, metadata
+        return embeddings, mapping_list, metadata
 
     def ensure_collection(self, collection: str, vector_size: int = 384):
         """Create the Qdrant collection if it does not already exist."""
@@ -129,29 +139,59 @@ class EmbeddingUploader:
         vector_size = embeddings.shape[1] if len(embeddings.shape) > 1 else 384
         self.ensure_collection(collection, vector_size=vector_size)
 
-        # Prepare points
+        # Prepare points from mapping list
         logger.info(f"Preparing {len(mapping)} points...")
 
-        repo_ids = list(mapping.keys())
-        total_points = len(repo_ids)
+        # Deduplicate mapping by repo_id (preserve first occurrence)
+        seen = set()
+        deduped = []
+        for m in mapping:
+            rid = m.get("repo_id")
+            if not rid:
+                logger.warning("Skipping mapping entry with empty repo_id")
+                continue
+            if rid in seen:
+                logger.warning(f"Duplicate mapping entry for repo_id {rid} - skipping subsequent occurrence")
+                continue
+            seen.add(rid)
+            deduped.append(m)
+
+        total_points = len(deduped)
         uploaded = 0
 
         # Upload in batches
         for i in range(0, total_points, batch_size):
-            batch_ids = repo_ids[i:i+batch_size]
+            batch = deduped[i:i+batch_size]
             batch_points = []
 
-            for repo_id in batch_ids:
-                idx = mapping[repo_id]
-                vector = embeddings[idx].tolist()
+            for entry in batch:
+                repo_id = entry.get("repo_id")
+                idx = entry.get("index")
+                hsh = entry.get("hash")
 
+                if idx is None:
+                    logger.warning(f"No index for repo {repo_id}, skipping")
+                    continue
+
+                try:
+                    idx_int = int(idx)
+                except (TypeError, ValueError):
+                    logger.warning(f"Invalid index for repo {repo_id}: {idx}, skipping")
+                    continue
+
+                if idx_int < 0 or idx_int >= embeddings.shape[0]:
+                    logger.warning(f"Index out of range for repo {repo_id}: {idx_int}, skipping")
+                    continue
+
+                vector = embeddings[idx_int].tolist()
                 point = {
                     "id": repo_id,
                     "vector": vector,
                     "payload": {
                         "repo_id": repo_id,
                         "model": metadata.get("model_name", "unknown"),
-                        "timestamp": metadata.get("timestamp", "unknown")
+                        "timestamp": metadata.get("timestamp", "unknown"),
+                        "hash": hsh
                     }
                 }
                 batch_points.append(point)

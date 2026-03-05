@@ -1,7 +1,8 @@
 // Register functionality
 document.addEventListener('DOMContentLoaded', () => {
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    const API_BASE = isLocalhost ? 'http://localhost:80' : '';
+    // Use empty string for same-origin (webserver proxies API calls to gateway)
+    const API_BASE = '';
     const registerForm = document.getElementById('registerForm');
     const nameInput = document.getElementById('name');
     const emailInput = document.getElementById('email');
@@ -89,7 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 },
                 credentials: 'include',
                 body: JSON.stringify({
-                    name: nameInput.value.trim(),
+                    username: nameInput.value.trim(),
                     email: emailInput.value.trim(),
                     password: passwordInput.value,
                 }),
@@ -99,18 +100,17 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (response.ok) {
                 showMessage('Account created successfully! Signing you in...', 'success');
-                // Create a temporary session with the registered email and username
-                const tempUsername = nameInput.value.trim() || emailInput.value.trim().split('@')[0];
-                localStorage.setItem('sessionId', 'session_' + Date.now());
-                localStorage.setItem('userId', emailInput.value.trim());
-                localStorage.setItem('username', tempUsername);
+                // Store real session info from gateway response
+                localStorage.setItem('sessionId', data.session_id || ('session_' + Date.now()));
+                localStorage.setItem('userId', data.user_id || emailInput.value.trim());
+                localStorage.setItem('username', data.username || nameInput.value.trim());
                 
                 // Redirect to home page
                 setTimeout(() => {
                     window.location.href = '/home.html';
                 }, 2000);
             } else {
-                showMessage(data.message || 'Registration failed. Please try again.', 'error');
+                showMessage(data.detail || data.message || 'Registration failed. Please try again.', 'error');
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Create Account';
             }
