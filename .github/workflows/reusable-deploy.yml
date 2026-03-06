@@ -87,6 +87,15 @@ jobs:
           # docker-compose services that use `env_file: .env` require the file
           # to exist in the compose working directory.
           cp /tmp/deploy.env .env
+          # Fix network label mismatch from docker-compose v1 -> docker compose v2 migration.
+          # v1 set com.docker.compose.network=<full-name>; v2 expects the compose key name.
+          # If the old label is present, tear down first so the network is recreated correctly.
+          NETLABEL=$(docker network inspect git-query-internal-network --format '{{ index .Labels "com.docker.compose.network" }}' 2>/dev/null || true)
+          if [ "$NETLABEL" = "git-query-internal-network" ]; then
+            echo "Removing mis-labeled network from docker-compose v1..."
+            docker compose ${{ inputs.compose_files }} down || true
+            docker network rm git-query-internal-network || true
+          fi
           docker compose ${{ inputs.compose_files }} up -d --build ${{ inputs.services }}
           sleep 5
           ENDSSH
