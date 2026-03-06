@@ -1,5 +1,11 @@
 # Development override - exposes ports to host for debugging
 
+networks:
+  # Override the external proxy network for local dev so docker compose creates
+  # it automatically instead of requiring a pre-existing external network.
+  proxy:
+    external: false
+
 services:
   mongodb:
     ports:

@@ -43,8 +43,6 @@ services:
     ports: []
     expose:
       - "80"
-    networks:
-      - proxy
     environment:
       LOG_LEVEL: INFO
 
