@@ -13,6 +13,7 @@ jobs:
     with:
       compose_files: "-f docker-compose.base.yml -f docker-compose.databases.yml -f docker-compose.gateway.yml"
       services: "gateway"
-      # Port 80 is not exposed to the host in production; exec into the container.
-      health_check_command: "docker exec git-query-gateway curl -f http://localhost/health"
+      # Use docker inspect to wait for the gateway's Docker HEALTHCHECK to pass.
+      # Port 80 is not exposed to the host in production.
+      health_check_command: "timeout 60 sh -c 'until docker inspect -f {{.State.Health.Status}} git-query-gateway 2>/dev/null | grep -qw healthy; do sleep 3; done'"
     secrets: inherit

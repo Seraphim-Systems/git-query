@@ -53,6 +53,14 @@ services:
     restart: unless-stopped
     networks:
       - internal-network
+    # qdrant image is a minimal Rust binary (no curl/wget); use bash /dev/tcp
+    # to verify the HTTP port is accepting connections.
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/0.0.0.0/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   qdrant-init:
     build:
