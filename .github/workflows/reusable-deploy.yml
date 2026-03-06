@@ -102,6 +102,10 @@ jobs:
           # This is a no-op if it already exists.
           docker network create proxy || true
           docker compose ${{ inputs.compose_files }} up -d --build ${{ inputs.services }}
+          # Explicitly connect gateway to proxy in case the container was not recreated
+          # (compose skips recreation when the image is cached and config hash matches
+          # the previous container, so network changes may not be applied automatically).
+          docker network connect proxy git-query-gateway 2>/dev/null || true
           sleep 5
           ENDSSH
 
