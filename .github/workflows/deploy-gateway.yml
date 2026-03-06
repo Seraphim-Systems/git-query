@@ -13,5 +13,6 @@ jobs:
     with:
       compose_files: "-f docker-compose.base.yml -f docker-compose.databases.yml -f docker-compose.gateway.yml"
       services: "gateway"
-      health_check_url: "http://localhost/health"
+      # Port 80 is not exposed to the host in production; exec into the container.
+      health_check_command: "docker exec git-query-gateway curl -f http://localhost/health"
     secrets: inherit

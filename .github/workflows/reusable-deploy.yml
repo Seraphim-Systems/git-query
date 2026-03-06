@@ -19,6 +19,11 @@ on:
         type: string
         default: "http://localhost/health"
         description: "URL to check for deployment health"
+      health_check_command:
+        required: false
+        type: string
+        default: ""
+        description: "Override the entire health check command (e.g. 'docker exec <container> curl -f http://localhost:<port>/health'). When set, health_check_url is ignored."
 
 jobs:
   deploy:
@@ -92,11 +97,12 @@ jobs:
           ENDSSH
 
       - name: Health check
+        if: inputs.health_check_url != '' || inputs.health_check_command != ''
         run: |
           ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
           set -e
           sleep 10
-          curl -f "${{ inputs.health_check_url }}" || exit 1
+          ${{ inputs.health_check_command != '' && inputs.health_check_command || format('curl -f "{0}"', inputs.health_check_url) }} || exit 1
           ENDSSH
 
       - name: Cleanup

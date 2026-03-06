@@ -24,5 +24,7 @@ jobs:
     with:
       compose_files: "-f docker-compose.base.yml -f docker-compose.databases.yml"
       services: ${{ github.event.inputs.services != 'all databases' && github.event.inputs.services || '' }}
-      health_check_url: "http://localhost:6333/health"
+      # Qdrant port is not exposed to the host in production (no dev override),
+      # so we exec into the container directly instead of curling localhost.
+      health_check_command: "docker exec git-query-qdrant curl -f http://localhost:6333/health"
     secrets: inherit

@@ -13,5 +13,6 @@ jobs:
     with:
       compose_files: "-f docker-compose.base.yml -f docker-compose.databases.yml -f docker-compose.app.yml"
       services: "mcp-server"
-      health_check_url: "http://localhost:8090/health"
+      # Port 8090 is not exposed to the host in production; exec into the container.
+      health_check_command: "docker exec git-query-mcp curl -f http://localhost:8090/health"
     secrets: inherit
