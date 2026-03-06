@@ -87,7 +87,7 @@ jobs:
           # docker-compose services that use `env_file: .env` require the file
           # to exist in the compose working directory.
           cp /tmp/deploy.env .env
-          docker-compose ${{ inputs.compose_files }} up -d --build ${{ inputs.services }}
+          docker compose ${{ inputs.compose_files }} up -d --build ${{ inputs.services }}
           sleep 5
           ENDSSH
 
@@ -96,7 +96,7 @@ jobs:
           ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
           set -e
           cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query/infrastructure/docker
-          docker-compose ${{ inputs.compose_files }} ps
+          docker compose ${{ inputs.compose_files }} ps
           ENDSSH
 
       - name: Health check
