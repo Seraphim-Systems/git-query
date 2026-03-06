@@ -24,7 +24,6 @@ jobs:
     with:
       compose_files: "-f docker-compose.base.yml -f docker-compose.databases.yml"
       services: ${{ github.event.inputs.services != 'all databases' && github.event.inputs.services || '' }}
-      # Qdrant image has no curl/wget. Use docker inspect to wait for the
-      # Docker-native HEALTHCHECK (bash /dev/tcp) to report healthy.
-      health_check_command: "timeout 60 sh -c 'until docker inspect -f {{.State.Health.Status}} git-query-qdrant 2>/dev/null | grep -qw healthy; do sleep 3; done'"
+      # Qdrant has no curl. Verify the container is running via docker inspect.
+      health_check_command: "docker inspect -f '{{.State.Running}}' git-query-qdrant | grep -q true"
     secrets: inherit

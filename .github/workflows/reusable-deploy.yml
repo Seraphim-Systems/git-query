@@ -84,6 +84,9 @@ jobs:
           set -e
           cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query/infrastructure/docker
           source /tmp/deploy.env
+          # docker-compose services that use `env_file: .env` require the file
+          # to exist in the compose working directory.
+          cp /tmp/deploy.env .env
           docker-compose ${{ inputs.compose_files }} up -d --build ${{ inputs.services }}
           sleep 5
           ENDSSH
@@ -108,4 +111,4 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} "rm -f /tmp/deploy.env" || true
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} "rm -f /tmp/deploy.env /home/${{ secrets.INFRA_HETZNER_USER }}/git-query/infrastructure/docker/.env" || true
