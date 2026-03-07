@@ -1,8 +1,23 @@
 """Shared middleware helpers and constants for the gateway."""
 
-# Public endpoints that don't require authentication
+# Prefixes of paths handled by the gateway itself (API routes, auth, health).
+# Any request path that does NOT start with one of these is a frontend request
+# and should be proxied to the web container without gateway auth.
+GATEWAY_API_PREFIXES = (
+    "/auth",
+    "/chat",
+    "/recommend",
+    "/user",
+    "/api",
+    "/health",
+    "/docs",
+    "/openapi.json",
+    "/redoc",
+)
+
+# Public API endpoints that don't require authentication or an API key.
+# Only paths within GATEWAY_API_PREFIXES need to be listed here.
 PUBLIC_PATHS = [
-    "/",
     "/health",
     "/api/health",
     "/api/health/databases",
@@ -11,12 +26,6 @@ PUBLIC_PATHS = [
     "/openapi.json",
     "/auth/login",
     "/auth/register",
-    # Frontend static assets and pages proxied to the web container
-    "/login.html",
-    "/register.html",
-    "/home.html",
-    "/styles/",
-    "/src/",
 ]
 
 # Session-authenticated paths: these are user-facing routes that use cookie

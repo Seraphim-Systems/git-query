@@ -18,6 +18,7 @@ from src.gateway.middleware.rate_limit import RateLimitMiddleware
 from src.gateway.middleware.api_key import APIKeyMiddleware
 from src.gateway.middleware.session import SessionMiddleware
 from src.gateway.routers import auth, chat, recommendations, user, health, repos
+from src.gateway.middleware.shared import GATEWAY_API_PREFIXES
 
 
 # Include DB routers directly in the Gateway so the Gateway serves DB endpoints
@@ -276,20 +277,6 @@ async def health_check(request: Request):
 # container. This makes port 80 the single entry point - no need to expose
 # the web container's port 8080 externally.
 
-# Prefixes owned by the gateway itself; everything else goes to the frontend.
-_GATEWAY_PREFIXES = (
-    "/auth",
-    "/chat",
-    "/recommend",
-    "/user",
-    "/api",
-    "/health",
-    "/docs",
-    "/openapi.json",
-    "/redoc",
-)
-
-
 @app.api_route("/{path:path}", methods=["GET", "HEAD", "OPTIONS"])
 async def proxy_frontend(path: str, request: Request):
     """Reverse-proxy frontend assets and HTML pages to the web container."""
@@ -300,7 +287,7 @@ async def proxy_frontend(path: str, request: Request):
 
     # Don't intercept known gateway API routes (shouldn't normally reach here,
     # but guard in case of route ordering edge cases).
-    if any(full_path.startswith(p) for p in _GATEWAY_PREFIXES):
+    if any(full_path.startswith(p) for p in GATEWAY_API_PREFIXES):
         from fastapi import HTTPException
 
         raise HTTPException(status_code=404, detail="Route not found")
