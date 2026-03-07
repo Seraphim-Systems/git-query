@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     # Backend services
     mcp_server_url: str = "http://mcp-server:8090"
     recommender_url: str = "http://recommender:8095"
+    web_url: str = "http://web:8080"
 
     # Security
     jwt_secret: str = "change-me-in-production"
@@ -36,7 +37,9 @@ class Settings(BaseSettings):
 
     # CORS - when using credentials, must specify exact origins (not "*")
     # For development, allow localhost on common ports
-    allowed_origins: str = "http://localhost:8080,http://localhost:80,http://localhost:3000,http://127.0.0.1:8080"
+    allowed_origins: str = (
+        "http://localhost:8080,http://localhost:80,http://localhost:3000,http://127.0.0.1:8080"
+    )
 
     # Rate limiting
     rate_limit_requests: int = 100
