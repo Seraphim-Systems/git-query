@@ -13,5 +13,6 @@ jobs:
     with:
       compose_files: "-f docker-compose.base.yml -f docker-compose.training.yml"
       services: "training"
+      branch: ${{ github.ref_name }}
       health_check_url: ""
     secrets: inherit

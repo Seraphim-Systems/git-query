@@ -14,6 +14,11 @@ on:
         required: false
         type: string
         description: "Optional: specific services to deploy (default: all defined in compose)"
+      branch:
+        required: false
+        type: string
+        default: "dev"
+        description: "Git branch to check out on the server"
       health_check_url:
         required: false
         type: string
@@ -70,7 +75,7 @@ jobs:
           if [ -d "$REPO_PATH/.git" ]; then
             cd "$REPO_PATH"
             git fetch origin
-            git reset --hard origin/dev
+            git reset --hard origin/${{ inputs.branch }}
             git clean -fd
           else
             git clone https://github.com/Seraphim-Systems/git-query.git "$REPO_PATH"

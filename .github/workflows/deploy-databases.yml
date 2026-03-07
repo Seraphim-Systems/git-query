@@ -24,6 +24,7 @@ jobs:
     with:
       compose_files: "-f docker-compose.base.yml -f docker-compose.databases.yml"
       services: ${{ github.event.inputs.services != 'all databases' && github.event.inputs.services || '' }}
+      branch: ${{ github.ref_name }}
       # Qdrant has no curl. Verify the container is running via docker inspect.
       health_check_command: "docker inspect -f '{{.State.Running}}' git-query-qdrant | grep -q true"
     secrets: inherit

@@ -13,6 +13,7 @@ jobs:
     with:
       compose_files: "-f docker-compose.base.yml -f docker-compose.databases.yml -f docker-compose.app.yml"
       services: "recommender"
+      branch: ${{ github.ref_name }}
       # Port 8095 is not exposed to the host in production; exec into the container.
       health_check_command: "docker exec git-query-recommender curl -f http://localhost:8095/health"
     secrets: inherit
