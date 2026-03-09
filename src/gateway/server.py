@@ -1,8 +1,8 @@
 """API Gateway server - main entry point."""
 
+import hashlib
 import logging
 from contextlib import asynccontextmanager
-import os
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -115,6 +115,30 @@ for name in NOISY_LOGGERS:
         pass
 
 
+async def _seed_admin_user(user_service) -> None:
+    """Create the admin seed user if WEB_ADMIN_EMAIL is configured and the user doesn't exist yet."""
+    email = settings.web_admin_email
+    if not email:
+        return
+
+    existing = await user_service.get_user(email)
+    if existing:
+        logger.info("Admin seed user already exists: %s", email)
+        return
+
+    password = settings.web_admin_password or ""
+    password_hash = hashlib.sha256(password.encode()).hexdigest()
+    username = settings.web_admin_username
+
+    await user_service.create_user(
+        user_id=email,
+        email=email,
+        username=username,
+        password_hash=password_hash,
+    )
+    logger.info("Admin seed user created: %s (%s)", email, username)
+
+
 @asynccontextmanager
 async def lifespan(app_instance: FastAPI):
     """Application lifespan manager - initialize and cleanup resources."""
@@ -149,6 +173,9 @@ async def lifespan(app_instance: FastAPI):
         app_instance.state.mongodb, redis_async
     )
     logger.info("Services initialized (gateway async + shared sync clients)")
+
+    # Seed admin user if configured (idempotent – skipped if user already exists)
+    await _seed_admin_user(app_instance.state.user_service)
 
     yield
 
@@ -276,6 +303,7 @@ async def health_check(request: Request):
 # Catch-all: proxy any request that isn't a known API route to the web
 # container. This makes port 80 the single entry point - no need to expose
 # the web container's port 8080 externally.
+
 
 @app.api_route("/{path:path}", methods=["GET", "HEAD", "OPTIONS"])
 async def proxy_frontend(path: str, request: Request):

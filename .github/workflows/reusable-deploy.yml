@@ -61,6 +61,9 @@ jobs:
           APP_SESSION_SECRET=${{ secrets.APP_SESSION_SECRET }}
           APP_JWT_SECRET=${{ secrets.APP_JWT_SECRET }}
           APP_OPENAI_API_KEY=${{ secrets.APP_OPENAI_API_KEY }}
+          WEB_ADMIN_EMAIL=${{ secrets.WEB_ADMIN_EMAIL }}
+          WEB_ADMIN_PASSWORD=${{ secrets.WEB_ADMIN_PASSWORD }}
+          WEB_ADMIN_USERNAME=${{ secrets.WEB_ADMIN_USERNAME }}
           SVC_LOG_LEVEL=${{ secrets.SVC_LOG_LEVEL }}
           SVC_NGINX_SERVER_NAME=${{ secrets.SVC_NGINX_SERVER_NAME }}
           EOF

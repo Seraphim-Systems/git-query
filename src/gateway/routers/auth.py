@@ -33,19 +33,20 @@ class AuthResponse(BaseModel):
 
 @router.post("/login", response_model=AuthResponse)
 async def login(request: Request, response: Response, credentials: LoginRequest):
-    """
-    Login endpoint - creates a session.
-
-    TODO: Implement proper password hashing and user verification
-    """
+    """Login endpoint - creates a session."""
     user_service = request.app.state.user_service
     session_manager = request.app.state.session_manager
 
-    # TODO: Verify password against stored hash
-    # For now, basic implementation
     user = await user_service.get_user(credentials.email)
 
     if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
+        )
+
+    # Verify password against stored hash
+    provided_hash = hashlib.sha256(credentials.password.encode()).hexdigest()
+    if user.get("password_hash") != provided_hash:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
         )

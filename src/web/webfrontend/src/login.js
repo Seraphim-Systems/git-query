@@ -1,6 +1,5 @@
 // Login functionality
 document.addEventListener('DOMContentLoaded', () => {
-    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     // Use empty string for same-origin (webserver proxies API calls to gateway)
     const API_BASE = '';
     const loginForm = document.getElementById('loginForm');
@@ -57,7 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
         submitBtn.textContent = 'Signing in...';
         
         try {
-            const response = await fetch(`${API_BASE}/api/auth/login`, {
+            const response = await fetch(`${API_BASE}/auth/login`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
