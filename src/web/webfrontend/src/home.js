@@ -1,6 +1,5 @@
 // Home page (Chat) functionality
 document.addEventListener('DOMContentLoaded', () => {
-    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     // Use empty string for same-origin (webserver proxies API calls to gateway)
     const API_BASE = '';
     const messageInput = document.getElementById('messageInput');

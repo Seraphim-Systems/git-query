@@ -4,7 +4,7 @@ import logging
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
-from src.gateway.middleware.shared import PUBLIC_PATHS, SESSION_PATHS
+from src.gateway.middleware.shared import PUBLIC_PATHS, SESSION_PATHS, GATEWAY_API_PREFIXES
 from src.shared.config import settings
 import os
 
@@ -16,7 +16,12 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         """Process request and validate API key for DB endpoints."""
-        # Skip auth for explicitly public endpoints
+        # Frontend requests (not a known API prefix) go straight to the proxy
+        # handler; no API key needed.
+        if not any(request.url.path.startswith(p) for p in GATEWAY_API_PREFIXES):
+            return await call_next(request)
+
+        # Skip auth for explicitly public API endpoints
         if any(request.url.path.startswith(path) for path in PUBLIC_PATHS):
             return await call_next(request)
 

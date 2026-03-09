@@ -1,6 +1,13 @@
 # Gateway service
 # Usage: Use with -f docker-compose.base.yml -f docker-compose.databases.yml -f docker-compose.gateway.yml
 
+networks:
+  # External proxy network - managed by the reverse proxy (e.g. Traefik/nginx-proxy).
+  # Must exist on the host before deploying. Created automatically by the deploy workflow.
+  proxy:
+    external: true
+    name: proxy
+
 services:
   gateway:
     build:
@@ -23,4 +30,11 @@ services:
       - qdrant-init
     networks:
       - internal-network
+      - proxy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

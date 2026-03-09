@@ -13,5 +13,8 @@ jobs:
     with:
       compose_files: "-f docker-compose.base.yml -f docker-compose.databases.yml -f docker-compose.gateway.yml"
       services: "gateway"
-      health_check_url: "http://localhost/health"
+      branch: ${{ github.ref_name }}
+      # Port 80 is not exposed to the host in production. Verify the container
+      # is running via docker inspect.
+      health_check_command: "docker inspect -f '{{.State.Running}}' git-query-gateway | grep -q true"
     secrets: inherit
