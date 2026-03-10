@@ -135,6 +135,7 @@ async def _seed_admin_user(user_service) -> None:
         email=email,
         username=username,
         password_hash=password_hash,
+        is_admin=True,
     )
     logger.info("Admin seed user created: %s (%s)", email, username)
 

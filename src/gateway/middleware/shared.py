@@ -26,6 +26,8 @@ PUBLIC_PATHS = [
     "/openapi.json",
     "/auth/login",
     "/auth/register",
+    # Repo lookup reads only public data; no key needed from browser clients.
+    "/api/repos/lookup",
 ]
 
 # Session-authenticated paths: these are user-facing routes that use cookie
