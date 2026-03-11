@@ -36,10 +36,10 @@ PUBLIC_PATHS = [
 # Both canonical paths (/recommend) and /api/* aliases are listed so the
 # frontend can call either form and still receive session-based auth.
 SESSION_PATHS = [
-    "/auth",           # Auth routes (login/register are public, logout needs session)
-    "/chat",           # AI chat - requires session
-    "/recommend",      # Repository search - requires session
-    "/user",           # User profile/preferences - requires session
+    "/auth",  # Auth routes (login/register are public, logout needs session)
+    "/chat",  # AI chat - requires session
+    "/recommend",  # Repository search - requires session
+    "/user",  # User profile/preferences - requires session
     "/api/recommend",  # Alias used by the browser frontend
-    "/api/chat",       # Alias used by the browser frontend
+    "/api/chat",  # Alias used by the browser frontend
 ]
