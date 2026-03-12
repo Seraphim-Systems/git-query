@@ -164,6 +164,9 @@ class DatabaseManager:
             [("user_id", 1), ("timestamp", -1)]
         )
         await self.db[settings.interactions_collection].create_index([("repo_id", 1)])
+        await self.db[settings.interactions_collection].create_index(
+            [("variant", 1), ("timestamp", -1)]
+        )
         await self.db[settings.user_prefs_collection].create_index([("user_id", 1)], unique=True)
 
         # Repository text index for performant keyword search — created on both
@@ -224,12 +227,36 @@ class DatabaseManager:
     ) -> List[UserInteraction]:
         """Get recent interactions for a user."""
         if self._gateway_mode:
-            # Timestamp-range queries over the gateway are unreliable because
-            # datetime objects must be serialised to strings for JSON transport
-            # and MongoDB won't compare BSON dates against strings.
-            # Personalization degrades gracefully when this returns [].
-            logger.warning("get_user_interactions not supported in gateway mode; skipping")
-            return []
+            cutoff = datetime.utcnow() - timedelta(days=days)
+            # Query latest events by user and post-filter by timestamp in-process.
+            # This avoids BSON-vs-string timestamp comparison issues over HTTP.
+            result = await self._run_sync(lambda: self._gw_post(
+                f"/api/mongodb/collections/{settings.interactions_collection}/query",
+                {
+                    "filter": {"user_id": user_id},
+                    "limit": max(limit * 5, 200),
+                    "sort": {"timestamp": -1},
+                },
+            ))
+            docs = result.get("documents", [])
+            interactions: List[UserInteraction] = []
+            for doc in docs:
+                doc.pop("_id", None)
+                ts = doc.get("timestamp")
+                if isinstance(ts, str):
+                    try:
+                        doc["timestamp"] = datetime.fromisoformat(ts.replace("Z", "+00:00")).replace(tzinfo=None)
+                    except Exception:
+                        continue
+                if isinstance(doc.get("timestamp"), datetime) and doc["timestamp"] < cutoff:
+                    continue
+                try:
+                    interactions.append(UserInteraction(**doc))
+                except Exception:
+                    continue
+                if len(interactions) >= limit:
+                    break
+            return interactions
         cutoff = datetime.utcnow() - timedelta(days=days)
         cursor = self.db[settings.interactions_collection].find(
             {"user_id": user_id, "timestamp": {"$gte": cutoff}}
