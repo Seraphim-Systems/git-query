@@ -2,6 +2,7 @@
 
 from typing import Optional, Dict, Any
 from datetime import datetime
+from uuid import uuid4
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from redis.asyncio import Redis
 from pydantic import BaseModel
@@ -280,14 +281,22 @@ class UserService:
         """
         return await self.db.users.find_one({"user_id": user_id})
 
+    async def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
+        """Get user document by email."""
+        return await self.db.users.find_one({"email": email})
+
     async def create_user(
-        self, user_id: str, email: str, username: str, **kwargs
+        self,
+        email: str,
+        username: str,
+        user_id: Optional[str] = None,
+        **kwargs,
     ) -> Dict[str, Any]:
         """
         Create a new user.
 
         Args:
-            user_id: User identifier
+            user_id: Optional user identifier; if omitted a UUIDv4 is generated
             email: User email
             username: Username
             **kwargs: Additional user data
@@ -295,8 +304,9 @@ class UserService:
         Returns:
             Created user document
         """
+        resolved_user_id = user_id or str(uuid4())
         user_doc = {
-            "user_id": user_id,
+            "user_id": resolved_user_id,
             "email": email,
             "username": username,
             "created_at": datetime.utcnow(),
