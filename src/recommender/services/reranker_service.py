@@ -2,7 +2,7 @@
 
 import os
 import logging
-from typing import List, Tuple, Optional
+from typing import List, Optional
 from sentence_transformers import CrossEncoder
 from ..config import settings
 from ..models import RepositoryResult, ModelMetadata
@@ -23,39 +23,51 @@ class RerankerService:
         self.model_name = model_name or settings.cross_encoder_model_name
         self.model = None
         self.current_model_id: Optional[str] = None
+        self._loaded_path: Optional[str] = None
 
     async def load_active_model(self, variant: str = "default"):
         """Load the currently active reranker model from the registry."""
         from .registry_service import ModelRegistryService
         registry = ModelRegistryService()
-        
+
         active_model = await registry.get_active_model("cross_encoder", variant)
-        
+
         if not active_model:
-            logger.warning(f"No active reranker model found for variant '{variant}'. Using default: {self.model_name}")
+            logger.warning(
+                "No active reranker model found for variant %r. Using default: %s",
+                variant,
+                self.model_name,
+            )
             self.load_model(self.model_name)
             return
 
         if active_model.model_id == self.current_model_id:
-            logger.info(f"Reranker model {active_model.model_id} is already loaded.")
+            logger.info("Reranker model %s is already loaded.", active_model.model_id)
             return
 
-        # Load from path
         full_path = os.path.join(settings.model_path, active_model.path)
         if os.path.exists(full_path):
-            logger.info(f"Loading active reranker model: {active_model.model_id} from {full_path}")
+            logger.info(
+                "Loading active reranker model: %s from %s",
+                active_model.model_id,
+                full_path,
+            )
             self.load_model(full_path)
             self.current_model_id = active_model.model_id
         else:
-            logger.error(f"Active reranker model path not found: {full_path}. Falling back to default.")
+            logger.error(
+                "Active reranker model path not found: %s. Falling back to default.",
+                full_path,
+            )
             self.load_model(self.model_name)
 
     def load_model(self, model_path: str = None):
         """Load the cross-encoder model into memory."""
         target = model_path or self.model_name
-        if self.model is None or target != self.model_name:
-            logger.info(f"Initializing CrossEncoder with: {target}")
+        if self.model is None or target != self._loaded_path:
+            logger.info("Initializing CrossEncoder with: %s", target)
             self.model = CrossEncoder(target)
+            self._loaded_path = target
         return self.model
 
     async def rerank(
@@ -64,44 +76,28 @@ class RerankerService:
         candidates: List[RepositoryResult],
         top_k: int = None,
     ) -> List[RepositoryResult]:
-        """
-        Rerank candidates using cross-encoder.
-
-        Args:
-            query: User query
-            candidates: List of candidate repositories
-            top_k: Number of top results to return
-
-        Returns:
-            Reranked list of repositories
-        """
+        """Rerank candidates using cross-encoder."""
         if not candidates:
             return []
 
         top_k = top_k or settings.rerank_top_k
 
-        # Prepare query-document pairs
-        pairs = []
-        for candidate in candidates:
-            # Create a text representation of the repo
-            repo_text = self._create_repo_text(candidate)
-            pairs.append([query, repo_text])
+        pairs = [
+            [query, self._create_repo_text(candidate)]
+            for candidate in candidates
+        ]
 
-        # Run reranking in thread pool
         loop = asyncio.get_running_loop()
         scores = await loop.run_in_executor(None, self._score_pairs, pairs)
 
-        # Attach scores and sort
         for candidate, score in zip(candidates, scores):
             candidate.explanation = candidate.explanation or {}
             candidate.explanation["rerank_score"] = float(score)
             candidate.explanation["original_score"] = candidate.score
             candidate.score = float(score)
 
-        # Sort by new score
         reranked = sorted(candidates, key=lambda x: x.score, reverse=True)
 
-        # Update ranks
         for idx, result in enumerate(reranked[:top_k]):
             result.rank = idx + 1
             result.explanation["reranked"] = True
@@ -123,4 +119,3 @@ class RerankerService:
             "language": repo.language,
         }
         return prepare_repo_text(repo_dict)
-
