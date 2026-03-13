@@ -167,6 +167,7 @@ async def get_recommendations(request: RecommendationRequest):
         return response
 
     except Exception as e:
+        logger.error("Recommendation failed: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Recommendation failed: {str(e)}")
 
 
@@ -187,6 +188,7 @@ async def explain_recommendation(repo_id: str, request: RecommendationRequest):
         return explanation
 
     except Exception as e:
+        logger.error("Explanation failed for repo %s: %s", repo_id, e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Explanation failed: {str(e)}")
 
 
@@ -209,11 +211,13 @@ async def log_interaction(
         # Log interaction
         interaction_id = await db_manager.log_interaction(interaction)
 
-        # Update user preferences in background
+        # Update user preferences in background — pass service explicitly to
+        # avoid a closure over app.state that could break on hot-reload.
         if interaction.user_id:
             background_tasks.add_task(
                 update_user_preferences_task,
                 interaction,
+                app.state.personalization_service,
             )
 
         return {
@@ -222,14 +226,16 @@ async def log_interaction(
         }
 
     except Exception as e:
+        logger.error("Failed to log interaction: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to log interaction: {str(e)}")
 
 
-async def update_user_preferences_task(interaction: UserInteraction):
+async def update_user_preferences_task(
+    interaction: UserInteraction,
+    personalization_service: PersonalizationService,
+):
     """Background task to update user preferences."""
     try:
-        personalization_service: PersonalizationService = app.state.personalization_service
-
         # Fetch repo data from database
         repos = await db_manager.search_repositories(
             {"_id": interaction.repo_id}, limit=1
