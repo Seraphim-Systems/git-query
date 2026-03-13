@@ -1,7 +1,7 @@
 """Configuration for the recommendation system."""
 
 import logging
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
 class RecommenderSettings(BaseSettings):
@@ -17,13 +17,6 @@ class RecommenderSettings(BaseSettings):
     redis_url: str = "redis://localhost:6379"
     qdrant_url: str = "http://localhost:6333"
     qdrant_api_key: Optional[str] = None
-
-    # Gateway mode — route all DB calls through the REST gateway instead of
-    # connecting to native Qdrant/MongoDB/Redis.  Set USE_GATEWAY=true and
-    # supply API_BASE_URL + APIKEY_QDRANT to use the public gateway endpoint.
-    use_gateway: bool = False
-    api_base_url: str = ""
-    apikey_qdrant: Optional[str] = None  # env: APIKEY_QDRANT
 
     # API Keys
     embedding_api_key: Optional[str] = None
@@ -69,10 +62,11 @@ class RecommenderSettings(BaseSettings):
     # Qdrant collections
     qdrant_repos_collection: str = "repositories_embeddings"
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        extra = "ignore"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 settings = RecommenderSettings()

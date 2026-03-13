@@ -3,7 +3,7 @@
 import asyncio
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -11,137 +11,28 @@ logger = logging.getLogger(__name__)
 import redis.asyncio as redis
 from motor.motor_asyncio import AsyncIOMotorClient
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, FieldCondition, Filter, MatchValue, PointStruct, VectorParams
+from qdrant_client.models import Distance, Filter, VectorParams
 
 from .config import settings
 from .models import ABTestConfig, EvaluationMetrics, ModelMetadata, UserInteraction, UserPreferences
 from src.db.config import db_clients
 
 
-# ---------------------------------------------------------------------------
-# Gateway-mode helpers — duck-type the Qdrant client using gateway REST calls
-# ---------------------------------------------------------------------------
-
-class _Hit:
-    """Minimal stand-in for a Qdrant ScoredPoint returned by QdrantClient.search()."""
-    def __init__(self, id_: str, score: float, payload: dict):
-        self.id = id_
-        self.score = score
-        self.payload = payload or {}
-
-
-class _GatewayQdrantClient:
-    """Routes QdrantClient.search() calls through the gateway REST API.
-
-    Assigned to ``DatabaseManager.qdrant_client`` when ``USE_GATEWAY=true``
-    so that ``vector_search()`` works without any other code changes.
-    """
-
-    def __init__(self, base_url: str, session: Any):
-        self._base = base_url.rstrip("/")
-        self._session = session
-
-    def search(
-        self,
-        collection_name: str,
-        query_vector: List[float],
-        limit: int = 10,
-        query_filter=None,
-        with_payload: bool = True,
-        **_,
-    ) -> List[_Hit]:
-        body: Dict[str, Any] = {
-            "vector": query_vector,
-            "limit": limit,
-            "with_payload": with_payload,
-        }
-        resp = self._session.post(
-            f"{self._base}/api/qdrant/collections/{collection_name}/search",
-            json=body,
-            timeout=30,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        hits = data if isinstance(data, list) else data.get("results", data.get("hits", []))
-        return [_Hit(h.get("id"), h.get("score", 0.0), h.get("payload", {})) for h in hits]
-
-    # Stubs for the few lifecycle calls made during startup checks
-    def get_collection(self, name: str):
-        return None
-
-    def get_collections(self):
-        return None
-
-
 class DatabaseManager:
-    """Manages connections to MongoDB, Qdrant, and Redis.
-
-    Supports two connection modes:
-    - **Native mode** (default): connects directly to Qdrant, MongoDB, and Redis
-      using their respective client libraries.
-    - **Gateway mode** (``USE_GATEWAY=true``): routes all database calls through
-      the project's REST gateway at ``API_BASE_URL``.  This is useful when the
-      native database ports are not publicly reachable but the gateway is.
-    """
+    """Manages connections to MongoDB, Qdrant, and Redis."""
 
     def __init__(self):
         self.mongo_client: Optional[AsyncIOMotorClient] = None
-        self.qdrant_client: Optional[Any] = None  # QdrantClient or _GatewayQdrantClient
+        self.qdrant_client: Optional[QdrantClient] = None
         self.redis_client: Optional[redis.Redis] = None
         self.db = None
-        self._gateway_mode: bool = False
-        self._gw_session: Optional[Any] = None  # requests.Session
-        self._gw_base: str = ""
-
-    # ------------------------------------------------------------------
-    # Gateway helpers
-    # ------------------------------------------------------------------
-
-    def _gw_post(self, path: str, body: dict) -> dict:
-        resp = self._gw_session.post(f"{self._gw_base}{path}", json=body, timeout=30)
-        resp.raise_for_status()
-        return resp.json()
-
-    def _gw_put(self, path: str, body: dict) -> dict:
-        resp = self._gw_session.put(f"{self._gw_base}{path}", json=body, timeout=15)
-        resp.raise_for_status()
-        return resp.json()
-
-    def _gw_get(self, path: str) -> dict:
-        resp = self._gw_session.get(f"{self._gw_base}{path}", timeout=15)
-        resp.raise_for_status()
-        return resp.json()
-
-    async def _run_sync(self, fn):
-        """Run a synchronous gateway call on the thread-pool executor."""
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, fn)
 
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
     async def connect(self):
-        """Initialize database connections.
-
-        In gateway mode, a ``requests.Session`` is created and pointed at
-        ``API_BASE_URL``.  Native client initialization and index setup are
-        skipped — the production databases already have the required indexes.
-        """
-        if settings.use_gateway:
-            import requests
-            self._gateway_mode = True
-            self._gw_base = settings.api_base_url.rstrip("/")
-            api_key = settings.apikey_qdrant or settings.qdrant_api_key or ""
-            self._gw_session = requests.Session()
-            self._gw_session.headers.update({
-                "X-API-Key": api_key,
-                "Content-Type": "application/json",
-            })
-            self.qdrant_client = _GatewayQdrantClient(self._gw_base, self._gw_session)
-            return  # Skip native client init and _ensure_collections
-
-        # ---- Native mode ----
+        """Initialize database connections."""
         config = db_clients.config
 
         mongo_url = config.mongodb_url or settings.mongodb_url
@@ -158,17 +49,15 @@ class DatabaseManager:
         await self._ensure_collections()
 
     async def _ensure_collections(self):
-        """Ensure MongoDB collections and Qdrant collections exist."""
-        # MongoDB indexes
+        """Ensure MongoDB indexes and Qdrant collection exist."""
         await self.db[settings.interactions_collection].create_index(
             [("user_id", 1), ("timestamp", -1)]
         )
         await self.db[settings.interactions_collection].create_index([("repo_id", 1)])
         await self.db[settings.user_prefs_collection].create_index([("user_id", 1)], unique=True)
 
-        # Repository text index for performant keyword search — created on both
-        # repos_collection (the clean/normalised store) and raw_repos_collection
-        # (the pipeline source) so keyword search works whichever is active.
+        # Repository text index — created on both collections so keyword search
+        # works whether raw or normalised data is active.
         for collection_name in {settings.repos_collection, settings.raw_repos_collection}:
             await self.db[collection_name].create_index(
                 [
@@ -194,10 +83,6 @@ class DatabaseManager:
 
     async def close(self):
         """Close all database connections."""
-        if self._gateway_mode:
-            if self._gw_session:
-                self._gw_session.close()
-            return
         if self.mongo_client:
             self.mongo_client.close()
         if self.redis_client:
@@ -207,13 +92,6 @@ class DatabaseManager:
 
     async def log_interaction(self, interaction: UserInteraction) -> str:
         """Log a user interaction."""
-        if self._gateway_mode:
-            doc = json.loads(json.dumps(interaction.model_dump(), default=str))
-            await self._run_sync(lambda: self._gw_post(
-                f"/api/mongodb/collections/{settings.interactions_collection}/bulk",
-                {"documents": [doc], "upsert": False},
-            ))
-            return "gateway-logged"
         result = await self.db[settings.interactions_collection].insert_one(
             interaction.model_dump()
         )
@@ -223,18 +101,13 @@ class DatabaseManager:
         self, user_id: str, limit: int = 100, days: int = 30
     ) -> List[UserInteraction]:
         """Get recent interactions for a user."""
-        if self._gateway_mode:
-            # Timestamp-range queries over the gateway are unreliable because
-            # datetime objects must be serialised to strings for JSON transport
-            # and MongoDB won't compare BSON dates against strings.
-            # Personalization degrades gracefully when this returns [].
-            logger.warning("get_user_interactions not supported in gateway mode; skipping")
-            return []
-        cutoff = datetime.utcnow() - timedelta(days=days)
-        cursor = self.db[settings.interactions_collection].find(
-            {"user_id": user_id, "timestamp": {"$gte": cutoff}}
-        ).sort("timestamp", -1).limit(limit)
-
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        cursor = (
+            self.db[settings.interactions_collection]
+            .find({"user_id": user_id, "timestamp": {"$gte": cutoff}})
+            .sort("timestamp", -1)
+            .limit(limit)
+        )
         interactions = []
         async for doc in cursor:
             doc.pop("_id", None)
@@ -245,16 +118,6 @@ class DatabaseManager:
 
     async def get_user_preferences(self, user_id: str) -> Optional[UserPreferences]:
         """Get user preferences."""
-        if self._gateway_mode:
-            result = await self._run_sync(lambda: self._gw_post(
-                f"/api/mongodb/collections/{settings.user_prefs_collection}/query",
-                {"filter": {"user_id": user_id}, "limit": 1},
-            ))
-            docs = result.get("documents", [])
-            if docs:
-                docs[0].pop("_id", None)
-                return UserPreferences(**docs[0])
-            return None
         doc = await self.db[settings.user_prefs_collection].find_one({"user_id": user_id})
         if doc:
             doc.pop("_id", None)
@@ -263,13 +126,6 @@ class DatabaseManager:
 
     async def update_user_preferences(self, preferences: UserPreferences):
         """Update user preferences."""
-        if self._gateway_mode:
-            doc = json.loads(json.dumps(preferences.model_dump(), default=str))
-            await self._run_sync(lambda: self._gw_post(
-                f"/api/mongodb/collections/{settings.user_prefs_collection}/bulk",
-                {"documents": [doc], "upsert": True},
-            ))
-            return
         await self.db[settings.user_prefs_collection].update_one(
             {"user_id": preferences.user_id},
             {"$set": preferences.model_dump()},
@@ -289,23 +145,7 @@ class DatabaseManager:
         Queries repos_collection first; if empty falls back to
         raw_repos_collection so Kaggle-imported data is always searchable.
         """
-        collections_to_try = [settings.repos_collection, settings.raw_repos_collection]
-
-        if self._gateway_mode:
-            for collection_name in collections_to_try:
-                try:
-                    result = await self._run_sync(lambda cn=collection_name: self._gw_post(
-                        f"/api/mongodb/collections/{cn}/query",
-                        {"filter": query_filter, "limit": limit, "skip": skip},
-                    ))
-                    docs = result.get("documents", [])
-                    if docs:
-                        return docs
-                except Exception as exc:
-                    logger.warning("Gateway MongoDB search on %s failed: %s", collection_name, exc)
-            return []
-
-        for collection_name in collections_to_try:
+        for collection_name in [settings.repos_collection, settings.raw_repos_collection]:
             cursor = (
                 self.db[collection_name]
                 .find(query_filter)
@@ -325,17 +165,11 @@ class DatabaseManager:
     ) -> Dict[str, Any]:
         """Fetch full repo metadata from raw_repositories by repo_id / _id.
 
-        kaggle_to_mongo.py sets ``_id = nameWithOwner`` and adds a ``repo_id``
-        field with the same value, so we query by both to be robust.
-
         Returns a mapping of repo_id → document for any IDs found.
-        Falls back gracefully on gateway errors.
         """
         if not repo_ids:
             return {}
 
-        # Primary: _id field (= nameWithOwner set by kaggle_to_mongo)
-        # Secondary: repo_id field (also set by kaggle_to_mongo)
         query_filter = {
             "$or": [
                 {"_id": {"$in": repo_ids}},
@@ -345,17 +179,10 @@ class DatabaseManager:
 
         docs: List[Dict[str, Any]] = []
         try:
-            if self._gateway_mode:
-                result = await self._run_sync(lambda: self._gw_post(
-                    f"/api/mongodb/collections/{settings.raw_repos_collection}/query",
-                    {"filter": query_filter, "limit": len(repo_ids)},
-                ))
-                docs = result.get("documents", [])
-            else:
-                cursor = self.db[settings.raw_repos_collection].find(query_filter).limit(len(repo_ids))
-                async for doc in cursor:
-                    doc["_id"] = str(doc["_id"])
-                    docs.append(doc)
+            cursor = self.db[settings.raw_repos_collection].find(query_filter).limit(len(repo_ids))
+            async for doc in cursor:
+                doc["_id"] = str(doc["_id"])
+                docs.append(doc)
         except Exception as exc:
             logger.warning("raw_repositories lookup failed: %s", exc)
             return {}
@@ -369,21 +196,28 @@ class DatabaseManager:
 
     # ===== Vector Search (Qdrant) =====
 
-    def vector_search(
+    async def vector_search(
         self,
         query_vector: List[float],
         top_k: int = 100,
         filter_conditions: Optional[Filter] = None,
     ) -> List[Dict[str, Any]]:
-        """Search for similar repositories using vector similarity."""
-        results = self.qdrant_client.search(
-            collection_name=settings.qdrant_repos_collection,
-            query_vector=query_vector,
-            limit=top_k,
-            query_filter=filter_conditions,
-            with_payload=True,
-        )
+        """Search for similar repositories using vector similarity.
 
+        Runs the synchronous QdrantClient call on the thread-pool executor
+        to keep the event loop unblocked.
+        """
+        loop = asyncio.get_running_loop()
+        results = await loop.run_in_executor(
+            None,
+            lambda: self.qdrant_client.search(
+                collection_name=settings.qdrant_repos_collection,
+                query_vector=query_vector,
+                limit=top_k,
+                query_filter=filter_conditions,
+                with_payload=True,
+            ),
+        )
         return [
             {
                 "repo_id": hit.id,
@@ -397,7 +231,7 @@ class DatabaseManager:
 
     async def cache_get(self, key: str) -> Optional[Any]:
         """Get value from cache."""
-        if self._gateway_mode or not settings.enable_cache:
+        if not settings.enable_cache:
             return None
         value = await self.redis_client.get(f"reco:{key}")
         if value:
@@ -406,7 +240,7 @@ class DatabaseManager:
 
     async def cache_set(self, key: str, value: Any, ttl: Optional[int] = None):
         """Set value in cache."""
-        if self._gateway_mode or not settings.enable_cache:
+        if not settings.enable_cache:
             return
         ttl = ttl or settings.cache_ttl_seconds
         await self.redis_client.setex(
@@ -417,15 +251,10 @@ class DatabaseManager:
 
     async def save_metrics(self, metrics: EvaluationMetrics):
         """Save evaluation metrics."""
-        if self._gateway_mode:
-            logger.warning("save_metrics not supported in gateway mode; skipping")
-            return
         await self.db["evaluation_metrics"].insert_one(metrics.model_dump())
 
     async def get_latest_metrics(self, variant: str) -> Optional[EvaluationMetrics]:
         """Get latest metrics for a variant."""
-        if self._gateway_mode:
-            return None
         doc = await self.db["evaluation_metrics"].find_one(
             {"variant": variant}, sort=[("timestamp", -1)]
         )
@@ -438,9 +267,7 @@ class DatabaseManager:
 
     async def get_active_ab_test(self) -> Optional[ABTestConfig]:
         """Get currently active A/B test."""
-        if self._gateway_mode:
-            return None
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         doc = await self.db[settings.ab_tests_collection].find_one(
             {
                 "is_active": True,
@@ -457,15 +284,10 @@ class DatabaseManager:
 
     async def save_model_metadata(self, metadata: ModelMetadata):
         """Save model metadata."""
-        if self._gateway_mode:
-            logger.warning("save_model_metadata not supported in gateway mode; skipping")
-            return
         await self.db[settings.models_collection].insert_one(metadata.model_dump())
 
     async def get_active_model(self, model_type: str, variant: str) -> Optional[ModelMetadata]:
-        """Get active model for a variant."""
-        if self._gateway_mode:
-            return None
+        """Get the active model for a given type and variant."""
         doc = await self.db[settings.models_collection].find_one(
             {"model_type": model_type, "variant": variant, "is_active": True},
             sort=[("trained_at", -1)],
@@ -475,7 +297,47 @@ class DatabaseManager:
             return ModelMetadata(**doc)
         return None
 
+    async def get_model_by_id(self, model_id: str) -> Optional[ModelMetadata]:
+        """Get a model by its ID."""
+        doc = await self.db[settings.models_collection].find_one({"model_id": model_id})
+        if doc:
+            doc.pop("_id", None)
+            return ModelMetadata(**doc)
+        return None
+
+    async def deactivate_models(self, model_type: str, variant: str) -> None:
+        """Archive all currently active models of a given type/variant."""
+        await self.db[settings.models_collection].update_many(
+            {"model_type": model_type, "variant": variant, "is_active": True},
+            {"$set": {"is_active": False, "status": "archived"}},
+        )
+
+    async def activate_model(self, model_id: str) -> None:
+        """Promote a model to active status."""
+        await self.db[settings.models_collection].update_one(
+            {"model_id": model_id},
+            {"$set": {"is_active": True, "status": "active"}},
+        )
+
+    async def list_models_query(
+        self,
+        model_type: Optional[str] = None,
+        status: Optional[str] = None,
+    ) -> List[ModelMetadata]:
+        """List models with optional type/status filtering."""
+        query: Dict[str, Any] = {}
+        if model_type:
+            query["model_type"] = model_type
+        if status:
+            query["status"] = status
+
+        cursor = self.db[settings.models_collection].find(query).sort("trained_at", -1)
+        models = []
+        async for doc in cursor:
+            doc.pop("_id", None)
+            models.append(ModelMetadata(**doc))
+        return models
+
 
 # Global database manager instance
 db_manager = DatabaseManager()
-

@@ -8,6 +8,6 @@ if __name__ == "__main__":
         "recommender.api:app",
         host=settings.recommender_host,
         port=settings.recommender_port,
-        reload=True,
+        reload=False,
         log_level=settings.log_level.lower(),
     )
