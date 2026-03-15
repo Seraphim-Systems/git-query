@@ -125,7 +125,7 @@ def _proxy_to_gateway(gateway_path, method=None, forward_cookies=True):
         return jsonify({"detail": "Gateway unavailable"}), 503
     except Exception as e:
         logger.error("Proxy error for %s %s: %s", method, url, e)
-        return jsonify({"detail": str(e)}), 500
+        return jsonify({"detail": "Internal proxy error"}), 500
 
     # Build Flask response, forwarding status and JSON body
     try:
