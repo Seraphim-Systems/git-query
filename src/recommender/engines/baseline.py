@@ -1,6 +1,5 @@
 """Baseline recommendation engine - keyword search only."""
 
-import re
 from typing import List, Dict, Any
 from ..models import RecommendationRequest, RepositoryResult
 from ..database import db_manager
@@ -23,14 +22,10 @@ class BaselineEngine(RecommendationEngine):
         # Build filter
         query_filter = {}
 
-        # Text search on name and description
+        # Use MongoDB text index for O(log N) search (requires text index on
+        # name, description, topics — created by DatabaseManager._ensure_collections)
         if request.query:
-            safe_query = re.escape(request.query)
-            query_filter["$or"] = [
-                {"name": {"$regex": safe_query, "$options": "i"}},
-                {"description": {"$regex": safe_query, "$options": "i"}},
-                {"topics": {"$regex": safe_query, "$options": "i"}},
-            ]
+            query_filter["$text"] = {"$search": request.query}
 
         # Apply hard filters
         if request.language:

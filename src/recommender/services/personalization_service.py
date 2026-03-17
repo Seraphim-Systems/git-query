@@ -4,7 +4,7 @@ from typing import Dict
 from collections import defaultdict
 from ..models import UserInteraction, UserPreferences, InteractionType
 from ..database import db_manager
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class PersonalizationService:
@@ -73,7 +73,7 @@ class PersonalizationService:
 
         # Update metadata
         prefs.total_interactions += 1
-        prefs.last_updated = datetime.utcnow()
+        prefs.last_updated = datetime.now(timezone.utc)
 
         # Save
         await db_manager.update_user_preferences(prefs)
@@ -106,7 +106,7 @@ class PersonalizationService:
             language_preferences=self._normalize_preferences(dict(language_scores)),
             topic_preferences=self._normalize_preferences(dict(topic_scores)),
             total_interactions=len(interactions),
-            last_updated=datetime.utcnow(),
+            last_updated=datetime.now(timezone.utc),
         )
 
         await db_manager.update_user_preferences(prefs)
