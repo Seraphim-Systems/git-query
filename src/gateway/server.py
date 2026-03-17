@@ -4,6 +4,7 @@ import hashlib
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
+from pymongo.errors import DuplicateKeyError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from redis.asyncio import Redis
@@ -130,13 +131,19 @@ async def _seed_admin_user(user_service) -> None:
     password_hash = hashlib.sha256(password.encode()).hexdigest()
     username = settings.web_admin_username
 
-    await user_service.create_user(
-        user_id=email,
-        email=email,
-        username=username,
-        password_hash=password_hash,
-    )
-    logger.info("Admin seed user created: %s (%s)", email, username)
+    try:
+        await user_service.create_user(
+            user_id=email,
+            email=email,
+            username=username,
+            password_hash=password_hash,
+            is_admin=True,
+        )
+        logger.info("Admin seed user created: %s (%s)", email, username)
+    except DuplicateKeyError:
+        logger.info(
+            "Admin seed user already exists (duplicate key): %s (%s)", email, username
+        )
 
 
 @asynccontextmanager
@@ -269,8 +276,12 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
 app.include_router(health.router)
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(chat.router, prefix="/chat", tags=["Chat"])
+app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
 app.include_router(
     recommendations.router, prefix="/recommend", tags=["Recommendations"]
+)
+app.include_router(
+    recommendations.router, prefix="/api/recommend", tags=["Recommendations"]
 )
 app.include_router(user.router, prefix="/user", tags=["User"])
 

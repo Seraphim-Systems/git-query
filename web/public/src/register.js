@@ -99,10 +99,12 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (response.ok) {
                 showMessage('Account created successfully! Signing you in...', 'success');
-                // Store real session info from gateway response
+                // Store JWT token and session info
+                localStorage.setItem('token', data.token || '');
                 localStorage.setItem('sessionId', data.session_id || ('session_' + Date.now()));
                 localStorage.setItem('userId', data.user_id || emailInput.value.trim());
                 localStorage.setItem('username', data.username || nameInput.value.trim());
+                localStorage.setItem('isAdmin', data.is_admin ? 'true' : 'false');
                 
                 // Redirect to home page
                 setTimeout(() => {

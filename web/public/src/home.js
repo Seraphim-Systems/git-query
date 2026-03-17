@@ -42,12 +42,19 @@ document.addEventListener('DOMContentLoaded', () => {
     let searchTimeout = null;
     
     // Check authentication
-    const sessionId = localStorage.getItem('sessionId');
+    const token = localStorage.getItem('token') || localStorage.getItem('sessionId');
     const userId = localStorage.getItem('userId');
     const username = localStorage.getItem('username');
-    if (!sessionId) {
+    if (!token) {
         window.location.href = '/login.html';
         return;
+    }
+
+    // Build auth headers for every API request (JWT Bearer token)
+    function authHeaders(extra) {
+        const headers = { 'Content-Type': 'application/json', ...extra };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        return headers;
     }
     
     // Initialize
@@ -153,9 +160,17 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelector('.user-info').addEventListener('click', async () => {
         const confirmed = await showConfirm('Logout', 'Are you sure you want to log out?');
         if (confirmed) {
+            // Invalidate server session (fire-and-forget)
+            fetch('/auth/logout', {
+                method: 'POST',
+                headers: authHeaders(),
+                credentials: 'include',
+            }).catch(() => {});
+            localStorage.removeItem('token');
             localStorage.removeItem('sessionId');
             localStorage.removeItem('userId');
             localStorage.removeItem('username');
+            localStorage.removeItem('isAdmin');
             window.location.href = '/login.html';
         }
     });
@@ -329,15 +344,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isRecoRequest) {
                 // Fire chat + recommendation APIs in parallel
                 const [chatRes, recoRes] = await Promise.all([
-                    fetch(`${API_BASE}/api/chat`, {
+                    fetch(`${API_BASE}/chat/`, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: authHeaders(),
                         credentials: 'include',
                         body: JSON.stringify({ message, context: { chatId: currentChatId } })
                     }),
-                    fetch(`${API_BASE}/api/recommend`, {
+                    fetch(`${API_BASE}/recommend/`, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: authHeaders(),
                         credentials: 'include',
                         body: JSON.stringify({
                             query: message,
@@ -363,18 +378,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Fire-and-forget view signal
                 if (userId) {
-                    fetch(`${API_BASE}/api/recommend/feedback`, {
+                    fetch(`${API_BASE}/recommend/feedback`, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: authHeaders(),
                         credentials: 'include',
                         body: JSON.stringify({ repo_id: `search:${message}`, action: 'view' })
                     }).catch(() => {});
                 }
             } else {
                 // Regular chat — no repo results
-                const response = await fetch(`${API_BASE}/api/chat`, {
+                const response = await fetch(`${API_BASE}/chat/`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: authHeaders(),
                     credentials: 'include',
                     body: JSON.stringify({ message, context: { chatId: currentChatId } })
                 });
@@ -828,7 +843,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch(`${API_BASE}/api/repos/lookup`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: authHeaders(),
                 credentials: 'include',
                 body: JSON.stringify({ repo_ids: ids })
             });
@@ -867,9 +882,9 @@ document.addEventListener('DOMContentLoaded', () => {
         repoGrid.innerHTML = '<div style="padding: 16px; color: var(--text-secondary); text-align: center;">Searching repositories...</div>';
         
         try {
-            const response = await fetch(`${API_BASE}/api/recommend`, {
+            const response = await fetch(`${API_BASE}/recommend/`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: authHeaders(),
                 credentials: 'include',
                 body: JSON.stringify({
                     query: query,
@@ -893,9 +908,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Record implicit view signal
                 if (userId) {
-                    fetch(`${API_BASE}/api/recommend/feedback`, {
+                    fetch(`${API_BASE}/recommend/feedback`, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: authHeaders(),
                         credentials: 'include',
                         body: JSON.stringify({ repo_id: `search:${query}`, action: 'view' })
                     }).catch(() => {}); // fire-and-forget
@@ -1028,9 +1043,9 @@ document.addEventListener('DOMContentLoaded', () => {
             favorites.push(repo);
             // Record save interaction with recommender
             if (userId && repo.id) {
-                fetch(`${API_BASE}/api/recommend/feedback`, {
+                fetch(`${API_BASE}/recommend/feedback`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: authHeaders(),
                     credentials: 'include',
                     body: JSON.stringify({ repo_id: repo.id, action: 'star' })
                 }).catch(() => {});
