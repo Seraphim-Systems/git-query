@@ -2,9 +2,14 @@
 
 from typing import Optional, Dict, Any
 from datetime import datetime
+from uuid import uuid4
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from redis.asyncio import Redis
 from pydantic import BaseModel
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 class UserPreferences(BaseModel):
@@ -38,6 +43,23 @@ class UserService:
         self.db = mongodb
         self.redis = redis
         self.cache_ttl = cache_ttl
+        self._action_map = {
+            "click": "click",
+            "view": "view",
+            "dismiss": "dismiss",
+            "thumbs_up": "thumbs_up",
+            "thumbs_down": "thumbs_down",
+            "save": "save",
+            "star": "save",
+            "bookmark": "save",
+            "clone": "click",
+            "fork": "click",
+            "open": "click",
+        }
+
+    def _to_recommender_interaction_type(self, action: str) -> str:
+        """Map gateway feedback actions to recommender interaction types."""
+        return self._action_map.get((action or "").lower(), "view")
 
     async def get_user_preferences(self, user_id: str) -> UserPreferences:
         """
@@ -56,12 +78,22 @@ class UserService:
         if cached:
             return UserPreferences.model_validate_json(cached)
 
-        # Fetch from MongoDB
+        # Fetch from MongoDB (gateway user profile doc)
         user = await self.db.users.find_one({"user_id": user_id})
 
         if not user or "preferences" not in user:
-            # Return default preferences
-            prefs = UserPreferences()
+            # Fallback to recommender preferences if available.
+            reco_prefs = await self.db.user_preferences.find_one({"user_id": user_id})
+            if reco_prefs:
+                languages = list((reco_prefs.get("language_preferences") or {}).keys())
+                topics = list((reco_prefs.get("topic_preferences") or {}).keys())
+                prefs = UserPreferences(
+                    languages=languages,
+                    topics=topics,
+                )
+            else:
+                # Return default preferences
+                prefs = UserPreferences()
         else:
             prefs = UserPreferences(**user["preferences"])
 
@@ -90,6 +122,31 @@ class UserService:
             upsert=True,
         )
 
+        # Keep recommender's preference store in sync so personalization reads
+        # a consistent profile source.
+        lang_scores = {
+            language: 1.0 for language in (preferences.get("languages") or [])
+        }
+        topic_scores = {
+            topic: 1.0 for topic in (preferences.get("topics") or [])
+        }
+        existing = await self.db.user_preferences.find_one({"user_id": user_id})
+        total_interactions = int((existing or {}).get("total_interactions", 0))
+
+        await self.db.user_preferences.update_one(
+            {"user_id": user_id},
+            {
+                "$set": {
+                    "user_id": user_id,
+                    "language_preferences": lang_scores,
+                    "topic_preferences": topic_scores,
+                    "last_updated": datetime.utcnow(),
+                },
+                "$setOnInsert": {"total_interactions": total_interactions},
+            },
+            upsert=True,
+        )
+
         # Invalidate cache
         await self.redis.delete(f"user_prefs:{user_id}")
 
@@ -100,6 +157,9 @@ class UserService:
         user_id: str,
         repo_id: str,
         action: str,
+        query: str = "",
+        variant: str = "hybrid",
+        position_in_results: Optional[int] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ):
         """
@@ -111,14 +171,29 @@ class UserService:
             action: Action type (star, view, clone, fork, click, dismiss)
             metadata: Additional metadata
         """
+        now = datetime.utcnow()
         interaction = {
             "repo_id": repo_id,
             "action": action,
-            "timestamp": datetime.utcnow(),
+            "timestamp": now,
             "metadata": metadata or {},
         }
 
-        # Store in MongoDB
+        # Canonical event log for recommender training/personalization.
+        recommender_event = {
+            "user_id": user_id,
+            "query": query,
+            "repo_id": repo_id,
+            "interaction_type": self._to_recommender_interaction_type(action),
+            "position_in_results": position_in_results,
+            "variant": variant,
+            "timestamp": now,
+            "metadata": metadata or {},
+        }
+
+        await self.db.user_interactions.insert_one(recommender_event)
+
+        # Keep legacy embedded interaction history for backward compatibility.
         await self.db.users.update_one(
             {"user_id": user_id},
             {
@@ -133,10 +208,29 @@ class UserService:
             upsert=True,
         )
 
+        # Keep recommender preference counters warm for users that only touch
+        # the gateway feedback endpoint.
+        try:
+            await self.db.user_preferences.update_one(
+                {"user_id": user_id},
+                {
+                    "$inc": {"total_interactions": 1},
+                    "$set": {"last_updated": now},
+                    "$setOnInsert": {
+                        "user_id": user_id,
+                        "language_preferences": {},
+                        "topic_preferences": {},
+                    },
+                },
+                upsert=True,
+            )
+        except Exception as exc:
+            logger.warning("Failed to update user_preferences counters: %s", exc)
+
         # Store in Redis for real-time access (last 100 interactions)
         await self.redis.lpush(
             f"user_interactions:{user_id}",
-            f"{repo_id}:{action}:{datetime.utcnow().isoformat()}",
+            f"{repo_id}:{action}:{now.isoformat()}",
         )
         await self.redis.ltrim(f"user_interactions:{user_id}", 0, 99)
 
@@ -153,6 +247,19 @@ class UserService:
         Returns:
             List of interactions
         """
+        # Primary source: canonical recommender interaction collection.
+        cursor = (
+            self.db.user_interactions.find({"user_id": user_id})
+            .sort("timestamp", -1)
+            .limit(limit)
+        )
+        interactions = await cursor.to_list(length=limit)
+        if interactions:
+            for item in interactions:
+                item.pop("_id", None)
+            return interactions
+
+        # Backward-compatible fallback.
         user = await self.db.users.find_one(
             {"user_id": user_id}, {"interaction_history": {"$slice": -limit}}
         )
@@ -174,14 +281,22 @@ class UserService:
         """
         return await self.db.users.find_one({"user_id": user_id})
 
+    async def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
+        """Get user document by email."""
+        return await self.db.users.find_one({"email": email})
+
     async def create_user(
-        self, user_id: str, email: str, username: str, **kwargs
+        self,
+        email: str,
+        username: str,
+        user_id: Optional[str] = None,
+        **kwargs,
     ) -> Dict[str, Any]:
         """
         Create a new user.
 
         Args:
-            user_id: User identifier
+            user_id: Optional user identifier; if omitted a UUIDv4 is generated
             email: User email
             username: Username
             **kwargs: Additional user data
@@ -189,8 +304,9 @@ class UserService:
         Returns:
             Created user document
         """
+        resolved_user_id = user_id or str(uuid4())
         user_doc = {
-            "user_id": user_id,
+            "user_id": resolved_user_id,
             "email": email,
             "username": username,
             "created_at": datetime.utcnow(),

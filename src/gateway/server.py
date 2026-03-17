@@ -122,7 +122,7 @@ async def _seed_admin_user(user_service) -> None:
     if not email:
         return
 
-    existing = await user_service.get_user(email)
+    existing = await user_service.get_user_by_email(email)
     if existing:
         logger.info("Admin seed user already exists: %s", email)
         return
