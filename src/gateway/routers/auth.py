@@ -4,6 +4,8 @@ from fastapi import APIRouter, HTTPException, status, Request, Response
 from pydantic import BaseModel, EmailStr
 import hashlib
 
+from src.gateway.services.jwt_service import create_access_token
+
 router = APIRouter()
 
 
@@ -29,6 +31,8 @@ class AuthResponse(BaseModel):
     user_id: str
     username: str
     message: str
+    token: str
+    is_admin: bool = False
 
 
 @router.post("/login", response_model=AuthResponse)
@@ -58,6 +62,9 @@ async def login(request: Request, response: Response, credentials: LoginRequest)
         user_agent=request.headers.get("user-agent", "unknown"),
     )
 
+    is_admin = bool(user.get("is_admin", False))
+    token = create_access_token(user["user_id"], user["username"], is_admin)
+
     # Set session cookie
     response.set_cookie(
         key="session_id",
@@ -73,6 +80,8 @@ async def login(request: Request, response: Response, credentials: LoginRequest)
         user_id=user["user_id"],
         username=user["username"],
         message="Login successful",
+        token=token,
+        is_admin=is_admin,
     )
 
 
@@ -110,6 +119,8 @@ async def register(request: Request, response: Response, data: RegisterRequest):
         user_agent=request.headers.get("user-agent", "unknown"),
     )
 
+    token = create_access_token(user["user_id"], user["username"], is_admin=False)
+
     # Set session cookie
     response.set_cookie(
         key="session_id",
@@ -125,6 +136,8 @@ async def register(request: Request, response: Response, data: RegisterRequest):
         user_id=user["user_id"],
         username=user["username"],
         message="Registration successful",
+        token=token,
+        is_admin=False,
     )
 
 

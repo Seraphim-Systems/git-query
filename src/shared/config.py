@@ -1,6 +1,13 @@
+import os
 from pydantic_settings import BaseSettings
 from pydantic import Field
 from typing import List, Optional
+
+# Resolve the docker .env relative to this file so it is found regardless of
+# the working directory (important for local dev where there is no root .env).
+_DOCKER_ENV = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), "../../infrastructure/docker/.env")
+)
 
 
 class Settings(BaseSettings):
@@ -59,7 +66,10 @@ class Settings(BaseSettings):
         return [origin.strip() for origin in self.allowed_origins.split(",")]
 
     class Config:
-        env_file = ".env"
+        # Check root .env first (Docker passes vars via environment, so the
+        # path not existing is fine), then fall back to infrastructure/docker/.env
+        # so local dev picks up credentials without needing a root-level .env.
+        env_file = (".env", _DOCKER_ENV)
         env_prefix = ""
         extra = "ignore"
 
