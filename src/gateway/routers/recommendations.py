@@ -1,7 +1,7 @@
 """Recommendations router - proxies to recommender service."""
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 import httpx
 
@@ -132,7 +132,11 @@ class FeedbackRequest(BaseModel):
     """Feedback request model."""
 
     repo_id: str
-    action: str  # click, star, clone, dismiss
+    action: str  # click, save, dismiss, thumbs_up, thumbs_down, view, star, clone
+    query: str = ""
+    variant: str = "hybrid"
+    position_in_results: Optional[int] = None
+    metadata: dict = Field(default_factory=dict)
 
 
 @router.post("/feedback")
@@ -145,11 +149,18 @@ async def record_feedback(
     user_service = request.app.state.user_service
 
     await user_service.record_interaction(
-        user_id=user_id, repo_id=feedback.repo_id, action=feedback.action
+        user_id=user_id,
+        repo_id=feedback.repo_id,
+        action=feedback.action,
+        query=feedback.query,
+        variant=feedback.variant,
+        position_in_results=feedback.position_in_results,
+        metadata=feedback.metadata,
     )
 
     return {
         "status": "recorded",
         "repo_id": feedback.repo_id,
         "action": feedback.action,
+        "variant": feedback.variant,
     }

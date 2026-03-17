@@ -4,6 +4,8 @@ from fastapi import APIRouter, HTTPException, status, Request, Response
 from pydantic import BaseModel, EmailStr
 import hashlib
 
+from src.gateway.services.jwt_service import create_access_token
+
 router = APIRouter()
 
 
@@ -29,6 +31,8 @@ class AuthResponse(BaseModel):
     user_id: str
     username: str
     message: str
+    token: str
+    is_admin: bool = False
 
 
 @router.post("/login", response_model=AuthResponse)
@@ -37,7 +41,7 @@ async def login(request: Request, response: Response, credentials: LoginRequest)
     user_service = request.app.state.user_service
     session_manager = request.app.state.session_manager
 
-    user = await user_service.get_user(credentials.email)
+    user = await user_service.get_user_by_email(credentials.email)
 
     if not user:
         raise HTTPException(
@@ -58,6 +62,9 @@ async def login(request: Request, response: Response, credentials: LoginRequest)
         user_agent=request.headers.get("user-agent", "unknown"),
     )
 
+    is_admin = bool(user.get("is_admin", False))
+    token = create_access_token(user["user_id"], user["username"], is_admin)
+
     # Set session cookie
     response.set_cookie(
         key="session_id",
@@ -73,6 +80,8 @@ async def login(request: Request, response: Response, credentials: LoginRequest)
         user_id=user["user_id"],
         username=user["username"],
         message="Login successful",
+        token=token,
+        is_admin=is_admin,
     )
 
 
@@ -87,7 +96,7 @@ async def register(request: Request, response: Response, data: RegisterRequest):
     session_manager = request.app.state.session_manager
 
     # Check if user exists
-    existing_user = await user_service.get_user(data.email)
+    existing_user = await user_service.get_user_by_email(data.email)
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="User already exists"
@@ -98,7 +107,6 @@ async def register(request: Request, response: Response, data: RegisterRequest):
     password_hash = hashlib.sha256(data.password.encode()).hexdigest()
 
     user = await user_service.create_user(
-        user_id=data.email,  # Using email as user_id for simplicity
         email=data.email,
         username=data.username,
         password_hash=password_hash,
@@ -110,6 +118,8 @@ async def register(request: Request, response: Response, data: RegisterRequest):
         ip_address=request.client.host if request.client else "unknown",
         user_agent=request.headers.get("user-agent", "unknown"),
     )
+
+    token = create_access_token(user["user_id"], user["username"], is_admin=False)
 
     # Set session cookie
     response.set_cookie(
@@ -126,6 +136,8 @@ async def register(request: Request, response: Response, data: RegisterRequest):
         user_id=user["user_id"],
         username=user["username"],
         message="Registration successful",
+        token=token,
+        is_admin=False,
     )
 
 

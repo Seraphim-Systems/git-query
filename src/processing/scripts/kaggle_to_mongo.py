@@ -376,13 +376,14 @@ def load_to_cosmos(
         client = httpx.Client(timeout=300.0)
     else:
         if target == "mongodb":
-            from src.storage.db_config import get_mongodb_db  # noqa: E402
+            from src.db.config import get_mongodb_db  # noqa: E402
 
             database = get_mongodb_db()
         else:
-            from src.storage.db_config import get_cosmos_db  # noqa: E402
-
-            database = get_cosmos_db()
+            raise RuntimeError(
+                "Direct Cosmos mode is no longer supported in this repository. "
+                "Use --target mongodb (direct or gateway mode)."
+            )
         collection = database[collection_name]
 
     total_upserted = 0
