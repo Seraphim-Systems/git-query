@@ -13,5 +13,7 @@ jobs:
     with:
       compose_files: "-f docker-compose.base.yml -f docker-compose.databases.yml -f docker-compose.web.yml"
       services: "web"
-      health_check_url: "http://localhost:8080/health"
+      branch: ${{ github.ref_name }}
+      # Port 8080 is not exposed to the host in production; exec into the container.
+      health_check_command: "docker exec git-query-web curl -f http://localhost:8080/health"
     secrets: inherit

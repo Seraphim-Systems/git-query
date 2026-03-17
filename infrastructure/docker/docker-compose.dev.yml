@@ -1,5 +1,11 @@
 # Development override - exposes ports to host for debugging
 
+networks:
+  # Override the external proxy network for local dev so docker compose creates
+  # it automatically instead of requiring a pre-existing external network.
+  proxy:
+    external: false
+
 services:
   mongodb:
     ports:
@@ -49,5 +55,7 @@ services:
       - "8080:8080"
     environment:
       LOG_LEVEL: DEBUG
+    networks:
+      - internal-network
     # Note: db-query-api removed in favor of running the API Gateway which now
     # serves DB endpoints. The `gateway` service will bind host port 80 in dev.

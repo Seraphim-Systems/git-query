@@ -13,5 +13,6 @@ jobs:
     with:
       compose_files: "-f docker-compose.base.yml -f docker-compose.databases.yml -f docker-compose.gateway.yml -f docker-compose.app.yml -f docker-compose.dev.yml"
       services: "gateway recommender mcp-server"
+      branch: ${{ github.ref_name }}
       health_check_url: "http://localhost/health"
     secrets: inherit

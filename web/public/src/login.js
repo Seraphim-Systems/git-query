@@ -1,6 +1,5 @@
 // Login functionality
 document.addEventListener('DOMContentLoaded', () => {
-    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     // Use empty string for same-origin (webserver proxies API calls to gateway)
     const API_BASE = '';
     const loginForm = document.getElementById('loginForm');
@@ -57,7 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
         submitBtn.textContent = 'Signing in...';
         
         try {
-            const response = await fetch(`${API_BASE}/api/auth/login`, {
+            const response = await fetch(`${API_BASE}/auth/login`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -73,10 +72,12 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (response.ok) {
                 showMessage('Login successful! Redirecting...', 'success');
-                // Store real session info from gateway response
+                // Store JWT token and session info
+                localStorage.setItem('token', data.token || '');
                 localStorage.setItem('sessionId', data.session_id || ('session_' + Date.now()));
                 localStorage.setItem('userId', data.user_id || emailInput.value.trim());
                 localStorage.setItem('username', data.username || emailInput.value.trim().split('@')[0]);
+                localStorage.setItem('isAdmin', data.is_admin ? 'true' : 'false');
                 // Redirect to home page
                 setTimeout(() => {
                     window.location.href = '/home.html';

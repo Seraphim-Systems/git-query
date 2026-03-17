@@ -31,6 +31,9 @@ hiredis>=2.3.0
 qdrant-client>=1.7.0
 
 
+# Authentication
+PyJWT>=2.8.0
+
 # Configuration
 python-dotenv>=1.0.0
 

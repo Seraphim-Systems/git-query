@@ -376,6 +376,7 @@ class TestEmbedServiceNoDuplication:
         fake_model = MagicMock()
         fake_model.encode.return_value = np.random.rand(3, 384)
         svc.model = fake_model
+        svc._loaded_path = "fake-model"
 
         texts = ["alpha description", "beta description", "gamma description"]
         result = await svc.embed_batch(texts)
@@ -392,6 +393,7 @@ class TestEmbedServiceNoDuplication:
         fake_model = MagicMock()
         fake_model.encode.return_value = np.random.rand(384)
         svc.model = fake_model
+        svc._loaded_path = "fake-model"
 
         result = await svc.embed_text("python web framework")
 
@@ -411,6 +413,7 @@ class TestEmbedServiceNoDuplication:
         fake_model = MagicMock()
         fake_model.encode.return_value = np.random.rand(5, 384)
         svc.model = fake_model
+        svc._loaded_path = "fake-model"
 
         result = await svc.embed_batch([f"repo {i}" for i in range(5)])
         assert len(result) == 5

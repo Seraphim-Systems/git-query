@@ -226,6 +226,9 @@ CLAUDE.md
 .claude-flow
 .swarm
 
+# generated spec/planning docs
+docs/test-spec-*.md
+
 models/
 *.parquet
 *.csv
