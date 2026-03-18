@@ -1,6 +1,6 @@
 """Pydantic models for the recommendation system."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Literal
 from pydantic import BaseModel, Field
 from enum import Enum
@@ -63,7 +63,7 @@ class RecommendationResponse(BaseModel):
     variant: str = Field("baseline", description="Which recommendation variant was used")
     personalized: bool = Field(False, description="Whether personalization was applied")
     filters_applied: Dict[str, Any] = Field(default_factory=dict)
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class UserInteraction(BaseModel):
@@ -75,7 +75,7 @@ class UserInteraction(BaseModel):
     interaction_type: InteractionType
     position_in_results: Optional[int] = None
     variant: str = Field("baseline", description="Which variant was shown")
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
@@ -90,7 +90,7 @@ class UserPreferences(BaseModel):
         default_factory=dict, description="Topic -> preference score"
     )
     total_interactions: int = 0
-    last_updated: datetime = Field(default_factory=datetime.utcnow)
+    last_updated: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class EvaluationMetrics(BaseModel):
@@ -109,7 +109,7 @@ class EvaluationMetrics(BaseModel):
     total_interactions: int
     evaluation_period_start: datetime
     evaluation_period_end: datetime
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class ABTestConfig(BaseModel):
@@ -125,7 +125,7 @@ class ABTestConfig(BaseModel):
     start_date: datetime
     end_date: Optional[datetime] = None
     is_active: bool = True
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class ModelMetadata(BaseModel):
@@ -140,7 +140,7 @@ class ModelMetadata(BaseModel):
     metrics: Dict[str, float] = Field(
         default_factory=dict, description="Training evaluation metrics"
     )
-    trained_at: datetime = Field(default_factory=datetime.utcnow)
+    trained_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     is_active: bool = False
     status: Literal["candidate", "active", "archived"] = "candidate"
     notes: Optional[str] = None

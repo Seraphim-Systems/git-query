@@ -1,0 +1,40 @@
+# Gateway service
+# Usage: Use with -f docker-compose.base.yml -f docker-compose.databases.yml -f docker-compose.gateway.yml
+
+networks:
+  # External proxy network - managed by the reverse proxy (e.g. Traefik/nginx-proxy).
+  # Must exist on the host before deploying. Created automatically by the deploy workflow.
+  proxy:
+    external: true
+    name: proxy
+
+services:
+  gateway:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.gateway
+    image: git-query-gateway:latest
+    container_name: git-query-gateway
+    env_file:
+      - .env
+    environment:
+      LOG_LEVEL: ${SVC_LOG_LEVEL:-INFO}
+      REDIS_URL: redis://:${DB_REDIS_PASSWORD:-redispass}@redis:6379
+      MONGODB_URL: mongodb://${DB_MONGODB_USER:-admin}:${DB_MONGODB_PASSWORD:-mongopass}@mongodb:27017/${DB_MONGODB_DATABASE:-gitquery}?authSource=admin
+      QDRANT_HOST: ${QDRANT_HOST:-qdrant}
+      QDRANT_HTTP_PORT: ${QDRANT_HTTP_PORT:-6333}
+    depends_on:
+      - mongodb
+      - redis
+      - qdrant
+      - qdrant-init
+    networks:
+      - internal-network
+      - proxy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

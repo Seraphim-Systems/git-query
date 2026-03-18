@@ -1,5 +1,11 @@
 # Development override - exposes ports to host for debugging
 
+networks:
+  # Override the external proxy network for local dev so docker compose creates
+  # it automatically instead of requiring a pre-existing external network.
+  proxy:
+    external: false
+
 services:
   mongodb:
     ports:
@@ -10,36 +16,46 @@ services:
     ports:
       - "6333:6333"
       - "6334:6334"
-
   redis:
     ports:
       - "6379:6379"
 
-  mcp-server:
+  recommender:
     ports:
-      - "8090:8090"
+      - "8095:8095"
     environment:
       LOG_LEVEL: DEBUG
-      MONGODB_URL: "mongodb://${DB_MONGODB_USER:-admin}:${DB_MONGODB_PASSWORD:-mongopass}@mongodb:27017/gitquery?authSource=admin"
-      REDIS_URL: "redis://:${DB_REDIS_PASSWORD:-redispass}@redis:6379"
-      QDRANT_HOST: "${QDRANT_HOST:-qdrant}"
-      QDRANT_PORT: "${QDRANT_HTTP_PORT:-6333}"
-      QDRANT_API_KEY: "${DB_QDRANT_API_KEY:-}"
-      MCP_API_KEY: "${APIKEY_MCP}"
-      OPENAI_API_KEY: "${APP_OPENAI_API_KEY}"
+      SVC_NGINX_SERVER_NAME: ""
+
+  mcp-server:
+      ports:
+        - "8090:8090"
+      environment:
+        LOG_LEVEL: DEBUG
+        MONGODB_URL: "mongodb://${DB_MONGODB_USER:-admin}:${DB_MONGODB_PASSWORD:-mongopass}@mongodb:27017/gitquery?authSource=admin"
+        REDIS_URL: "redis://:${DB_REDIS_PASSWORD:-redispass}@redis:6379"
+        QDRANT_HOST: "${QDRANT_HOST:-qdrant}"
+        QDRANT_PORT: "${QDRANT_HTTP_PORT:-6333}"
+        QDRANT_API_KEY: "${DB_QDRANT_API_KEY:-}"
+        MCP_API_KEY: "${APIKEY_MCP}"
+        OPENAI_API_KEY: "${APP_OPENAI_API_KEY}"
+        RECOMMENDER_URL: "http://recommender:8095"
 
   gateway:
+      ports:
+        - "80:80"
+      environment:
+        LOG_LEVEL: DEBUG
+
+  web:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.web
     ports:
-      - "80:80"
+      - "8080:8080"
     environment:
       LOG_LEVEL: DEBUG
-      REDIS_URL: "redis://:${DB_REDIS_PASSWORD:-redispass}@redis:6379"
-      MONGODB_URL: "mongodb://${DB_MONGODB_USER:-admin}:${DB_MONGODB_PASSWORD:-mongopass}@mongodb:27017/${DB_MONGODB_DATABASE:-gitquery}?authSource=admin"
-      QDRANT_HOST: "${QDRANT_HOST:-qdrant}"
-      QDRANT_HTTP_PORT: "${QDRANT_HTTP_PORT:-6333}"
-    # In development, do not attach the gateway to the external `proxy` network.
     networks:
-      - db-network
-      - web-network
-  # Note: db-query-api removed in favor of running the API Gateway which now
-  # serves DB endpoints. The `gateway` service will bind host port 80 in dev.
+      - internal-network
+    # Note: db-query-api removed in favor of running the API Gateway which now
+    # serves DB endpoints. The `gateway` service will bind host port 80 in dev.

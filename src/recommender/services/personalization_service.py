@@ -4,7 +4,7 @@ from typing import Dict
 from collections import defaultdict
 from ..models import UserInteraction, UserPreferences, InteractionType
 from ..database import db_manager
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class PersonalizationService:
@@ -73,7 +73,7 @@ class PersonalizationService:
 
         # Update metadata
         prefs.total_interactions += 1
-        prefs.last_updated = datetime.utcnow()
+        prefs.last_updated = datetime.now(timezone.utc)
 
         # Save
         await db_manager.update_user_preferences(prefs)
@@ -92,10 +92,13 @@ class PersonalizationService:
         for interaction in interactions:
             signal_weight = self._get_signal_weight(interaction.interaction_type)
 
-            # Would need to fetch repo data for each interaction
-            # For now, this is a placeholder
-            # In production, you might store language/topics with the interaction
-            pass
+            # Use metadata stored with the interaction if available
+            if hasattr(interaction, 'metadata') and interaction.metadata:
+                meta = interaction.metadata
+                if meta.get("language"):
+                    language_scores[meta["language"]] += signal_weight
+                for topic in meta.get("topics", []):
+                    topic_scores[topic] += signal_weight
 
         # Create or update preferences
         prefs = UserPreferences(
@@ -103,7 +106,7 @@ class PersonalizationService:
             language_preferences=self._normalize_preferences(dict(language_scores)),
             topic_preferences=self._normalize_preferences(dict(topic_scores)),
             total_interactions=len(interactions),
-            last_updated=datetime.utcnow(),
+            last_updated=datetime.now(timezone.utc),
         )
 
         await db_manager.update_user_preferences(prefs)

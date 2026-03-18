@@ -1,0 +1,140 @@
+name: Reusable Deploy Workflow
+
+# Single Responsibility: Handle common deployment steps across all services
+# Used by: deploy-infrastructure.yml, deploy-app.yml, deploy-reco.yml, deploy-training.yml, deploy-mcp.yml
+
+on:
+  workflow_call:
+    inputs:
+      compose_files:
+        required: true
+        type: string
+        description: "Space-separated docker-compose files (-f flag repeated)"
+      services:
+        required: false
+        type: string
+        description: "Optional: specific services to deploy (default: all defined in compose)"
+      branch:
+        required: false
+        type: string
+        default: "dev"
+        description: "Git branch to check out on the server"
+      health_check_url:
+        required: false
+        type: string
+        default: "http://localhost/health"
+        description: "URL to check for deployment health"
+      health_check_command:
+        required: false
+        type: string
+        default: ""
+        description: "Override the entire health check command (e.g. 'docker exec <container> curl -f http://localhost:<port>/health'). When set, health_check_url is ignored."
+
+jobs:
+  deploy:
+    name: Deploy Services
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Create environment file
+        run: |
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
+          set -e
+          cat > /tmp/deploy.env << EOF
+          DB_MONGODB_USER=${{ secrets.DB_MONGODB_USER }}
+          DB_MONGODB_PASSWORD=${{ secrets.DB_MONGODB_PASSWORD }}
+          DB_MONGODB_DATABASE=${{ secrets.DB_MONGODB_DATABASE }}
+          DB_REDIS_PASSWORD=${{ secrets.DB_REDIS_PASSWORD }}
+          DB_QDRANT_API_KEY=${{ secrets.DB_QDRANT_API_KEY }}
+          APIKEY_MONGODB=${{ secrets.APIKEY_MONGODB }}
+          APIKEY_REDIS=${{ secrets.APIKEY_REDIS }}
+          APIKEY_QDRANT=${{ secrets.APIKEY_QDRANT }}
+          APIKEY_MCP=${{ secrets.APIKEY_MCP }}
+          APP_SESSION_SECRET=${{ secrets.APP_SESSION_SECRET }}
+          APP_JWT_SECRET=${{ secrets.APP_JWT_SECRET }}
+          APP_OPENAI_API_KEY=${{ secrets.APP_OPENAI_API_KEY }}
+          WEB_ADMIN_EMAIL=${{ secrets.WEB_ADMIN_EMAIL }}
+          WEB_ADMIN_PASSWORD=${{ secrets.WEB_ADMIN_PASSWORD }}
+          WEB_ADMIN_USERNAME=${{ secrets.WEB_ADMIN_USERNAME }}
+          SVC_LOG_LEVEL=${{ secrets.SVC_LOG_LEVEL }}
+          SVC_NGINX_SERVER_NAME=${{ secrets.SVC_NGINX_SERVER_NAME }}
+          EOF
+          cat /tmp/deploy.env >> ~/.bashrc
+          ENDSSH
+
+      - name: Sync repository
+        run: |
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
+          set -e
+          REPO_PATH="/home/${{ secrets.INFRA_HETZNER_USER }}/git-query"
+          if [ -d "$REPO_PATH/.git" ]; then
+            cd "$REPO_PATH"
+            git fetch origin
+            git reset --hard origin/${{ inputs.branch }}
+            git clean -fd
+          else
+            git clone https://github.com/Seraphim-Systems/git-query.git "$REPO_PATH"
+            cd "$REPO_PATH"
+          fi
+          ENDSSH
+
+      - name: Deploy services
+        run: |
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
+          set -e
+          cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query/infrastructure/docker
+          source /tmp/deploy.env
+          # docker-compose services that use `env_file: .env` require the file
+          # to exist in the compose working directory.
+          cp /tmp/deploy.env .env
+          # Fix network label mismatch from docker-compose v1 -> docker compose v2 migration.
+          # v1 set com.docker.compose.network=<full-name>; v2 expects the compose key name.
+          # If the old label is present, tear down first so the network is recreated correctly.
+          NETLABEL=$(docker network inspect git-query-internal-network --format '{{ index .Labels "com.docker.compose.network" }}' 2>/dev/null || true)
+          if [ "$NETLABEL" = "git-query-internal-network" ]; then
+            echo "Removing mis-labeled network from docker-compose v1..."
+            docker compose ${{ inputs.compose_files }} down || true
+            docker network rm git-query-internal-network || true
+          fi
+          # Ensure the external proxy network exists (used by the gateway service).
+          docker network create proxy || true
+          # Ensure the external proxy network exists (required by the gateway service).
+          # This is a no-op if it already exists.
+          docker network create proxy || true
+          docker compose ${{ inputs.compose_files }} up -d --build ${{ inputs.services }}
+          # Explicitly connect gateway to proxy in case the container was not recreated
+          # (compose skips recreation when the image is cached and config hash matches
+          # the previous container, so network changes may not be applied automatically).
+          docker network connect proxy git-query-gateway 2>/dev/null || true
+          sleep 5
+          ENDSSH
+
+      - name: Verify deployment
+        run: |
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
+          set -e
+          cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query/infrastructure/docker
+          docker compose ${{ inputs.compose_files }} ps
+          ENDSSH
+
+      - name: Health check
+        if: inputs.health_check_url != '' || inputs.health_check_command != ''
+        run: |
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
+          set -e
+          sleep 10
+          ${{ inputs.health_check_command != '' && inputs.health_check_command || format('curl -f "{0}"', inputs.health_check_url) }} || exit 1
+          ENDSSH
+
+      - name: Cleanup
+        if: always()
+        run: |
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} "rm -f /tmp/deploy.env /home/${{ secrets.INFRA_HETZNER_USER }}/git-query/infrastructure/docker/.env" || true

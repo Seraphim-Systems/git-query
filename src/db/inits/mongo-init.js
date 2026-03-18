@@ -14,4 +14,21 @@ db.user_interactions.createIndex({ 'repo_id': 1 });
 db.recommendations.createIndex({ 'recommendation_id': 1 }, { unique: true });
 db.recommendations.createIndex({ 'user_id': 1 });
 db.recommendations.createIndex({ 'repo_id': 1 });
+
+// Seed default admin user (password: admin123 - CHANGE IN PRODUCTION)
+const adminExists = db.users.findOne({ email: 'admin@gitquery.local' });
+if (!adminExists) {
+    db.users.insertOne({
+        user_id: 'admin@gitquery.local',
+        email: 'admin@gitquery.local',
+        username: 'admin',
+        password_hash: '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9',
+        created_at: new Date(),
+        is_admin: true
+    });
+    print('MongoDB: admin user seeded (change default password!)');
+} else {
+    print('MongoDB: admin user already exists, skipping seed');
+}
+
 print(' MongoDB initialized');

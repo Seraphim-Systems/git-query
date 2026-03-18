@@ -1,0 +1,30 @@
+name: Deploy Infrastructure (Databases)
+
+# Single Responsibility: Deploy only database services
+# Triggered: Manual workflow dispatch
+# Services: MongoDB, Redis, Qdrant
+
+on:
+  workflow_dispatch:
+    inputs:
+      services:
+        description: 'Which services to deploy'
+        required: true
+        type: choice
+        options:
+          - all databases
+          - mongodb
+          - redis
+          - qdrant
+        default: 'all databases'
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/reusable-deploy.yml
+    with:
+      compose_files: "-f docker-compose.base.yml -f docker-compose.databases.yml"
+      services: ${{ github.event.inputs.services != 'all databases' && github.event.inputs.services || '' }}
+      branch: ${{ github.ref_name }}
+      # Qdrant has no curl. Verify the container is running via docker inspect.
+      health_check_command: "docker inspect -f '{{.State.Running}}' git-query-qdrant | grep -q true"
+    secrets: inherit

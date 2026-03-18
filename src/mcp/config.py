@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     qdrant_url: str = ""
     redis_url: str = ""
 
+    # Recommender service
+    # Inside Docker the service name is "recommender" on port 8095.
+    # Override with RECOMMENDER_URL when running locally.
+    recommender_url: str = "http://recommender:8095"
+
     # CORS
     allowed_origins: str = "http://localhost:3000,http://localhost:8080"
 

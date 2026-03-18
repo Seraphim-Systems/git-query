@@ -1,8 +1,10 @@
 """API Gateway server - main entry point."""
 
+import hashlib
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
+from pymongo.errors import DuplicateKeyError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from redis.asyncio import Redis
@@ -15,7 +17,9 @@ from src.gateway.services.session_manager import SessionManager
 from src.gateway.services.user_service import UserService
 from src.gateway.middleware.rate_limit import RateLimitMiddleware
 from src.gateway.middleware.api_key import APIKeyMiddleware
-from src.gateway.routers import auth, chat, recommendations, user, health
+from src.gateway.middleware.session import SessionMiddleware
+from src.gateway.routers import auth, chat, recommendations, user, health, repos
+from src.gateway.middleware.shared import GATEWAY_API_PREFIXES
 
 
 # Include DB routers directly in the Gateway so the Gateway serves DB endpoints
@@ -112,6 +116,36 @@ for name in NOISY_LOGGERS:
         pass
 
 
+async def _seed_admin_user(user_service) -> None:
+    """Create the admin seed user if WEB_ADMIN_EMAIL is configured and the user doesn't exist yet."""
+    email = settings.web_admin_email
+    if not email:
+        return
+
+    existing = await user_service.get_user_by_email(email)
+    if existing:
+        logger.info("Admin seed user already exists: %s", email)
+        return
+
+    password = settings.web_admin_password or ""
+    password_hash = hashlib.sha256(password.encode()).hexdigest()
+    username = settings.web_admin_username
+
+    try:
+        await user_service.create_user(
+            user_id=email,
+            email=email,
+            username=username,
+            password_hash=password_hash,
+            is_admin=True,
+        )
+        logger.info("Admin seed user created: %s (%s)", email, username)
+    except DuplicateKeyError:
+        logger.info(
+            "Admin seed user already exists (duplicate key): %s (%s)", email, username
+        )
+
+
 @asynccontextmanager
 async def lifespan(app_instance: FastAPI):
     """Application lifespan manager - initialize and cleanup resources."""
@@ -147,6 +181,9 @@ async def lifespan(app_instance: FastAPI):
     )
     logger.info("Services initialized (gateway async + shared sync clients)")
 
+    # Seed admin user if configured (idempotent – skipped if user already exists)
+    await _seed_admin_user(app_instance.state.user_service)
+
     yield
 
     # Cleanup
@@ -174,13 +211,15 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins_list,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
+    expose_headers=["Set-Cookie"],
 )
 
 # Add custom middleware
-# Enforce API key auth for non-public endpoints. Session-based auth removed
-# in favor of API-key-only access for all guarded routes.
+# Enforce API key auth for non-public endpoints. Session middleware handles
+# user-facing routes (/chat, /recommend, /user).
+app.add_middleware(SessionMiddleware)
 app.add_middleware(APIKeyMiddleware)
 app.add_middleware(
     RateLimitMiddleware,
@@ -237,8 +276,12 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
 app.include_router(health.router)
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(chat.router, prefix="/chat", tags=["Chat"])
+app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
 app.include_router(
     recommendations.router, prefix="/recommend", tags=["Recommendations"]
+)
+app.include_router(
+    recommendations.router, prefix="/api/recommend", tags=["Recommendations"]
 )
 app.include_router(user.router, prefix="/user", tags=["User"])
 
@@ -250,6 +293,7 @@ app.include_router(user.router, prefix="/user", tags=["User"])
 app.include_router(mongodb_router.router, prefix="/api")
 app.include_router(redis_router.router, prefix="/api")
 app.include_router(qdrant_router.router, prefix="/api")
+app.include_router(repos.router, prefix="/api")
 
 
 # Health check
@@ -264,6 +308,71 @@ async def health_check(request: Request):
     # Import Request locally to avoid circular import issues during module
     # import time (the global Request type is already available).
     return await health_check_all(request)
+
+
+# ── Frontend reverse proxy ────────────────────────────────────────────────────
+# Catch-all: proxy any request that isn't a known API route to the web
+# container. This makes port 80 the single entry point - no need to expose
+# the web container's port 8080 externally.
+
+
+@app.api_route("/{path:path}", methods=["GET", "HEAD", "OPTIONS"])
+async def proxy_frontend(path: str, request: Request):
+    """Reverse-proxy frontend assets and HTML pages to the web container."""
+    import httpx
+    from fastapi.responses import Response
+
+    full_path = f"/{path}"
+
+    # Don't intercept known gateway API routes (shouldn't normally reach here,
+    # but guard in case of route ordering edge cases).
+    if any(full_path.startswith(p) for p in GATEWAY_API_PREFIXES):
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=404, detail="Route not found")
+
+    web_url = settings.web_url
+    target = f"{web_url}{full_path}"
+
+    # Forward headers except host (rewritten by httpx to the target host)
+    forward_headers = {
+        k: v
+        for k, v in request.headers.items()
+        if k.lower() not in ("host", "content-length")
+    }
+
+    async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
+        try:
+            resp = await client.request(
+                method=request.method,
+                url=target,
+                headers=forward_headers,
+                params=request.query_params,
+            )
+        except httpx.ConnectError:
+            logger.error("Cannot connect to web container at %s", web_url)
+            return Response(content=b"Web frontend unavailable", status_code=503)
+        except httpx.TimeoutException:
+            logger.error("Timeout proxying to web container at %s", target)
+            return Response(content=b"Web frontend timeout", status_code=504)
+
+    # Strip hop-by-hop headers that mustn't be forwarded
+    excluded = {
+        "transfer-encoding",
+        "connection",
+        "keep-alive",
+        "te",
+        "trailers",
+        "upgrade",
+    }
+    resp_headers = {k: v for k, v in resp.headers.items() if k.lower() not in excluded}
+
+    return Response(
+        content=resp.content,
+        status_code=resp.status_code,
+        headers=resp_headers,
+        media_type=resp.headers.get("content-type"),
+    )
 
 
 if __name__ == "__main__":

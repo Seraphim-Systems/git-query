@@ -2,10 +2,15 @@
 
 from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from contextlib import asynccontextmanager
+import logging
+import os
 import time
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 
 from .config import settings
 from .models import (
@@ -70,14 +75,34 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS
+# CORS — allow_origins=["*"] and allow_credentials=True cannot be combined
+# (browsers reject it per the CORS spec). For a public API, omit credentials.
+# To support credentialed requests, replace ["*"] with explicit origin list.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ===== Root Redirect =====
+
+@app.get("/")
+async def root():
+    """Redirect to frontend nginx server.
+    
+    In production: Uses SVC_NGINX_SERVER_NAME from GitHub secrets
+    In development: Defaults to localhost:8080
+    """
+    nginx_server = os.getenv("SVC_NGINX_SERVER_NAME", "")
+    if nginx_server:
+        frontend_url = f"https://{nginx_server}"
+    else:
+        frontend_url = "http://localhost:8080"
+    
+    return RedirectResponse(url=frontend_url)
 
 
 # ===== Health Check =====
@@ -89,7 +114,7 @@ async def health_check():
         "status": "healthy",
         "service": "recommender",
         "version": "1.0.0",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -142,6 +167,7 @@ async def get_recommendations(request: RecommendationRequest):
         return response
 
     except Exception as e:
+        logger.error("Recommendation failed: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Recommendation failed: {str(e)}")
 
 
@@ -162,6 +188,7 @@ async def explain_recommendation(repo_id: str, request: RecommendationRequest):
         return explanation
 
     except Exception as e:
+        logger.error("Explanation failed for repo %s: %s", repo_id, e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Explanation failed: {str(e)}")
 
 
@@ -184,11 +211,13 @@ async def log_interaction(
         # Log interaction
         interaction_id = await db_manager.log_interaction(interaction)
 
-        # Update user preferences in background
+        # Update user preferences in background — pass service explicitly to
+        # avoid a closure over app.state that could break on hot-reload.
         if interaction.user_id:
             background_tasks.add_task(
                 update_user_preferences_task,
                 interaction,
+                app.state.personalization_service,
             )
 
         return {
@@ -197,25 +226,31 @@ async def log_interaction(
         }
 
     except Exception as e:
+        logger.error("Failed to log interaction: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to log interaction: {str(e)}")
 
 
-async def update_user_preferences_task(interaction: UserInteraction):
+async def update_user_preferences_task(
+    interaction: UserInteraction,
+    personalization_service: PersonalizationService,
+):
     """Background task to update user preferences."""
     try:
-        personalization_service: PersonalizationService = app.state.personalization_service
+        # Fetch repo data from database
+        repos = await db_manager.search_repositories(
+            {"_id": interaction.repo_id}, limit=1
+        )
+        if not repos:
+            repos = await db_manager.search_repositories(
+                {"id": interaction.repo_id}, limit=1
+            )
 
-        # Fetch repo data (would need to get from DB)
-        # For now, we'll skip the actual update
-        # In production, you'd fetch the repo and pass it here
-        # repo_data = await db_manager.get_repository(interaction.repo_id)
-        # await personalization_service.update_preferences_from_interaction(
-        #     interaction, repo_data
-        # )
-        pass
+        if repos:
+            await personalization_service.update_preferences_from_interaction(
+                interaction, repos[0]
+            )
     except Exception as e:
-        # Log error but don't fail the request
-        print(f"Failed to update preferences: {e}")
+        logger.error("Failed to update preferences: %s", e)
 
 
 # ===== User Preferences =====
@@ -255,9 +290,11 @@ async def get_active_ab_test():
 async def clear_cache():
     """Clear recommendation cache."""
     try:
-        # Clear all cache keys starting with "reco:"
-        # This would need proper implementation
-        return {"status": "success", "message": "Cache cleared"}
+        cleared = 0
+        async for key in db_manager.redis_client.scan_iter(match="reco:*"):
+            await db_manager.redis_client.delete(key)
+            cleared += 1
+        return {"status": "success", "message": f"Cleared {cleared} cache entries"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to clear cache: {str(e)}")
 

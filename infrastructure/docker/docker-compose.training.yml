@@ -7,6 +7,7 @@ services:
       context: ../..
       dockerfile: infrastructure/docker/Dockerfile.training
     container_name: git-query-training
+    image: git-query-training:latest
     environment:
       # API Configuration - REQUIRED in .env file
       - API_BASE_URL=${API_BASE_URL}
@@ -19,20 +20,23 @@ services:
       - MAX_REPOS=${MAX_REPOS:-}
       - SKIP_IF_NO_NEW_DATA=${SKIP_IF_NO_NEW_DATA:-true}
 
-      # MLflow Configuration
-      - ENABLE_MLFLOW=${ENABLE_MLFLOW:-true}
-      - MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI:-http://mlflow:5000}
-      - MLFLOW_EXPERIMENT_NAME=${MLFLOW_EXPERIMENT_NAME:-git-query-recommender}
+      # Qdrant Upload Configuration
+      - APIKEY_QDRANT=${APIKEY_QDRANT}
+      - QDRANT_COLLECTION=${QDRANT_COLLECTION:-repositories_embeddings}
+      - UPLOAD_BATCH_SIZE=${UPLOAD_BATCH_SIZE:-100}
+      - SKIP_QDRANT_UPLOAD=${SKIP_QDRANT_UPLOAD:-false}
 
-      # Drift Monitoring
-      - EVIDENTLY_REPORT_PATH=/app/drift_reports
+      # Chunked Pipeline Configuration
+      - USE_CHUNKED_PIPELINE=${USE_CHUNKED_PIPELINE:-true}
+      - CHUNK_SIZE=${CHUNK_SIZE:-100000}
+      - N_WORKERS=${N_WORKERS:-6}
 
       # Logging
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
 
-    networks:
-      - web-network
+    # No network needed - training only connects to external API via internet
     restart: "no"  # Run once, don't restart
+    shm_size: '2gb'  # PyTorch multiprocessing needs shared memory for model weights
     volumes:
       # Persist trained models
       - training-models:/app/models
@@ -40,8 +44,8 @@ services:
       - training-data:/app/training_data
       # Logs
       - training-logs:/app/logs
-      # Drift reports
-      - drift-reports:/app/drift_reports
+    networks:
+      - internal-network
 
 volumes:
   training-models:
@@ -50,9 +54,3 @@ volumes:
     name: git-query-training-data
   training-logs:
     name: git-query-training-logs
-  drift-reports:
-    name: git-query-drift-reports
-
-networks:
-  web-network:
-    external: true

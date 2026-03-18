@@ -62,7 +62,7 @@ class ABTestService:
         """
         # Create hash of user_id + test_id
         hash_input = f"{user_id}:{ab_test.test_id}"
-        hash_value = int(hashlib.md5(hash_input.encode()).hexdigest(), 16)
+        hash_value = int(hashlib.sha256(hash_input.encode()).hexdigest(), 16)
 
         # Normalize to [0, 1]
         normalized = (hash_value % 10000) / 10000.0

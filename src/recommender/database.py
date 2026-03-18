@@ -1,17 +1,20 @@
 """Database clients for the recommendation system."""
 
 import asyncio
-import os
+import json
+import logging
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
+
+import redis.asyncio as redis
 from motor.motor_asyncio import AsyncIOMotorClient
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
-import redis.asyncio as redis
-from datetime import datetime, timedelta
-import json
+from qdrant_client.models import Distance, Filter, VectorParams
 
 from .config import settings
-from .models import UserInteraction, UserPreferences, EvaluationMetrics, ABTestConfig, ModelMetadata
+from .models import ABTestConfig, EvaluationMetrics, ModelMetadata, UserInteraction, UserPreferences
 from src.db.config import db_clients
 
 
@@ -24,48 +27,51 @@ class DatabaseManager:
         self.redis_client: Optional[redis.Redis] = None
         self.db = None
 
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+
     async def connect(self):
-        """Initialize all database connections using shared storage configuration."""
+        """Initialize database connections."""
         config = db_clients.config
-        
-        # MongoDB
-        # Use shared settings or env vars for the URL
+
         mongo_url = config.mongodb_url or settings.mongodb_url
         self.mongo_client = AsyncIOMotorClient(mongo_url)
         self.db = self.mongo_client[config.mongodb_db or "gitquery"]
 
-        # Qdrant
         self.qdrant_client = QdrantClient(
             url=config.qdrant_url,
             api_key=config.qdrant_api_key or settings.qdrant_api_key,
         )
 
-        # Redis
-        redis_url = os.getenv("REDIS_URL") or settings.redis_url
-        self.redis_client = await redis.from_url(redis_url)
+        self.redis_client = await redis.from_url(settings.redis_url)
 
-        # Ensure collections exist
         await self._ensure_collections()
 
     async def _ensure_collections(self):
-        """Ensure MongoDB collections and Qdrant collections exist."""
-        # MongoDB indexes
+        """Ensure MongoDB indexes and Qdrant collection exist."""
         await self.db[settings.interactions_collection].create_index(
             [("user_id", 1), ("timestamp", -1)]
         )
         await self.db[settings.interactions_collection].create_index([("repo_id", 1)])
+        await self.db[settings.interactions_collection].create_index(
+            [("variant", 1), ("timestamp", -1)]
+        )
         await self.db[settings.user_prefs_collection].create_index([("user_id", 1)], unique=True)
 
-        # Repository text index for performant keyword search
-        await self.db[settings.repos_collection].create_index(
-            [
-                ("name", "text"),
-                ("description", "text"),
-                ("topics", "text"),
-            ],
-            name="repo_text_search",
-            weights={"name": 10, "topics": 5, "description": 1},
-        )
+        # Repository text index — created on both collections so keyword search
+        # works whether raw or normalised data is active.
+        for collection_name in {settings.repos_collection, settings.raw_repos_collection}:
+            await self.db[collection_name].create_index(
+                [
+                    ("name", "text"),
+                    ("description", "text"),
+                    ("topics", "text"),
+                ],
+                name="repo_text_search",
+                weights={"name": 10, "topics": 5, "description": 1},
+                language_override="text_language",
+            )
 
         # Qdrant collection
         try:
@@ -98,6 +104,37 @@ class DatabaseManager:
         self, user_id: str, limit: int = 100, days: int = 30
     ) -> List[UserInteraction]:
         """Get recent interactions for a user."""
+        if self._gateway_mode:
+            cutoff = datetime.utcnow() - timedelta(days=days)
+            # Query latest events by user and post-filter by timestamp in-process.
+            # This avoids BSON-vs-string timestamp comparison issues over HTTP.
+            result = await self._run_sync(lambda: self._gw_post(
+                f"/api/mongodb/collections/{settings.interactions_collection}/query",
+                {
+                    "filter": {"user_id": user_id},
+                    "limit": max(limit * 5, 200),
+                    "sort": {"timestamp": -1},
+                },
+            ))
+            docs = result.get("documents", [])
+            interactions: List[UserInteraction] = []
+            for doc in docs:
+                doc.pop("_id", None)
+                ts = doc.get("timestamp")
+                if isinstance(ts, str):
+                    try:
+                        doc["timestamp"] = datetime.fromisoformat(ts.replace("Z", "+00:00")).replace(tzinfo=None)
+                    except Exception:
+                        continue
+                if isinstance(doc.get("timestamp"), datetime) and doc["timestamp"] < cutoff:
+                    continue
+                try:
+                    interactions.append(UserInteraction(**doc))
+                except Exception:
+                    continue
+                if len(interactions) >= limit:
+                    break
+            return interactions
         cutoff = datetime.utcnow() - timedelta(days=days)
         cursor = self.db[settings.interactions_collection].find(
             {"user_id": user_id, "timestamp": {"$gte": cutoff}}
@@ -135,36 +172,84 @@ class DatabaseManager:
         limit: int = 100,
         skip: int = 0,
     ) -> List[Dict[str, Any]]:
-        """Search repositories with filters."""
-        cursor = (
-            self.db[settings.repos_collection]
-            .find(query_filter)
-            .skip(skip)
-            .limit(limit)
-        )
+        """Search repositories with filters.
 
-        repos = []
-        async for doc in cursor:
-            doc["_id"] = str(doc["_id"])
-            repos.append(doc)
-        return repos
+        Queries repos_collection first; if empty falls back to
+        raw_repos_collection so Kaggle-imported data is always searchable.
+        """
+        for collection_name in [settings.repos_collection, settings.raw_repos_collection]:
+            cursor = (
+                self.db[collection_name]
+                .find(query_filter)
+                .skip(skip)
+                .limit(limit)
+            )
+            repos = []
+            async for doc in cursor:
+                doc["_id"] = str(doc["_id"])
+                repos.append(doc)
+            if repos:
+                return repos
+        return []
+
+    async def get_repositories_by_repo_ids(
+        self, repo_ids: List[str]
+    ) -> Dict[str, Any]:
+        """Fetch full repo metadata from raw_repositories by repo_id / _id.
+
+        Returns a mapping of repo_id → document for any IDs found.
+        """
+        if not repo_ids:
+            return {}
+
+        query_filter = {
+            "$or": [
+                {"_id": {"$in": repo_ids}},
+                {"repo_id": {"$in": repo_ids}},
+            ]
+        }
+
+        docs: List[Dict[str, Any]] = []
+        try:
+            cursor = self.db[settings.raw_repos_collection].find(query_filter).limit(len(repo_ids))
+            async for doc in cursor:
+                doc["_id"] = str(doc["_id"])
+                docs.append(doc)
+        except Exception as exc:
+            logger.warning("raw_repositories lookup failed: %s", exc)
+            return {}
+
+        result_map: Dict[str, Any] = {}
+        for d in docs:
+            key = d.get("repo_id") or d.get("_id") or d.get("nameWithOwner", "")
+            if key:
+                result_map[key] = d
+        return result_map
 
     # ===== Vector Search (Qdrant) =====
 
-    def vector_search(
+    async def vector_search(
         self,
         query_vector: List[float],
         top_k: int = 100,
         filter_conditions: Optional[Filter] = None,
     ) -> List[Dict[str, Any]]:
-        """Search for similar repositories using vector similarity."""
-        results = self.qdrant_client.search(
-            collection_name=settings.qdrant_repos_collection,
-            query_vector=query_vector,
-            limit=top_k,
-            query_filter=filter_conditions,
-        )
+        """Search for similar repositories using vector similarity.
 
+        Runs the synchronous QdrantClient call on the thread-pool executor
+        to keep the event loop unblocked.
+        """
+        loop = asyncio.get_running_loop()
+        results = await loop.run_in_executor(
+            None,
+            lambda: self.qdrant_client.search(
+                collection_name=settings.qdrant_repos_collection,
+                query_vector=query_vector,
+                limit=top_k,
+                query_filter=filter_conditions,
+                with_payload=True,
+            ),
+        )
         return [
             {
                 "repo_id": hit.id,
@@ -180,7 +265,6 @@ class DatabaseManager:
         """Get value from cache."""
         if not settings.enable_cache:
             return None
-
         value = await self.redis_client.get(f"reco:{key}")
         if value:
             return json.loads(value)
@@ -190,7 +274,6 @@ class DatabaseManager:
         """Set value in cache."""
         if not settings.enable_cache:
             return
-
         ttl = ttl or settings.cache_ttl_seconds
         await self.redis_client.setex(
             f"reco:{key}", ttl, json.dumps(value, default=str)
@@ -216,7 +299,7 @@ class DatabaseManager:
 
     async def get_active_ab_test(self) -> Optional[ABTestConfig]:
         """Get currently active A/B test."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         doc = await self.db[settings.ab_tests_collection].find_one(
             {
                 "is_active": True,
@@ -236,7 +319,7 @@ class DatabaseManager:
         await self.db[settings.models_collection].insert_one(metadata.model_dump())
 
     async def get_active_model(self, model_type: str, variant: str) -> Optional[ModelMetadata]:
-        """Get active model for a variant."""
+        """Get the active model for a given type and variant."""
         doc = await self.db[settings.models_collection].find_one(
             {"model_type": model_type, "variant": variant, "is_active": True},
             sort=[("trained_at", -1)],
@@ -246,7 +329,47 @@ class DatabaseManager:
             return ModelMetadata(**doc)
         return None
 
+    async def get_model_by_id(self, model_id: str) -> Optional[ModelMetadata]:
+        """Get a model by its ID."""
+        doc = await self.db[settings.models_collection].find_one({"model_id": model_id})
+        if doc:
+            doc.pop("_id", None)
+            return ModelMetadata(**doc)
+        return None
+
+    async def deactivate_models(self, model_type: str, variant: str) -> None:
+        """Archive all currently active models of a given type/variant."""
+        await self.db[settings.models_collection].update_many(
+            {"model_type": model_type, "variant": variant, "is_active": True},
+            {"$set": {"is_active": False, "status": "archived"}},
+        )
+
+    async def activate_model(self, model_id: str) -> None:
+        """Promote a model to active status."""
+        await self.db[settings.models_collection].update_one(
+            {"model_id": model_id},
+            {"$set": {"is_active": True, "status": "active"}},
+        )
+
+    async def list_models_query(
+        self,
+        model_type: Optional[str] = None,
+        status: Optional[str] = None,
+    ) -> List[ModelMetadata]:
+        """List models with optional type/status filtering."""
+        query: Dict[str, Any] = {}
+        if model_type:
+            query["model_type"] = model_type
+        if status:
+            query["status"] = status
+
+        cursor = self.db[settings.models_collection].find(query).sort("trained_at", -1)
+        models = []
+        async for doc in cursor:
+            doc.pop("_id", None)
+            models.append(ModelMetadata(**doc))
+        return models
+
 
 # Global database manager instance
 db_manager = DatabaseManager()
-

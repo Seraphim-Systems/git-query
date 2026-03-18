@@ -72,21 +72,43 @@ class HybridRetrievalEngine(RecommendationEngine):
         # Get query embedding
         query_embedding = await self.embedding_service.embed_text(request.query)
 
-        # Search in Qdrant
-        results = db_manager.vector_search(
+        # vector_search handles the run_in_executor internally.
+        results = await db_manager.vector_search(
             query_vector=query_embedding,
             top_k=settings.hybrid_search_top_k,
         )
 
-        return [
-            {
-                "repo_id": r["repo_id"],
+        out = []
+        for r in results:
+            payload = r.get("payload") or {}
+            # Prefer the string repo_id stored in the Qdrant payload over the
+            # point UUID so downstream RRF and MongoDB lookups use stable IDs.
+            string_id = (
+                payload.get("repo_id")
+                or payload.get("_orig_id")
+                or str(r["repo_id"])
+            )
+            out.append({
+                "repo_id": string_id,
                 "score": r["score"],
                 "source": "semantic",
-                "payload": r.get("payload", {}),
-            }
-            for r in results
+                "payload": payload,
+            })
+
+        # Batch-fetch full metadata for repos that only have minimal payload.
+        # This enriches results even when Qdrant payloads lack name/stars/etc.
+        ids_needing_enrichment = [
+            r["repo_id"] for r in out
+            if "/" in r["repo_id"] and not r["payload"].get("stars")
         ]
+        if ids_needing_enrichment:
+            meta_map = await db_manager.get_repositories_by_repo_ids(ids_needing_enrichment)
+            if meta_map:
+                for r in out:
+                    if r["repo_id"] in meta_map and not r["payload"].get("stars"):
+                        r["payload"] = {**r["payload"], **meta_map[r["repo_id"]]}
+
+        return out
 
     async def _keyword_search(
         self, request: RecommendationRequest
@@ -126,9 +148,8 @@ class HybridRetrievalEngine(RecommendationEngine):
         for rank, result in enumerate(semantic_results, start=1):
             repo_id = result["repo_id"]
             scores[repo_id] = scores.get(repo_id, 0) + 1 / (self.k + rank)
-            sources[repo_id] = sources.get(repo_id, set())
-            sources[repo_id].add("semantic")
-            
+            sources.setdefault(repo_id, set()).add("semantic")
+
             # Fallback metadata from Qdrant payload
             if "payload" in result and repo_id not in repo_data:
                 repo_data[repo_id] = result["payload"]
@@ -137,8 +158,7 @@ class HybridRetrievalEngine(RecommendationEngine):
         for rank, result in enumerate(keyword_results, start=1):
             repo_id = result["repo_id"]
             scores[repo_id] = scores.get(repo_id, 0) + 1 / (self.k + rank)
-            sources[repo_id] = sources.get(repo_id, set())
-            sources[repo_id].add("keyword")
+            sources.setdefault(repo_id, set()).add("keyword")
             if "repo_data" in result:
                 # Keyword data is usually richer, so it takes precedence
                 repo_data[repo_id] = result["repo_data"]
@@ -146,25 +166,30 @@ class HybridRetrievalEngine(RecommendationEngine):
         # Sort by fused score
         sorted_repos = sorted(scores.items(), key=lambda x: x[1], reverse=True)
 
-        # Convert to RepositoryResult
+        # Convert to RepositoryResult — use whatever data we have; a minimal
+        # payload (repo_id only) is better than skipping the result entirely.
         results = []
         for repo_id, score in sorted_repos:
-            data = repo_data.get(repo_id, {})
-            if not data:
-                continue  # Skip if we don't have repo data
-
+            data = repo_data.get(repo_id) or {}
+            # Derive a human-readable name from the repo_id string when full
+            # metadata is absent (e.g. Qdrant payload not yet populated).
+            display_name = (
+                data.get("name")
+                or data.get("full_name")
+                or (repo_id.split("/")[-1] if "/" in str(repo_id) else "")
+            )
             results.append(
                 RepositoryResult(
                     repo_id=repo_id,
-                    name=data.get("name", ""),
-                    full_name=data.get("full_name", ""),
+                    name=display_name,
+                    full_name=data.get("full_name", repo_id if "/" in str(repo_id) else ""),
                     description=data.get("description"),
                     language=data.get("language"),
-                    stars=data.get("stars", 0),
-                    forks=data.get("forks", 0),
-                    url=data.get("url", ""),
+                    stars=data.get("stars", data.get("stargazers_count", 0)),
+                    forks=data.get("forks", data.get("forks_count", 0)),
+                    url=data.get("url", data.get("html_url", "")),
                     license=data.get("license"),
-                    last_updated=data.get("last_updated"),
+                    last_updated=data.get("last_updated", data.get("updated_at")),
                     score=score,
                     rank=0,  # Will be set later
                     explanation={

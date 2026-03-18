@@ -189,18 +189,8 @@ class RerankerTrainer:
 
     def _repo_to_text(self, repo: Dict[str, Any]) -> str:
         """Convert repository data to text."""
-        parts = []
-
-        if repo.get("name"):
-            parts.append(repo["name"])
-
-        if repo.get("description"):
-            parts.append(repo["description"])
-
-        if repo.get("language"):
-            parts.append(f"Language: {repo['language']}")
-
-        return " | ".join(parts)
+        from .utils import prepare_repo_text
+        return prepare_repo_text(repo)
 
     def _create_dataloader(self, examples: List[InputExample], batch_size: int):
         """Create DataLoader for training."""

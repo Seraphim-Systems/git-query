@@ -1,0 +1,58 @@
+# Application services: MCP Server, Recommender
+# Usage: Use with -f docker-compose.base.yml -f docker-compose.databases.yml -f docker-compose.app.yml
+
+services:
+  recommender:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.recommender
+    container_name: git-query-recommender
+    image: git-query-recommender:latest
+    environment:
+      RECOMMENDER_HOST: 0.0.0.0
+      RECOMMENDER_PORT: 8095
+      LOG_LEVEL: ${SVC_LOG_LEVEL:-INFO}
+      MONGODB_URL: mongodb://${DB_MONGODB_USER:-admin}:${DB_MONGODB_PASSWORD:-mongopass}@mongodb:27017/gitquery?authSource=admin
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+      QDRANT_API_KEY: ${DB_QDRANT_API_KEY:-}
+      REDIS_URL: redis://:${DB_REDIS_PASSWORD:-redispass}@redis:6379
+    networks:
+      - internal-network
+    restart: unless-stopped
+    volumes:
+      - model-artifacts:/app/models
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8095/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  mcp-server:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.mcp
+    image: git-query-mcp:latest
+    container_name: git-query-mcp
+    environment:
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: 8090
+      LOG_LEVEL: ${SVC_LOG_LEVEL:-INFO}
+      MONGODB_URL: mongodb://${DB_MONGODB_USER:-admin}:${DB_MONGODB_PASSWORD:-mongopass}@mongodb:27017/gitquery?authSource=admin
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+      QDRANT_API_KEY: ${DB_QDRANT_API_KEY:-}
+      REDIS_URL: redis://:${DB_REDIS_PASSWORD:-redispass}@redis:6379
+      MCP_API_KEY: ${APIKEY_MCP}
+      OPENAI_API_KEY: ${APP_OPENAI_API_KEY}
+      RECOMMENDER_URL: http://recommender:8095
+    networks:
+      - internal-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s

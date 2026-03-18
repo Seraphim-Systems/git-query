@@ -11,6 +11,15 @@ transformers>=4.37.2
 numpy>=1.26.3
 scikit-learn>=1.4.0
 python-multipart==0.0.6
+python-dotenv>=1.0.0
+requests>=2.32.0
+
+# Data science / notebook dependencies
+pandas>=3.0.0
+pyarrow>=14.0.0
+fastparquet>=2024.0.0
+matplotlib>=3.8.0
+ipykernel>=6.0.0
 
 # MLOps dependencies
 mlflow>=2.10.0
