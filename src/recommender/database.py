@@ -62,25 +62,34 @@ class DatabaseManager:
         # Repository text index — created on both collections so keyword search
         # works whether raw or normalised data is active.
         for collection_name in {settings.repos_collection, settings.raw_repos_collection}:
-            await self.db[collection_name].create_index(
-                [
-                    ("name", "text"),
-                    ("description", "text"),
-                    ("topics", "text"),
-                ],
-                name="repo_text_search",
-                weights={"name": 10, "topics": 5, "description": 1},
-                language_override="text_language",
-            )
+            try:
+                await self.db[collection_name].create_index(
+                    [
+                        ("name", "text"),
+                        ("description", "text"),
+                        ("topics", "text"),
+                    ],
+                    name="repo_text_search",
+                    weights={"name": 10, "topics": 5, "description": 1},
+                    language_override="text_language",
+                )
+            except Exception as exc:
+                logger.warning("Could not create text index on %s (may already exist): %s", collection_name, exc)
+
+        await self.db["evaluation_metrics"].create_index([("variant", 1), ("timestamp", -1)])
 
         # Qdrant collection
+        loop = asyncio.get_running_loop()
         try:
-            self.qdrant_client.get_collection(settings.qdrant_repos_collection)
+            await loop.run_in_executor(None, self.qdrant_client.get_collection, settings.qdrant_repos_collection)
         except Exception:
-            self.qdrant_client.create_collection(
-                collection_name=settings.qdrant_repos_collection,
-                vectors_config=VectorParams(
-                    size=settings.embedding_dimension, distance=Distance.COSINE
+            await loop.run_in_executor(
+                None,
+                lambda: self.qdrant_client.create_collection(
+                    collection_name=settings.qdrant_repos_collection,
+                    vectors_config=VectorParams(
+                        size=settings.embedding_dimension, distance=Distance.COSINE
+                    ),
                 ),
             )
 
