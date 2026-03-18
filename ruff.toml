@@ -1,0 +1,65 @@
+# Ruff configuration for git-query project
+
+# Target Python version
+target-version = "py311"
+
+# Line length
+line-length = 120
+
+# Exclude directories
+exclude = [
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "*.egg-info",
+    ".eggs",
+    "build",
+    "dist",
+    "node_modules",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+]
+
+[lint]
+# Enable specific rule sets
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+]
+
+# Ignore specific rules
+ignore = [
+    "E501",   # Line too long (handled by formatter)
+    "B008",   # Do not perform function calls in argument defaults
+    "B904",   # Within an except clause, raise exceptions with raise ... from err
+    "C901",   # Function is too complex
+]
+
+# Allow unused variables when underscore-prefixed
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[lint.per-file-ignores]
+# Tests can use assertions and have unused imports
+"tests/**/*.py" = ["S101", "F401", "F811"]
+# Init files can have unused imports
+"**/__init__.py" = ["F401"]
+
+[lint.isort]
+known-first-party = ["src", "recommender", "gateway", "mcp", "processing", "scraper"]
+
+[format]
+# Use double quotes for strings
+quote-style = "double"
+
+# Indent with spaces
+indent-style = "space"
+
+# Format docstrings
+docstring-code-format = true

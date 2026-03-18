@@ -237,3 +237,8 @@ package.json
 package-lock.json
 
 node_modules/
+
+# MLflow local tracking artifacts
+mlruns/
+*_mlruns/
+mlartifacts/

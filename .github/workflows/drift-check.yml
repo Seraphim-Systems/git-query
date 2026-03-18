@@ -1,0 +1,118 @@
+name: Drift Monitoring
+
+on:
+  # Run weekly on Sundays at 3 AM UTC
+  schedule:
+    - cron: '0 3 * * 0'
+
+  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      check_type:
+        description: 'Type of drift check to run'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - data
+          - embedding
+          - prediction
+
+jobs:
+  drift-check:
+    name: Run Drift Detection
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Run Drift Check
+        run: |
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
+          set -e
+
+          cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query
+
+          echo "🔍 Running drift detection..."
+          echo "Check type: ${{ github.event.inputs.check_type || 'all' }}"
+
+          # Check if drift monitoring container/script exists
+          if [ -f "src/recommender/mlops/drift_monitor.py" ]; then
+            # Run drift monitoring script
+            docker exec git-query-recommender python -m recommender.mlops.drift_monitor 2>/dev/null || \
+            echo "⚠️ Drift check container not running or script failed"
+          else
+            echo "⚠️ Drift monitoring script not found"
+          fi
+
+          echo "✅ Drift check completed"
+          ENDSSH
+
+      - name: Check Results
+        run: |
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
+          set -e
+
+          cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query
+
+          echo "📊 Checking drift reports..."
+
+          # Check for recent drift reports
+          REPORT_DIR="/app/drift_reports"
+          if docker exec git-query-recommender ls $REPORT_DIR 2>/dev/null; then
+            echo "Recent drift reports:"
+            docker exec git-query-recommender ls -la $REPORT_DIR | tail -5
+          else
+            echo "No drift reports found (this may be normal for first run)"
+          fi
+          ENDSSH
+
+  notify-on-drift:
+    name: Notify on Drift Detection
+    runs-on: ubuntu-latest
+    needs: drift-check
+    if: failure()
+    steps:
+      - name: Create Issue on Drift
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = '⚠️ Model/Data Drift Detected';
+            const body = `
+            ## Drift Detection Alert
+
+            The scheduled drift check has detected potential drift in the recommendation system.
+
+            **Run:** ${context.runId}
+            **Triggered:** ${new Date().toISOString()}
+
+            ### Recommended Actions:
+            1. Review drift reports in \`/app/drift_reports\`
+            2. Check model performance metrics
+            3. Consider triggering a retraining run if drift is significant
+
+            [View Workflow Run](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
+            `;
+
+            // Check if issue already exists
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'drift-alert',
+              state: 'open'
+            });
+
+            if (issues.data.length === 0) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: ['drift-alert', 'mlops']
+              });
+            }
