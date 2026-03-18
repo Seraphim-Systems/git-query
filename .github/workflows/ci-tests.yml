@@ -2,9 +2,9 @@ name: CI Tests
 
 on:
   pull_request:
-    branches: [MLOps]
+    branches: [dev, MLOps]
   push:
-    branches: [MLOps]
+    branches: [dev, MLOps]
 
 env:
   PYTHON_VERSION: "3.11"
@@ -27,14 +27,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install ruff
 
-      - name: Run Ruff linter (MLOps code only)
+      - name: Run Ruff linter (MLOps code)
         run: |
-          # Only lint the MLOps code to avoid touching other team members' code
-          ruff check src/recommender/mlops/ tests/mlops/ --output-format=github
+          ruff check src/recommender/mlops/ tests/mlops/ tests/test_smoke.py --output-format=github
 
-      - name: Run Ruff formatter check (MLOps code only)
+      - name: Run Ruff formatter check (MLOps code)
         run: |
-          ruff format src/recommender/mlops/ tests/mlops/ --check
+          ruff format src/recommender/mlops/ tests/mlops/ tests/test_smoke.py --check
 
   unit-tests:
     name: Unit Tests
