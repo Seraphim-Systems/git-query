@@ -15,11 +15,15 @@ python-dotenv>=1.0.0
 requests>=2.32.0
 
 # Data science / notebook dependencies
-pandas>=3.0.0
+pandas>=2.0.0
 pyarrow>=14.0.0
 fastparquet>=2024.0.0
 matplotlib>=3.8.0
 ipykernel>=6.0.0
+
+# MLOps dependencies
+mlflow>=2.10.0
+evidently>=0.4.0
 
 # Testing dependencies
 pytest==7.4.3
@@ -27,3 +31,4 @@ pytest-asyncio==0.21.1
 pytest-mock==3.12.0
 pytest-cov==4.1.0
 httpx==0.26.0
+ruff>=0.1.0

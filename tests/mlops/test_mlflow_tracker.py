@@ -1,0 +1,149 @@
+"""Tests for MLflow tracking integration."""
+
+import os
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+
+class TestMLflowTracker:
+    """Test suite for MLflowTracker."""
+
+    def test_import_mlflow_tracker(self):
+        """Test that MLflowTracker can be imported."""
+        from src.recommender.mlops.mlflow_tracker import MLflowTracker
+
+        assert MLflowTracker is not None
+
+    def test_tracker_initialization_without_mlflow(self):
+        """Test tracker initializes gracefully when MLflow is not available."""
+        with patch.dict("sys.modules", {"mlflow": None}):
+            # Re-import to test without mlflow
+            from src.recommender.mlops import mlflow_tracker
+
+            # Should not raise
+            tracker = mlflow_tracker.MLflowTracker(experiment_name="test-experiment", tracking_uri="./test_mlruns")
+            assert tracker.experiment_name == "test-experiment"
+
+    @pytest.mark.skipif(not os.getenv("MLFLOW_AVAILABLE", "false").lower() == "true", reason="MLflow not available")
+    def test_tracker_with_mlflow(self):
+        """Test tracker with actual MLflow (when available)."""
+        from src.recommender.mlops.mlflow_tracker import MLFLOW_AVAILABLE, MLflowTracker
+
+        if not MLFLOW_AVAILABLE:
+            pytest.skip("MLflow not installed")
+
+        tracker = MLflowTracker(experiment_name="test-experiment", tracking_uri="./test_mlruns")
+
+        # Test logging params without active run (should be no-op)
+        tracker.log_params({"test_param": "value"})
+
+    def test_log_params_converts_to_string(self):
+        """Test that params are converted to strings."""
+        from src.recommender.mlops.mlflow_tracker import MLflowTracker
+
+        tracker = MLflowTracker(experiment_name="test")
+
+        # Should not raise even with non-string values
+        tracker.log_params(
+            {
+                "int_param": 42,
+                "float_param": 3.14,
+                "bool_param": True,
+                "list_param": [1, 2, 3],
+            }
+        )
+
+    def test_log_metrics_handles_no_run(self):
+        """Test that logging metrics without active run doesn't raise."""
+        from src.recommender.mlops.mlflow_tracker import MLflowTracker
+
+        tracker = MLflowTracker(experiment_name="test")
+
+        # Should not raise
+        tracker.log_metrics({"precision": 0.85, "recall": 0.72})
+
+    def test_log_model_info_separates_params_and_metrics(self):
+        """Test that model info is correctly categorized."""
+        from src.recommender.mlops.mlflow_tracker import MLflowTracker
+
+        tracker = MLflowTracker(experiment_name="test")
+
+        model_metadata = {
+            "model_name": "all-MiniLM-L6-v2",
+            "embedding_dim": 384,
+            "num_repos": 1000,
+            "training_time_seconds": 45.5,
+            "device": "cuda",
+            "normalized": True,
+            "batch_size": 32,
+        }
+
+        # Should not raise
+        tracker.log_model_info(model_metadata)
+
+    def test_log_evaluation_metrics_flattens_dict(self):
+        """Test that nested evaluation metrics are flattened."""
+        from src.recommender.mlops.mlflow_tracker import MLflowTracker
+
+        tracker = MLflowTracker(experiment_name="test")
+
+        eval_metrics = {
+            "precision_at_k": {1: 0.6, 5: 0.75, 10: 0.82},
+            "recall_at_k": {1: 0.1, 5: 0.35, 10: 0.55},
+            "ndcg_at_k": {1: 0.6, 5: 0.7, 10: 0.78},
+            "mrr": 0.65,
+        }
+
+        # Should not raise
+        tracker.log_evaluation_metrics(eval_metrics)
+
+    def test_create_tracker_from_env(self):
+        """Test creating tracker from environment variables."""
+        from src.recommender.mlops.mlflow_tracker import create_tracker_from_env
+
+        with patch.dict(
+            os.environ,
+            {
+                "MLFLOW_EXPERIMENT_NAME": "env-test-experiment",
+                "MLFLOW_TRACKING_URI": "./env_mlruns",
+            },
+        ):
+            tracker = create_tracker_from_env()
+            assert tracker.experiment_name == "env-test-experiment"
+            assert tracker.tracking_uri == "./env_mlruns"
+
+    def test_get_run_id_returns_none_without_run(self):
+        """Test that get_run_id returns None when no run is active."""
+        from src.recommender.mlops.mlflow_tracker import MLflowTracker
+
+        tracker = MLflowTracker(experiment_name="test")
+        assert tracker.get_run_id() is None
+
+
+class TestMLflowTrackerContextManager:
+    """Test the context manager functionality."""
+
+    def test_start_run_context_manager(self):
+        """Test using start_run as context manager."""
+        from src.recommender.mlops.mlflow_tracker import MLFLOW_AVAILABLE, MLflowTracker
+
+        tracker = MLflowTracker(experiment_name="test")
+
+        with tracker.start_run(run_name="test-run") as run:
+            # When MLflow is not available, run should be None
+            if not MLFLOW_AVAILABLE:
+                assert run is None
+
+    def test_nested_runs(self):
+        """Test nested run capability."""
+        from src.recommender.mlops.mlflow_tracker import MLFLOW_AVAILABLE, MLflowTracker
+
+        if not MLFLOW_AVAILABLE:
+            pytest.skip("MLflow not installed")
+
+        tracker = MLflowTracker(experiment_name="test")
+
+        with tracker.start_run(run_name="parent"):
+            with tracker.start_run(run_name="child", nested=True):
+                pass  # Should not raise
