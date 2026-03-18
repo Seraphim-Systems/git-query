@@ -1,15 +1,16 @@
 """Cross-encoder reranker service for accurate ranking of top candidates."""
 
+import asyncio
 import os
 import logging
 from typing import List, Optional
 from sentence_transformers import CrossEncoder
 from ..config import settings
 from ..models import RepositoryResult, ModelMetadata
-import asyncio
 import joblib
 import pandas as pd
 from ..data.features import FeatureExtractor
+from ..training.utils import prepare_repo_text
 
 logger = logging.getLogger(__name__)
 
@@ -27,55 +28,61 @@ class RerankerService:
         self.model = None
         self.current_model_id: Optional[str] = None
         self._loaded_path: Optional[str] = None
+        self._is_lgbm: bool = False  # set to True when a .pkl LightGBM adapter is loaded
+        self._load_lock = asyncio.Lock()
 
     async def load_active_model(self, variant: str = "default"):
         """Load the currently active reranker model from the registry."""
-        from .registry_service import ModelRegistryService
-        registry = ModelRegistryService()
-        # Prefer explicitly-typed cross_encoder entries, but also allow generic 'reranker' entries
-        active_model = await registry.get_active_model("cross_encoder", variant)
-        if not active_model:
-            active_model = await registry.get_active_model("reranker", variant)
+        async with self._load_lock:
+            from .registry_service import ModelRegistryService
+            registry = ModelRegistryService()
+            # Prefer explicitly-typed cross_encoder entries, but also allow generic 'reranker' entries
+            active_model = await registry.get_active_model("cross_encoder", variant)
+            if not active_model:
+                active_model = await registry.get_active_model("reranker", variant)
 
-        if not active_model:
-            logger.warning(
-                "No active reranker model found for variant %r. Using default: %s",
-                variant,
-                self.model_name,
-            )
-            self.load_model(self.model_name)
-            return
+            if not active_model:
+                logger.warning(
+                    "No active reranker model found for variant %r. Using default: %s",
+                    variant,
+                    self.model_name,
+                )
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(None, self.load_model, self.model_name)
+                return
 
-        if active_model.model_id == self.current_model_id:
-            logger.info("Reranker model %s is already loaded.", active_model.model_id)
-            return
+            if active_model.model_id == self.current_model_id:
+                logger.info("Reranker model %s is already loaded.", active_model.model_id)
+                return
 
-        # Load from path (prefer model files stored under settings.model_path)
-        full_path = os.path.join(settings.model_path, active_model.path) if getattr(active_model, 'path', None) else None
-        if full_path and os.path.exists(full_path):
-            logger.info(f"Loading active reranker model: {active_model.model_id} from {full_path}")
-            self.load_model(full_path)
-            self.current_model_id = active_model.model_id
-        else:
-            # If registry holds a model identifier (eg. HF id or local dir), try to load it directly
-            try:
-                logger.info(f"Attempting to load active reranker by id/path: {getattr(active_model, 'path', None)}")
-                self.load_model(getattr(active_model, 'path', self.model_name))
+            # Load from path (prefer model files stored under settings.model_path)
+            full_path = os.path.join(settings.model_path, active_model.path) if getattr(active_model, 'path', None) else None
+            loop = asyncio.get_running_loop()
+            if full_path and os.path.exists(full_path):
+                logger.info("Loading active reranker model: %s from %s", active_model.model_id, full_path)
+                await loop.run_in_executor(None, self.load_model, full_path)
                 self.current_model_id = active_model.model_id
-            except Exception:
-                logger.error(f"Could not load active reranker model '{getattr(active_model,'model_id', None)}'. Falling back to default.")
-                self.load_model(self.model_name)
+            else:
+                logger.warning(
+                    "Active reranker model path not found on disk (model_id=%s, path=%s). Falling back to default: %s",
+                    getattr(active_model, 'model_id', None),
+                    getattr(active_model, 'path', None),
+                    self.model_name,
+                )
+                await loop.run_in_executor(None, self.load_model, self.model_name)
 
     def load_model(self, model_path: str = None):
         """Load the cross-encoder model into memory."""
         target = model_path or self.model_name
         # If target is a LightGBM artifact (pickled), load and wrap it with a small adapter
         if isinstance(target, str) and (target.endswith('.pkl') or target.endswith('.joblib')):
-            logger.info(f"Loading LightGBM reranker artifact via joblib: {target}")
+            logger.info("Loading LightGBM reranker artifact via joblib: %s", target)
             model_obj = joblib.load(target)
 
             # Adapter exposes a candidate-aware prediction method used by rerank()
             class _LightGBMAdapter:
+                _is_lgbm_adapter = True  # sentinel — avoids hasattr() collision with MagicMock
+
                 def __init__(self, model, feature_extractor: FeatureExtractor):
                     self.model = model
                     self.fe = feature_extractor
@@ -107,13 +114,16 @@ class RerankerService:
                     return self.model.predict(X.values)
 
             self.model = _LightGBMAdapter(model_obj, FeatureExtractor())
+            self._is_lgbm = True
+            self._loaded_path = target
             return self.model
 
         # Otherwise treat as a CrossEncoder model id/path
         if self.model is None or target != self.model_name:
-            logger.info(f"Initializing CrossEncoder with: {target}")
+            logger.info("Initializing CrossEncoder with: %s", target)
             self.model = CrossEncoder(target)
             self._loaded_path = target
+        self._is_lgbm = False
         return self.model
 
     async def rerank(
@@ -135,14 +145,11 @@ class RerankerService:
 
         # Run reranking in thread pool. If a LightGBM adapter is loaded, call its
         # candidate-aware prediction method so features are computed from RepositoryResult.
-        loop = asyncio.get_event_loop()
-        if hasattr(self.model, 'predict_from_candidates'):
+        loop = asyncio.get_running_loop()
+        if self._is_lgbm:
             scores = await loop.run_in_executor(None, self.model.predict_from_candidates, query, candidates)
         else:
             scores = await loop.run_in_executor(None, self._score_pairs, pairs)
-        # Run reranking in thread pool
-        loop = asyncio.get_running_loop()
-        scores = await loop.run_in_executor(None, self._score_pairs, pairs)
 
         for candidate, score in zip(candidates, scores):
             candidate.explanation = candidate.explanation or {}
@@ -160,13 +167,11 @@ class RerankerService:
 
     def _score_pairs(self, pairs: List[List[str]]) -> List[float]:
         """Score query-document pairs using cross-encoder."""
-        model = self.load_model()
-        scores = model.predict(pairs, show_progress_bar=False)
+        scores = self.model.predict(pairs, show_progress_bar=False)
         return scores
 
     def _create_repo_text(self, repo: RepositoryResult) -> str:
         """Create text representation of repository for reranking."""
-        from ..training.utils import prepare_repo_text
         repo_dict = {
             "name": repo.name,
             "description": repo.description,

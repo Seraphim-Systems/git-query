@@ -96,6 +96,8 @@ class PersonalizedEngine(HybridRetrievalEngine):
         explanation["personalization"] = "User preferences applied to boost ranking"
 
         if request.user_id:
+            # Fetch preferences once here; _apply_personalization fetches
+            # independently during recommend() — both paths share no state.
             prefs = await db_manager.get_user_preferences(request.user_id)
             if prefs:
                 explanation["user_interactions"] = prefs.total_interactions

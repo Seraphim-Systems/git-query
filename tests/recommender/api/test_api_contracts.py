@@ -352,9 +352,9 @@ class TestUpdateUserPreferencesTask:
 
         mocker.patch.object(
             db_manager,
-            "search_repositories",
+            "get_repositories_by_repo_ids",
             new_callable=AsyncMock,
-            return_value=[repo_doc],
+            return_value={"repo1": repo_doc},
         )
 
         mock_personalization = AsyncMock()
@@ -381,9 +381,9 @@ class TestUpdateUserPreferencesTask:
 
         mocker.patch.object(
             db_manager,
-            "search_repositories",
+            "get_repositories_by_repo_ids",
             new_callable=AsyncMock,
-            return_value=[],
+            return_value={},
         )
 
         mock_personalization = AsyncMock()
@@ -408,7 +408,7 @@ class TestUpdateUserPreferencesTask:
 
         mocker.patch.object(
             db_manager,
-            "search_repositories",
+            "get_repositories_by_repo_ids",
             new_callable=AsyncMock,
             side_effect=RuntimeError("db down"),
         )

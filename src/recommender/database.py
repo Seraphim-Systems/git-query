@@ -62,25 +62,34 @@ class DatabaseManager:
         # Repository text index — created on both collections so keyword search
         # works whether raw or normalised data is active.
         for collection_name in {settings.repos_collection, settings.raw_repos_collection}:
-            await self.db[collection_name].create_index(
-                [
-                    ("name", "text"),
-                    ("description", "text"),
-                    ("topics", "text"),
-                ],
-                name="repo_text_search",
-                weights={"name": 10, "topics": 5, "description": 1},
-                language_override="text_language",
-            )
+            try:
+                await self.db[collection_name].create_index(
+                    [
+                        ("name", "text"),
+                        ("description", "text"),
+                        ("topics", "text"),
+                    ],
+                    name="repo_text_search",
+                    weights={"name": 10, "topics": 5, "description": 1},
+                    language_override="text_language",
+                )
+            except Exception as exc:
+                logger.warning("Could not create text index on %s (may already exist): %s", collection_name, exc)
+
+        await self.db["evaluation_metrics"].create_index([("variant", 1), ("timestamp", -1)])
 
         # Qdrant collection
+        loop = asyncio.get_running_loop()
         try:
-            self.qdrant_client.get_collection(settings.qdrant_repos_collection)
+            await loop.run_in_executor(None, self.qdrant_client.get_collection, settings.qdrant_repos_collection)
         except Exception:
-            self.qdrant_client.create_collection(
-                collection_name=settings.qdrant_repos_collection,
-                vectors_config=VectorParams(
-                    size=settings.embedding_dimension, distance=Distance.COSINE
+            await loop.run_in_executor(
+                None,
+                lambda: self.qdrant_client.create_collection(
+                    collection_name=settings.qdrant_repos_collection,
+                    vectors_config=VectorParams(
+                        size=settings.embedding_dimension, distance=Distance.COSINE
+                    ),
                 ),
             )
 
@@ -104,38 +113,7 @@ class DatabaseManager:
         self, user_id: str, limit: int = 100, days: int = 30
     ) -> List[UserInteraction]:
         """Get recent interactions for a user."""
-        if self._gateway_mode:
-            cutoff = datetime.utcnow() - timedelta(days=days)
-            # Query latest events by user and post-filter by timestamp in-process.
-            # This avoids BSON-vs-string timestamp comparison issues over HTTP.
-            result = await self._run_sync(lambda: self._gw_post(
-                f"/api/mongodb/collections/{settings.interactions_collection}/query",
-                {
-                    "filter": {"user_id": user_id},
-                    "limit": max(limit * 5, 200),
-                    "sort": {"timestamp": -1},
-                },
-            ))
-            docs = result.get("documents", [])
-            interactions: List[UserInteraction] = []
-            for doc in docs:
-                doc.pop("_id", None)
-                ts = doc.get("timestamp")
-                if isinstance(ts, str):
-                    try:
-                        doc["timestamp"] = datetime.fromisoformat(ts.replace("Z", "+00:00")).replace(tzinfo=None)
-                    except Exception:
-                        continue
-                if isinstance(doc.get("timestamp"), datetime) and doc["timestamp"] < cutoff:
-                    continue
-                try:
-                    interactions.append(UserInteraction(**doc))
-                except Exception:
-                    continue
-                if len(interactions) >= limit:
-                    break
-            return interactions
-        cutoff = datetime.utcnow() - timedelta(days=days)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
         cursor = self.db[settings.interactions_collection].find(
             {"user_id": user_id, "timestamp": {"$gte": cutoff}}
         ).sort("timestamp", -1).limit(limit)

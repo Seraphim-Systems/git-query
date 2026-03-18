@@ -36,8 +36,15 @@ class ABTestService:
         if not settings.ab_test_enabled:
             return settings.default_variant
 
-        # Get active A/B test
-        ab_test = await db_manager.get_active_ab_test()
+        # Get active A/B test — short-TTL cache to avoid a DB hit per request
+        _ab_cache_key = "ab_test:active"
+        _cached = await db_manager.cache_get(_ab_cache_key)
+        if _cached is not None:
+            ab_test = ABTestConfig(**_cached)
+        else:
+            ab_test = await db_manager.get_active_ab_test()
+            if ab_test:
+                await db_manager.cache_set(_ab_cache_key, ab_test.model_dump(), ttl=60)
 
         if not ab_test:
             return settings.default_variant

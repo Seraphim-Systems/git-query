@@ -4,7 +4,7 @@ import logging
 from typing import Dict, Any, List
 from sentence_transformers import SentenceTransformer, InputExample, losses
 from torch.utils.data import DataLoader
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 
 from ..config import settings
@@ -81,7 +81,7 @@ class EmbeddingTrainer:
         # Train
         logger.info(f"Starting training with {len(train_examples)} examples")
 
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         base_output_dir = os.path.join(settings.model_path, f"embedding_{variant}_{timestamp}")
         os.makedirs(base_output_dir, exist_ok=True)
 
@@ -129,7 +129,7 @@ class EmbeddingTrainer:
 
         # Save metadata via registry
         metadata = ModelMetadata(
-            model_id=f"embedding_{variant}_{datetime.utcnow().timestamp()}",
+            model_id=f"embedding_{variant}_{datetime.now(timezone.utc).timestamp()}",
             model_type="embedding",
             variant=variant,
             version="1.0.0",
@@ -143,7 +143,7 @@ class EmbeddingTrainer:
                 "num_examples": float(len(train_examples)),
                 "best_metric": float(best_metric)
             },
-            trained_at=datetime.utcnow(),
+            trained_at=datetime.now(timezone.utc),
             is_active=False,
             status="candidate"
         )

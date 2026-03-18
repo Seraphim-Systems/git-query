@@ -39,10 +39,13 @@ class ModelRegistryService:
     async def promote_model(self, model_id: str) -> bool:
         """Promote a model to 'active' status.
 
-        Atomic operation:
+        Steps:
         1. Look up the model to determine its type/variant.
         2. Archive all currently active models of that type/variant.
         3. Activate the specified model.
+
+        NOTE: these two writes are not atomic. On failure between them,
+        call promote_model again to recover (deactivate is idempotent).
         """
         try:
             model = await db_manager.get_model_by_id(model_id)
@@ -57,7 +60,7 @@ class ModelRegistryService:
             return True
 
         except Exception as e:
-            logger.error("Failed to promote model %s: %s", model_id, e)
+            logger.error("Failed to promote model %s: %s", model_id, e, exc_info=True)
             return False
 
     async def list_models(

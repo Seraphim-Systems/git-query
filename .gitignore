@@ -232,7 +232,6 @@ docs/test-spec-*.md
 models/
 *.parquet
 *.csv
-pytest.ini
 package.json
 package-lock.json
 

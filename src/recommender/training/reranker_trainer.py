@@ -3,7 +3,7 @@
 import logging
 from typing import Dict, Any, List
 from sentence_transformers import CrossEncoder, InputExample
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 import shutil
 import glob
@@ -63,7 +63,7 @@ class RerankerTrainer:
 
         output_path = os.path.join(
             settings.model_path,
-            f"reranker_{variant}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}",
+            f"reranker_{variant}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}",
         )
 
         def train_callback(score: float, epoch: int, steps: int):
@@ -85,7 +85,7 @@ class RerankerTrainer:
 
         # Save metadata via registry
         metadata = ModelMetadata(
-            model_id=f"reranker_{variant}_{datetime.utcnow().timestamp()}",
+            model_id=f"reranker_{variant}_{datetime.now(timezone.utc).timestamp()}",
             model_type="cross_encoder",
             variant=variant,
             version="1.0.0",
@@ -96,7 +96,7 @@ class RerankerTrainer:
                 "batch_size": batch_size,
             },
             metrics={"num_examples": float(len(train_examples))},
-            trained_at=datetime.utcnow(),
+            trained_at=datetime.now(timezone.utc),
             is_active=False,
             status="candidate"
         )
