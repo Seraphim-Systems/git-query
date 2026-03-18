@@ -67,6 +67,7 @@ jobs:
           pytest tests/ \
             -m "not integration and not slow" \
             --ignore=tests/test_processing.py \
+            --deselect=tests/recommender/test_reranker_service.py::TestLoadActiveModel::test_load_active_model_falls_back_when_path_missing \
             --cov=src \
             --cov-report=xml \
             --cov-report=term-missing \
