@@ -432,6 +432,8 @@ class TestApplyFilters:
 
 class TestRecommend:
     async def test_recommend_calls_reranker_when_results_exist(self, mocker):
+        mocker.patch.object(db_manager, "cache_get", new_callable=AsyncMock, return_value=None)
+        mocker.patch.object(db_manager, "cache_set", new_callable=AsyncMock)
         mocker.patch.object(
             db_manager, "vector_search", new_callable=AsyncMock, return_value=[]
         )
@@ -465,6 +467,8 @@ class TestRecommend:
         mock_reranker.rerank.assert_awaited_once()
 
     async def test_recommend_skips_reranker_when_service_is_none(self, mocker):
+        mocker.patch.object(db_manager, "cache_get", new_callable=AsyncMock, return_value=None)
+        mocker.patch.object(db_manager, "cache_set", new_callable=AsyncMock)
         mocker.patch.object(
             db_manager, "vector_search", new_callable=AsyncMock, return_value=[]
         )
@@ -477,6 +481,8 @@ class TestRecommend:
         assert isinstance(results, list)
 
     async def test_recommend_returns_top_k_results(self, mocker):
+        mocker.patch.object(db_manager, "cache_get", new_callable=AsyncMock, return_value=None)
+        mocker.patch.object(db_manager, "cache_set", new_callable=AsyncMock)
         mocker.patch.object(
             db_manager, "vector_search", new_callable=AsyncMock, return_value=[]
         )
@@ -506,6 +512,8 @@ class TestRecommend:
         assert len(results) == 3
 
     async def test_recommend_assigns_final_ranks(self, mocker):
+        mocker.patch.object(db_manager, "cache_get", new_callable=AsyncMock, return_value=None)
+        mocker.patch.object(db_manager, "cache_set", new_callable=AsyncMock)
         mocker.patch.object(
             db_manager, "vector_search", new_callable=AsyncMock, return_value=[]
         )

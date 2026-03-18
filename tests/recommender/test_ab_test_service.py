@@ -88,6 +88,8 @@ class TestABTestingDisabled:
 class TestNoActiveTest:
     async def test_returns_default_variant_when_no_active_test(self, service, mocker):
         """When there is no active A/B test the default_variant is returned."""
+        mocker.patch.object(db_manager, "cache_get", new_callable=AsyncMock, return_value=None)
+        mocker.patch.object(db_manager, "cache_set", new_callable=AsyncMock)
         mocker.patch.object(
             db_manager,
             "get_active_ab_test",
@@ -114,6 +116,8 @@ class TestConsistentHashing:
     async def test_same_user_always_gets_same_variant(self, service, mocker):
         """The same user_id must resolve to the same variant across multiple calls."""
         ab_test = _make_ab_test()
+        mocker.patch.object(db_manager, "cache_get", new_callable=AsyncMock, return_value=None)
+        mocker.patch.object(db_manager, "cache_set", new_callable=AsyncMock)
         mocker.patch.object(
             db_manager,
             "get_active_ab_test",
@@ -136,6 +140,8 @@ class TestConsistentHashing:
             variants=["baseline", "hybrid"],
             traffic_split={"baseline": 0.5, "hybrid": 0.5},
         )
+        mocker.patch.object(db_manager, "cache_get", new_callable=AsyncMock, return_value=None)
+        mocker.patch.object(db_manager, "cache_set", new_callable=AsyncMock)
         mocker.patch.object(
             db_manager,
             "get_active_ab_test",
@@ -199,6 +205,8 @@ class TestAnonymousUsers:
     async def test_anonymous_user_gets_random_variant_from_split(self, service, mocker):
         """user_id=None must return a variant that exists in the test config."""
         ab_test = _make_ab_test()
+        mocker.patch.object(db_manager, "cache_get", new_callable=AsyncMock, return_value=None)
+        mocker.patch.object(db_manager, "cache_set", new_callable=AsyncMock)
         mocker.patch.object(
             db_manager,
             "get_active_ab_test",
@@ -221,6 +229,8 @@ class TestAnonymousUsers:
             variants=["baseline", "hybrid"],
             traffic_split={"baseline": 0.5, "hybrid": 0.5},
         )
+        mocker.patch.object(db_manager, "cache_get", new_callable=AsyncMock, return_value=None)
+        mocker.patch.object(db_manager, "cache_set", new_callable=AsyncMock)
         mocker.patch.object(
             db_manager,
             "get_active_ab_test",
