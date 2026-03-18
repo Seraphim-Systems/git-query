@@ -21,14 +21,14 @@ logger = logging.getLogger(__name__)
 # Check if Evidently is available
 try:
     import pandas as pd
-    from evidently import ColumnMapping
-    from evidently.metric_preset import TargetDriftPreset
-    from evidently.metrics import (
+    from evidently.legacy.base_metric import ColumnMapping
+    from evidently.legacy.metric_preset import TargetDriftPreset
+    from evidently.legacy.metrics import (
         ColumnDriftMetric,
         DataDriftTable,
         DatasetDriftMetric,
     )
-    from evidently.report import Report
+    from evidently.legacy.report import Report
 
     EVIDENTLY_AVAILABLE = True
 except ImportError:

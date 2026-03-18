@@ -1,0 +1,50 @@
+# Monitoring stack: drift detection + MLflow tracking server
+#
+# Usage (one-off drift check):
+#   docker compose -f docker-compose.monitoring.yml run --rm drift-monitor
+#
+# Usage (MLflow UI only):
+#   docker compose -f docker-compose.monitoring.yml up mlflow
+
+services:
+  drift-monitor:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.drift-monitor
+    image: git-query-drift-monitor:latest
+    container_name: git-query-drift-monitor
+    environment:
+      REFERENCE_DATA_PATH: ${REFERENCE_DATA_PATH:-/data/reference.parquet}
+      CURRENT_DATA_PATH: ${CURRENT_DATA_PATH:-/data/current.parquet}
+      EVIDENTLY_REPORT_PATH: ${EVIDENTLY_REPORT_PATH:-/app/drift_reports}
+    volumes:
+      - drift-reports:/app/drift_reports
+      - ${DATA_DIR:-./data}:/data:ro
+    restart: "no"
+
+  mlflow:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.mlflow
+    image: git-query-mlflow:latest
+    container_name: git-query-mlflow
+    environment:
+      MLFLOW_BACKEND_STORE_URI: ${MLFLOW_BACKEND_STORE_URI:-/mlflow/mlruns}
+      MLFLOW_DEFAULT_ARTIFACT_ROOT: ${MLFLOW_DEFAULT_ARTIFACT_ROOT:-/mlflow/artifacts}
+    ports:
+      - "${MLFLOW_PORT:-5000}:5000"
+    volumes:
+      - mlflow-data:/mlflow
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  drift-reports:
+    driver: local
+  mlflow-data:
+    driver: local

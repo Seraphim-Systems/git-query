@@ -1,0 +1,34 @@
+# Drift Monitor — runs Evidently AI drift checks as a one-shot container.
+# Usage:
+#   docker build -f infrastructure/docker/Dockerfile.drift-monitor -t drift-monitor .
+#   docker run --rm \
+#     -e REFERENCE_DATA_PATH=/data/reference.parquet \
+#     -e CURRENT_DATA_PATH=/data/current.parquet \
+#     -e EVIDENTLY_REPORT_PATH=/app/drift_reports \
+#     -v $(pwd)/data:/data \
+#     -v $(pwd)/drift_reports:/app/drift_reports \
+#     drift-monitor
+
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app
+
+WORKDIR /app
+
+# Install dependencies (no torch — keep image small)
+RUN pip install --no-cache-dir \
+    evidently>=0.4.0 \
+    pandas>=2.0.0 \
+    numpy>=1.26.3 \
+    pyarrow>=14.0.0
+
+# Copy MLOps source
+COPY src/recommender/mlops/ /app/
+
+# Default report output directory
+RUN mkdir -p /app/drift_reports
+
+# One-shot entrypoint — exits 0 (no drift) or 1 (drift detected)
+ENTRYPOINT ["python", "run_drift_check.py"]
