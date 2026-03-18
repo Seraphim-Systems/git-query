@@ -1,11 +1,13 @@
 """Hybrid retrieval engine - combines embeddings + keyword search."""
 
+import asyncio
+import hashlib
+import json
 from typing import List, Dict, Any, Set
 from ..models import RecommendationRequest, RepositoryResult
 from ..database import db_manager
 from ..config import settings
 from .base import RecommendationEngine
-import asyncio
 
 
 class HybridRetrievalEngine(RecommendationEngine):
@@ -26,6 +28,22 @@ class HybridRetrievalEngine(RecommendationEngine):
         self, request: RecommendationRequest
     ) -> List[RepositoryResult]:
         """Generate recommendations using hybrid retrieval."""
+
+        # Build a deterministic cache key from parameters that affect results
+        cache_key_parts = {
+            "query": request.query,
+            "language": request.language,
+            "min_stars": request.min_stars,
+            "license": request.license,
+            "top_k": getattr(request, "top_k", settings.final_top_k),
+        }
+        cache_key = "hybrid:" + hashlib.md5(
+            json.dumps(cache_key_parts, sort_keys=True).encode()
+        ).hexdigest()
+
+        cached = await db_manager.cache_get(cache_key)
+        if cached is not None:
+            return [RepositoryResult(**r) for r in cached]
 
         # Step 1: Parallel retrieval from both sources
         semantic_task = self._semantic_search(request)
@@ -59,6 +77,9 @@ class HybridRetrievalEngine(RecommendationEngine):
         # Add rank
         for idx, result in enumerate(final_results):
             result.rank = idx + 1
+
+        # Cache the results for subsequent identical requests
+        await db_manager.cache_set(cache_key, [r.model_dump() for r in final_results])
 
         return final_results
 
@@ -209,16 +230,16 @@ class HybridRetrievalEngine(RecommendationEngine):
         filtered = []
 
         for result in results:
-            # Language filter
-            if request.language and result.language != request.language:
+            # Language filter (case-insensitive)
+            if request.language and (result.language or "").lower() != (request.language or "").lower():
                 continue
 
             # Min stars filter
             if request.min_stars and result.stars < request.min_stars:
                 continue
 
-            # License filter
-            if request.license and result.license != request.license:
+            # License filter (case-insensitive)
+            if request.license and (result.license or "").lower() != (request.license or "").lower():
                 continue
 
             filtered.append(result)

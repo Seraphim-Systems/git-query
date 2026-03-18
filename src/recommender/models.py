@@ -132,7 +132,7 @@ class ModelMetadata(BaseModel):
     """Metadata for a trained model."""
 
     model_id: str
-    model_type: Literal["embedding", "cross_encoder", "personalization"]
+    model_type: Literal["embedding", "cross_encoder", "personalization", "reranker"]
     variant: str = Field(..., description="Variant name for A/B testing")
     version: str
     path: str = Field(..., description="Relative path within the model volume")
