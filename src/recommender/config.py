@@ -5,6 +5,8 @@ from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
+_config_logger = logging.getLogger(__name__)
+
 class RecommenderSettings(BaseSettings):
     """Settings for the recommender service."""
 
@@ -41,6 +43,7 @@ class RecommenderSettings(BaseSettings):
     hybrid_search_top_k: int = 100
     rerank_top_k: int = 20
     final_top_k: int = 10
+    rrf_k: int = 60  # Reciprocal Rank Fusion constant; smaller = sharper rank differences
 
     # Embeddings
     embedding_dimension: int = 384
@@ -81,6 +84,6 @@ class RecommenderSettings(BaseSettings):
 settings = RecommenderSettings()
 
 if not settings.embedding_api_key:
-    logging.warning(
+    _config_logger.warning(
         "EMBEDDING_API_KEY not set. Embedding functionality may be limited."
     )
