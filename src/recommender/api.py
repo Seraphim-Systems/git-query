@@ -10,8 +10,6 @@ import time
 from typing import Optional
 from datetime import datetime, timezone
 
-logger = logging.getLogger(__name__)
-
 from .config import settings
 from .models import (
     RecommendationRequest,
@@ -29,6 +27,8 @@ from .services import (
     ABTestService,
     ModelRegistryService,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # Lifespan context manager

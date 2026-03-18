@@ -27,6 +27,7 @@ class RerankerService:
         self.model = None
         self.current_model_id: Optional[str] = None
         self._loaded_path: Optional[str] = None
+        self._is_lgbm: bool = False  # set to True when a .pkl LightGBM adapter is loaded
 
     async def load_active_model(self, variant: str = "default"):
         """Load the currently active reranker model from the registry."""
@@ -57,14 +58,13 @@ class RerankerService:
             self.load_model(full_path)
             self.current_model_id = active_model.model_id
         else:
-            # If registry holds a model identifier (eg. HF id or local dir), try to load it directly
-            try:
-                logger.info(f"Attempting to load active reranker by id/path: {getattr(active_model, 'path', None)}")
-                self.load_model(getattr(active_model, 'path', self.model_name))
-                self.current_model_id = active_model.model_id
-            except Exception:
-                logger.error(f"Could not load active reranker model '{getattr(active_model,'model_id', None)}'. Falling back to default.")
-                self.load_model(self.model_name)
+            logger.warning(
+                "Active reranker model path not found on disk (model_id=%s, path=%s). Falling back to default: %s",
+                getattr(active_model, 'model_id', None),
+                getattr(active_model, 'path', None),
+                self.model_name,
+            )
+            self.load_model(self.model_name)
 
     def load_model(self, model_path: str = None):
         """Load the cross-encoder model into memory."""
@@ -76,6 +76,8 @@ class RerankerService:
 
             # Adapter exposes a candidate-aware prediction method used by rerank()
             class _LightGBMAdapter:
+                _is_lgbm_adapter = True  # sentinel — avoids hasattr() collision with MagicMock
+
                 def __init__(self, model, feature_extractor: FeatureExtractor):
                     self.model = model
                     self.fe = feature_extractor
@@ -107,6 +109,7 @@ class RerankerService:
                     return self.model.predict(X.values)
 
             self.model = _LightGBMAdapter(model_obj, FeatureExtractor())
+            self._is_lgbm = True
             return self.model
 
         # Otherwise treat as a CrossEncoder model id/path
@@ -114,6 +117,7 @@ class RerankerService:
             logger.info(f"Initializing CrossEncoder with: {target}")
             self.model = CrossEncoder(target)
             self._loaded_path = target
+        self._is_lgbm = False
         return self.model
 
     async def rerank(
@@ -135,14 +139,11 @@ class RerankerService:
 
         # Run reranking in thread pool. If a LightGBM adapter is loaded, call its
         # candidate-aware prediction method so features are computed from RepositoryResult.
-        loop = asyncio.get_event_loop()
-        if hasattr(self.model, 'predict_from_candidates'):
+        loop = asyncio.get_running_loop()
+        if self._is_lgbm:
             scores = await loop.run_in_executor(None, self.model.predict_from_candidates, query, candidates)
         else:
             scores = await loop.run_in_executor(None, self._score_pairs, pairs)
-        # Run reranking in thread pool
-        loop = asyncio.get_running_loop()
-        scores = await loop.run_in_executor(None, self._score_pairs, pairs)
 
         for candidate, score in zip(candidates, scores):
             candidate.explanation = candidate.explanation or {}
