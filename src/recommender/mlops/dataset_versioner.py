@@ -17,9 +17,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 class DatasetVersioner:
@@ -72,7 +72,7 @@ class DatasetVersioner:
         version: str,
         df: Any,
         path: Path,
-        extra: Optional[Dict[str, Any]] = None,
+        extra: dict[str, Any] | None = None,
     ) -> None:
         """Persist version metadata to a JSON file.
 
@@ -90,9 +90,9 @@ class DatasetVersioner:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
 
-        meta: Dict[str, Any] = {
+        meta: dict[str, Any] = {
             "version": version,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "row_count": len(df),
             "col_count": len(df.columns),
             "feature_cols": sorted(df.columns.tolist()),
@@ -103,7 +103,7 @@ class DatasetVersioner:
         with open(path, "w", encoding="utf-8") as fh:
             json.dump(meta, fh, indent=2, default=str)
 
-    def load_version_metadata(self, path: Path) -> Dict[str, Any]:
+    def load_version_metadata(self, path: Path) -> dict[str, Any]:
         """Load previously saved version metadata from a JSON file.
 
         Parameters
@@ -116,7 +116,7 @@ class DatasetVersioner:
         dict
             The metadata dictionary.
         """
-        with open(Path(path), "r", encoding="utf-8") as fh:
+        with open(Path(path), encoding="utf-8") as fh:
             return json.load(fh)
 
     def versions_match(self, v1: str, v2: str) -> bool:

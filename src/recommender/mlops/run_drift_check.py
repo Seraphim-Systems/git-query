@@ -26,7 +26,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def _load_data(path: str) -> "pd.DataFrame":
+def _load_data(path: str):
     import pandas as pd
 
     p = Path(path)
