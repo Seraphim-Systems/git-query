@@ -1,5 +1,9 @@
 name: Drift Monitoring
 
+permissions:
+  contents: read
+  issues: write
+
 on:
   # Run weekly on Sundays at 3 AM UTC
   schedule:
