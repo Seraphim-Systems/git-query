@@ -4,23 +4,19 @@ import asyncio
 import os
 import logging
 from typing import List, Optional
-from sentence_transformers import CrossEncoder
 from ..config import settings
-from ..models import RepositoryResult, ModelMetadata
-import joblib
-import pandas as pd
-from ..data.features import FeatureExtractor
-from ..training.utils import prepare_repo_text
+from ..models import RepositoryResult
+from .adapters import BaseRerankerAdapter, AdapterFactory
 
 logger = logging.getLogger(__name__)
 
 
 class RerankerService:
     """
-    Cross-encoder based reranker.
+    Reranker service — delegates to a hot-swappable adapter backend.
 
-    More accurate but slower than bi-encoders.
-    Used to rerank top K candidates from retrieval.
+    Supports CrossEncoder and LightGBM LambdaRank via the adapter pattern.
+    The active backend is selected at load time by AdapterFactory.from_path().
     """
 
     def __init__(self, model_name: str = None):
@@ -28,7 +24,7 @@ class RerankerService:
         self.model = None
         self.current_model_id: Optional[str] = None
         self._loaded_path: Optional[str] = None
-        self._is_lgbm: bool = False  # set to True when a .pkl LightGBM adapter is loaded
+        self._adapter: Optional[BaseRerankerAdapter] = None
         self._load_lock = asyncio.Lock()
 
     async def load_active_model(self, variant: str = "default"):
@@ -72,59 +68,14 @@ class RerankerService:
                 await loop.run_in_executor(None, self.load_model, self.model_name)
 
     def load_model(self, model_path: str = None):
-        """Load the cross-encoder model into memory."""
+        """Load the reranker model into memory via AdapterFactory."""
         target = model_path or self.model_name
-        # If target is a LightGBM artifact (pickled), load and wrap it with a small adapter
-        if isinstance(target, str) and (target.endswith('.pkl') or target.endswith('.joblib')):
-            logger.info("Loading LightGBM reranker artifact via joblib: %s", target)
-            model_obj = joblib.load(target)
-
-            # Adapter exposes a candidate-aware prediction method used by rerank()
-            class _LightGBMAdapter:
-                _is_lgbm_adapter = True  # sentinel — avoids hasattr() collision with MagicMock
-
-                def __init__(self, model, feature_extractor: FeatureExtractor):
-                    self.model = model
-                    self.fe = feature_extractor
-
-                def predict_from_candidates(self, query: str, candidates: List[RepositoryResult]):
-                    # Build a DataFrame from RepositoryResult objects with columns expected by FeatureExtractor
-                    rows = []
-                    for c in candidates:
-                        rows.append({
-                            'name': getattr(c, 'name', None),
-                            'description': getattr(c, 'description', None),
-                            'stars': getattr(c, 'stars', None),
-                            'forks': getattr(c, 'forks', None),
-                            'language': getattr(c, 'language', None),
-                            'license': getattr(c, 'license', None),
-                            'topics': getattr(c, 'topics', None),
-                            'readme': getattr(c, 'readme', None),
-                            'updated_at': getattr(c, 'updated_at', None),
-                            'pushed_at': getattr(c, 'pushed_at', None),
-                        })
-                    df = pd.DataFrame(rows)
-                    X = self.fe.extract_all(df, query=query)
-                    # If the saved model has an explicit feature ordering, respect it
-                    if hasattr(self.model, 'feature_cols'):
-                        try:
-                            X = X[self.model.feature_cols]
-                        except Exception:
-                            pass
-                    return self.model.predict(X.values)
-
-            self.model = _LightGBMAdapter(model_obj, FeatureExtractor())
-            self._is_lgbm = True
-            self._loaded_path = target
-            return self.model
-
-        # Otherwise treat as a CrossEncoder model id/path
-        if self.model is None or target != self.model_name:
-            logger.info("Initializing CrossEncoder with: %s", target)
-            self.model = CrossEncoder(target)
-            self._loaded_path = target
-        self._is_lgbm = False
-        return self.model
+        logger.info("Loading reranker model: %s", target)
+        self._adapter = AdapterFactory.from_path(target)
+        # Keep self.model pointing at the adapter for legacy callers
+        self.model = self._adapter
+        self._loaded_path = target
+        return self._adapter
 
     async def rerank(
         self,
@@ -138,18 +89,8 @@ class RerankerService:
 
         top_k = top_k or settings.rerank_top_k
 
-        pairs = [
-            [query, self._create_repo_text(candidate)]
-            for candidate in candidates
-        ]
-
-        # Run reranking in thread pool. If a LightGBM adapter is loaded, call its
-        # candidate-aware prediction method so features are computed from RepositoryResult.
         loop = asyncio.get_running_loop()
-        if self._is_lgbm:
-            scores = await loop.run_in_executor(None, self.model.predict_from_candidates, query, candidates)
-        else:
-            scores = await loop.run_in_executor(None, self._score_pairs, pairs)
+        scores = await loop.run_in_executor(None, self._adapter.score, query, candidates)
 
         for candidate, score in zip(candidates, scores):
             candidate.explanation = candidate.explanation or {}
@@ -165,16 +106,3 @@ class RerankerService:
 
         return reranked[:top_k]
 
-    def _score_pairs(self, pairs: List[List[str]]) -> List[float]:
-        """Score query-document pairs using cross-encoder."""
-        scores = self.model.predict(pairs, show_progress_bar=False)
-        return scores
-
-    def _create_repo_text(self, repo: RepositoryResult) -> str:
-        """Create text representation of repository for reranking."""
-        repo_dict = {
-            "name": repo.name,
-            "description": repo.description,
-            "language": repo.language,
-        }
-        return prepare_repo_text(repo_dict)
