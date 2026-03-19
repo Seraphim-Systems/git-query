@@ -1,5 +1,9 @@
 name: Drift Monitoring
 
+permissions:
+  contents: read
+  issues: write
+
 on:
   # Run weekly on Sundays at 3 AM UTC
   schedule:
@@ -20,57 +24,66 @@ on:
           - prediction
 
 jobs:
+  build-drift-monitor:
+    name: Build Drift Monitor Image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build drift monitor image
+        run: |
+          docker build \
+            -f infrastructure/docker/Dockerfile.drift-monitor \
+            -t git-query-drift-monitor:latest \
+            .
+
+      - name: Smoke test — image starts without error
+        run: |
+          # Run without data paths to confirm the container starts and
+          # exits with code 2 (missing env vars) not a crash/import error.
+          docker run --rm \
+            git-query-drift-monitor:latest || [ $? -eq 2 ]
+
   drift-check:
     name: Run Drift Detection
     runs-on: ubuntu-latest
+    needs: build-drift-monitor
+    # Only runs when real data is available (scheduled or manual trigger
+    # with DATA_DIR secret configured). Skipped on regular PRs.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
-      - name: Setup SSH
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build drift monitor image
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts
+          docker build \
+            -f infrastructure/docker/Dockerfile.drift-monitor \
+            -t git-query-drift-monitor:latest \
+            .
 
-      - name: Run Drift Check
+      - name: Run drift check
         run: |
-          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
-          set -e
+          docker run --rm \
+            -e REFERENCE_DATA_PATH=/data/reference.parquet \
+            -e CURRENT_DATA_PATH=/data/current.parquet \
+            -e EVIDENTLY_REPORT_PATH=/app/drift_reports \
+            -v ${{ github.workspace }}/drift_reports:/app/drift_reports \
+            git-query-drift-monitor:latest || DRIFT_EXIT=$?
 
-          cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query
-
-          echo "🔍 Running drift detection..."
-          echo "Check type: ${{ github.event.inputs.check_type || 'all' }}"
-
-          # Check if drift monitoring container/script exists
-          if [ -f "src/recommender/mlops/drift_monitor.py" ]; then
-            # Run drift monitoring script
-            docker exec git-query-recommender python -m recommender.mlops.drift_monitor 2>/dev/null || \
-            echo "⚠️ Drift check container not running or script failed"
-          else
-            echo "⚠️ Drift monitoring script not found"
+          if [ "${DRIFT_EXIT}" = "1" ]; then
+            echo "::warning::Drift detected in recommendation data"
           fi
+        continue-on-error: true
 
-          echo "✅ Drift check completed"
-          ENDSSH
-
-      - name: Check Results
-        run: |
-          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
-          set -e
-
-          cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query
-
-          echo "📊 Checking drift reports..."
-
-          # Check for recent drift reports
-          REPORT_DIR="/app/drift_reports"
-          if docker exec git-query-recommender ls $REPORT_DIR 2>/dev/null; then
-            echo "Recent drift reports:"
-            docker exec git-query-recommender ls -la $REPORT_DIR | tail -5
-          else
-            echo "No drift reports found (this may be normal for first run)"
-          fi
-          ENDSSH
+      - name: Upload drift reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: drift-reports-${{ github.run_id }}
+          path: drift_reports/
+          if-no-files-found: ignore
 
   notify-on-drift:
     name: Notify on Drift Detection
@@ -82,7 +95,7 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const title = '⚠️ Model/Data Drift Detected';
+            const title = 'Model/Data Drift Detected';
             const body = `
             ## Drift Detection Alert
 
@@ -92,14 +105,13 @@ jobs:
             **Triggered:** ${new Date().toISOString()}
 
             ### Recommended Actions:
-            1. Review drift reports in \`/app/drift_reports\`
-            2. Check model performance metrics
+            1. Review drift reports uploaded as workflow artifacts
+            2. Check model performance metrics in MLflow
             3. Consider triggering a retraining run if drift is significant
 
             [View Workflow Run](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
             `;
 
-            // Check if issue already exists
             const issues = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,

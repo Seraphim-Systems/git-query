@@ -139,7 +139,10 @@ jobs:
           EPOCHS=${{ github.event.inputs.epochs || '10' }}
           SKIP_IF_NO_NEW_DATA=${{ github.event.inputs.force_retrain == 'true' && 'false' || 'true' }}
           ENABLE_MLFLOW=true
+          MLFLOW_TRACKING_URI=file:///app/mlruns
           MLFLOW_EXPERIMENT_NAME=git-query-scheduled-retrain
+          ENABLE_LGBM_TRAINING=true
+          LGBM_NUM_BOOST_ROUNDS=300
           EOF
 
           cp .env infrastructure/docker/.env
@@ -292,6 +295,10 @@ jobs:
           elif [ "${{ needs.retrain.outputs.training_success }}" == "true" ]; then
             echo "✅ **Status:** Success" >> $GITHUB_STEP_SUMMARY
             echo "**Model Version:** ${{ needs.retrain.outputs.model_version }}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### MLflow Experiment" >> $GITHUB_STEP_SUMMARY
+            echo "**Experiment:** git-query-scheduled-retrain" >> $GITHUB_STEP_SUMMARY
+            echo "**Tracking URI:** file:///app/mlruns (inside training container)" >> $GITHUB_STEP_SUMMARY
           else
             echo "❌ **Status:** Failed" >> $GITHUB_STEP_SUMMARY
           fi

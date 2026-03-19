@@ -31,6 +31,14 @@ services:
       - CHUNK_SIZE=${CHUNK_SIZE:-100000}
       - N_WORKERS=${N_WORKERS:-6}
 
+      # MLflow experiment tracking
+      - MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI:-file:///app/mlruns}
+      - MLFLOW_EXPERIMENT_NAME=${MLFLOW_EXPERIMENT_NAME:-git-query-retrain}
+      - ENABLE_LGBM_TRAINING=${ENABLE_LGBM_TRAINING:-true}
+      - LGBM_TOP_N_QUERIES=${LGBM_TOP_N_QUERIES:-100}
+      - LGBM_CANDIDATES_PER_QUERY=${LGBM_CANDIDATES_PER_QUERY:-100}
+      - LGBM_NUM_BOOST_ROUNDS=${LGBM_NUM_BOOST_ROUNDS:-300}
+
       # Logging
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
 
@@ -44,6 +52,8 @@ services:
       - training-data:/app/training_data
       # Logs
       - training-logs:/app/logs
+      # MLflow tracking artifacts
+      - mlflow-runs:/app/mlruns
     networks:
       - internal-network
 
@@ -54,3 +64,5 @@ volumes:
     name: git-query-training-data
   training-logs:
     name: git-query-training-logs
+  mlflow-runs:
+    name: git-query-mlflow-runs
