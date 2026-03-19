@@ -47,9 +47,7 @@ def main() -> None:
     report_dir = os.getenv("EVIDENTLY_REPORT_PATH", "/app/drift_reports")
 
     if not reference_path or not current_path:
-        logger.error(
-            "REFERENCE_DATA_PATH and CURRENT_DATA_PATH environment variables are required."
-        )
+        logger.error("REFERENCE_DATA_PATH and CURRENT_DATA_PATH environment variables are required.")
         sys.exit(2)
 
     logger.info(f"Loading reference data from: {reference_path}")

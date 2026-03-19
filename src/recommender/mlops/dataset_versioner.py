@@ -8,7 +8,7 @@ Usage::
     from src.recommender.mlops.dataset_versioner import DatasetVersioner
 
     versioner = DatasetVersioner()
-    version = versioner.compute_version(df)          # e.g. "a3f2c1d8"
+    version = versioner.compute_version(df)  # e.g. "a3f2c1d8"
     versioner.save_version_metadata(version, df, Path("artifacts/dataset_version.json"))
     meta = versioner.load_version_metadata(Path("artifacts/dataset_version.json"))
 """
