@@ -7,18 +7,18 @@ import shutil
 # but it uses it inside methods or init, so patching where it is imported is enough.
 # However, RerankerTrainer imports settings from ..config.
 
-from src.recommender.training.reranker_trainer import RerankerTrainer
+from src.recommender.training.trainers.reranker_cross_encoder_trainer import RerankerCrossEncoderTrainer as RerankerTrainer
 
 @pytest.mark.asyncio
 async def test_reranker_checkpointing():
     # Mock settings
-    with patch("src.recommender.training.reranker_trainer.settings") as mock_settings:
+    with patch("src.recommender.training.trainers.reranker_cross_encoder_trainer.settings") as mock_settings:
         mock_settings.model_path = "/tmp/models"
         mock_settings.checkpoint_path = "/tmp/models/checkpoints"
         mock_settings.cross_encoder_model_name = "test-model"
 
         # Mock CrossEncoder
-        with patch("src.recommender.training.reranker_trainer.CrossEncoder") as MockCrossEncoder:
+        with patch("src.recommender.training.trainers.reranker_cross_encoder_trainer.CrossEncoder") as MockCrossEncoder:
             mock_model = MagicMock()
             MockCrossEncoder.return_value = mock_model
             
@@ -32,13 +32,13 @@ async def test_reranker_checkpointing():
                 # So we patch specific functions or let them be if we use real paths in tests (but we want to avoid disk IO)
                 # But here we are using side_effect to use real logic for path manipulation
                 
-                with patch("src.recommender.training.reranker_trainer.os.makedirs") as mock_makedirs:
-                    with patch("src.recommender.training.reranker_trainer.os.remove") as mock_remove:
-                        with patch("src.recommender.training.reranker_trainer.os.path.isdir") as mock_isdir:
+                with patch("src.recommender.training.trainers.reranker_cross_encoder_trainer.os.makedirs") as mock_makedirs:
+                    with patch("src.recommender.training.trainers.reranker_cross_encoder_trainer.os.remove") as mock_remove:
+                        with patch("src.recommender.training.trainers.reranker_cross_encoder_trainer.os.path.isdir") as mock_isdir:
                             mock_isdir.return_value = True # Assume directories
                             
-                            with patch("src.recommender.training.reranker_trainer.shutil.rmtree") as mock_rmtree:
-                                with patch("src.recommender.training.reranker_trainer.glob.glob") as mock_glob:
+                            with patch("src.recommender.training.trainers.reranker_cross_encoder_trainer.shutil.rmtree") as mock_rmtree:
+                                with patch("src.recommender.training.trainers.reranker_cross_encoder_trainer.glob.glob") as mock_glob:
                                     
                                     # Instantiate trainer
                                     trainer = RerankerTrainer(base_model="test-base", checkpoint_save_total_limit=2)
@@ -51,7 +51,7 @@ async def test_reranker_checkpointing():
                                     }
                                     
                                     # Run train
-                                    await trainer.train(training_data, variant="test_v1", epochs=2)
+                                    result = await trainer.train(training_data, variant="test_v1", epochs=2)
                                     
                                     # Verify fit called
                                     assert mock_model.fit.called
@@ -96,4 +96,12 @@ async def test_reranker_checkpointing():
                                     # epoch_1 is the oldest (1 < 2 < 3)
                                     
                                     mock_rmtree.assert_called_with("/tmp/models/checkpoints/test_v1/epoch_1")
+
+                                    # Verify registry was called to register the model
+                                    mock_registry.register_model.assert_awaited_once()
+
+                                    # Verify train() return contract
+                                    assert "model_path" in result
+                                    assert result["epochs"] == 2
+                                    assert "num_examples" in result
 
