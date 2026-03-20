@@ -32,9 +32,9 @@ def sample_repos():
 
 @pytest.fixture
 def pipeline(tmp_path):
-    """UnifiedTrainingPipeline with temp dirs — no real API or DB connections."""
-    from src.recommender.training.unified_pipeline import UnifiedTrainingPipeline
-    return UnifiedTrainingPipeline(
+    """_EmbeddingIndexer with temp dirs — no real API or DB connections."""
+    from src.recommender.training.pipelines.embedding_indexing_pipeline import _EmbeddingIndexer
+    return _EmbeddingIndexer(
         api_base_url="http://fake-api",
         api_key="fake-key",
         models_dir=str(tmp_path / "models"),
@@ -267,7 +267,7 @@ class TestQdrantPreCheckBeforeEmbedding:
         mock_model = MagicMock()
         mock_model.encode.return_value = np.random.rand(1, 384)   # only 1 expected
 
-        with patch("src.recommender.training.unified_pipeline.SentenceTransformer", return_value=mock_model):
+        with patch("src.recommender.training.pipelines.embedding_indexing_pipeline.SentenceTransformer", return_value=mock_model):
             pipeline.train_embeddings(repositories=sample_repos, model_name="m", batch_size=32)
 
         encoded_texts = mock_model.encode.call_args[0][0]
@@ -570,8 +570,8 @@ class TestChunkedPipelineDeduplication:
         with patch.object(pipeline, "_get_total_count", return_value=3), \
              patch.object(pipeline, "_fetch_batch", return_value=sample_repos), \
              patch.object(pipeline, "_embed_chunk_parallel", side_effect=fake_embed), \
-             patch("src.recommender.training.unified_pipeline.SentenceTransformer"), \
-             patch("src.recommender.training.unified_pipeline.EmbeddingUploader",
+             patch("src.recommender.training.pipelines.embedding_indexing_pipeline.SentenceTransformer"), \
+             patch("src.recommender.training.pipelines.embedding_indexing_pipeline.EmbeddingUploader",
                    return_value=fake_uploader):
             pipeline.run_chunked(
                 chunk_size=100_000,

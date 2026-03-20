@@ -1,10 +1,8 @@
-"""Unified training pipeline: Fetch data from server and train embeddings.
+"""Embedding indexing pipeline: fetch all repos → encode → upload to Qdrant.
 
-This script:
-1. Fetches repository data from MongoDB API (only new/updated repos)
-2. Trains embedding model using sentence-transformers
-3. Saves trained embeddings and metadata to models directory
-4. Designed to run in Docker container
+Wraps _EmbeddingIndexer (formerly UnifiedTrainingPipeline) in the BasePipeline
+async interface. The production Qdrant index build step — distinct from
+EmbeddingPipeline, which fine-tunes model weights via MultipleNegativesRankingLoss.
 """
 
 import json
@@ -26,13 +24,15 @@ import logging
 try:
     from ..scripts.upload_embeddings import EmbeddingUploader
 except ImportError:
-    # When run directly (e.g. `python unified_pipeline.py`) the parent
+    # When run directly (e.g. `python embedding_indexing_pipeline.py`) the parent
     # package is unknown.  Add the recommender root (parent of training/)
     # so that `scripts/` is importable as a top-level package.
-    _recommender_root = Path(__file__).resolve().parents[1]
+    _recommender_root = Path(__file__).resolve().parents[2]
     if str(_recommender_root) not in sys.path:
         sys.path.insert(0, str(_recommender_root))
     from scripts.upload_embeddings import EmbeddingUploader
+
+from .base_pipeline import BasePipeline
 
 logging.basicConfig(
     level=logging.INFO,
@@ -41,7 +41,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-class UnifiedTrainingPipeline:
+class _EmbeddingIndexer:
     """Fetch data from API and train embeddings in one pipeline."""
 
     def __init__(
@@ -946,87 +946,89 @@ class UnifiedTrainingPipeline:
             raise
 
 
-def main():
-    """Main entry point for containerized training."""
-    # Auto-load .env files for local development.
-    # Try repo-root .env first, then infrastructure/docker/.env as fallback.
-    try:
-        from dotenv import load_dotenv
+class EmbeddingIndexingPipeline(BasePipeline):
+    """Batch embedding indexing pipeline: fetch all repos → encode → upload to Qdrant.
 
-        _script_dir = Path(__file__).resolve()
-        # Walk up looking for infrastructure/docker/.env relative to repo root
-        for _parent in _script_dir.parents:
-            _docker_env = _parent / "infrastructure" / "docker" / ".env"
-            if _docker_env.exists():
-                load_dotenv(_docker_env, override=False)
-                break
-            _root_env = _parent / ".env"
-            if _root_env.exists():
-                load_dotenv(_root_env, override=False)
-                break
-    except ImportError:
+    Wraps _EmbeddingIndexer in an async-safe interface. Overrides BasePipeline.run()
+    because the streaming chunked loop does not split into discrete fetch/train phases.
+
+    This is the production Qdrant index build step — distinct from EmbeddingPipeline,
+    which fine-tunes model weights via MultipleNegativesRankingLoss.
+    """
+
+    def __init__(
+        self,
+        api_base_url: str,
+        api_key: str,
+        model_name: str = "sentence-transformers/all-MiniLM-L6-v2",
+        models_dir: str = "/app/models",
+        data_cache_dir: str = "/app/training_data",
+        batch_size: int = 32,
+        fetch_batch_size: int = 500,
+        max_repos=None,
+        skip_if_no_new_data: bool = True,
+        use_chunked: bool = True,
+        chunk_size: int = 100_000,
+        n_workers: int = 1,
+    ):
+        self.api_base_url = api_base_url
+        self.api_key = api_key
+        self.model_name = model_name
+        self.models_dir = models_dir
+        self.data_cache_dir = data_cache_dir
+        self.batch_size = batch_size
+        self.fetch_batch_size = fetch_batch_size
+        self.max_repos = max_repos
+        self.skip_if_no_new_data = skip_if_no_new_data
+        self.use_chunked = use_chunked
+        self.chunk_size = chunk_size
+        self.n_workers = n_workers
+
+    async def run(self):
+        """Delegate to _EmbeddingIndexer in a thread-pool executor."""
+        import asyncio
+        indexer = _EmbeddingIndexer(
+            api_base_url=self.api_base_url,
+            api_key=self.api_key,
+            models_dir=self.models_dir,
+            data_cache_dir=self.data_cache_dir,
+        )
+        loop = asyncio.get_running_loop()
+        if self.use_chunked:
+            await loop.run_in_executor(
+                None,
+                lambda: indexer.run_chunked(
+                    model_name=self.model_name,
+                    batch_size=self.batch_size,
+                    fetch_batch_size=self.fetch_batch_size,
+                    chunk_size=self.chunk_size,
+                    max_repos=self.max_repos,
+                    skip_if_no_new_data=self.skip_if_no_new_data,
+                    n_workers=self.n_workers,
+                ),
+            )
+        else:
+            await loop.run_in_executor(
+                None,
+                lambda: indexer.run(
+                    model_name=self.model_name,
+                    batch_size=self.batch_size,
+                    fetch_batch_size=self.fetch_batch_size,
+                    max_repos=self.max_repos,
+                    skip_if_no_new_data=self.skip_if_no_new_data,
+                ),
+            )
+        return None
+
+    # Abstract method stubs — the only entry point is run()
+    async def fetch(self):
+        raise NotImplementedError("EmbeddingIndexingPipeline delegates to run()")
+
+    async def train(self, training_data):
+        raise NotImplementedError("EmbeddingIndexingPipeline delegates to run()")
+
+    async def evaluate(self, training_data, metrics):
+        return metrics
+
+    async def register(self, metrics):
         pass
-
-    # Read from environment variables (with local-dev defaults)
-    api_base_url = os.getenv("API_BASE_URL", "http://localhost")
-    api_key = os.getenv("APIKEY_MONGODB")
-
-    if not api_base_url or not api_key:
-        raise ValueError(
-            "Missing required environment variables!\n"
-            "Please set API_BASE_URL and APIKEY_MONGODB in your .env file"
-        )
-
-    model_name = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
-    batch_size = int(os.getenv("BATCH_SIZE", "32"))
-    fetch_batch_size = int(os.getenv("FETCH_BATCH_SIZE", "100"))
-    max_repos = os.getenv("MAX_REPOS")
-    max_repos = int(max_repos) if max_repos else None
-    skip_if_no_new_data = os.getenv("SKIP_IF_NO_NEW_DATA", "true").lower() == "true"
-
-    # Chunked pipeline config
-    use_chunked = os.getenv("USE_CHUNKED_PIPELINE", "true").lower() == "true"
-    chunk_size = int(os.getenv("CHUNK_SIZE", "100000"))
-    n_workers = os.getenv("N_WORKERS")
-    n_workers = int(n_workers) if n_workers else (os.cpu_count() or 1)
-
-    models_dir = os.getenv("MODELS_DIR", "./models")
-    data_cache_dir = os.getenv("DATA_CACHE_DIR", "./training_data")
-
-    # Initialize pipeline
-    pipeline = UnifiedTrainingPipeline(
-        api_base_url=api_base_url,
-        api_key=api_key,
-        models_dir=models_dir,
-        data_cache_dir=data_cache_dir,
-    )
-
-    # Route to chunked or original pipeline
-    if use_chunked:
-        pipeline.run_chunked(
-            model_name=model_name,
-            batch_size=batch_size,
-            fetch_batch_size=fetch_batch_size,
-            chunk_size=chunk_size,
-            max_repos=max_repos,
-            skip_if_no_new_data=skip_if_no_new_data,
-            n_workers=n_workers,
-        )
-    else:
-        pipeline.run(
-            model_name=model_name,
-            batch_size=batch_size,
-            fetch_batch_size=fetch_batch_size,
-            max_repos=max_repos,
-            skip_if_no_new_data=skip_if_no_new_data,
-        )
-
-
-if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        logger.warning("\n⚠ Training interrupted by user")
-    except Exception as e:
-        logger.error(f"\n❌ Training failed: {e}", exc_info=True)
-        exit(1)

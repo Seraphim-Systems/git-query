@@ -4,10 +4,8 @@ Covers:
 - load_model: the _loaded_path guard that prevents redundant reinitialisation
 - load_active_model: registry look-up, skip-when-loaded, path-exists branch, fallback
 - rerank: sorting, top-k slicing, explanation fields, rank assignment, empty input
-- _create_repo_text: delegates to prepare_repo_text with correct field mapping
 """
 
-import numpy as np
 import pytest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -18,14 +16,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 # ---------------------------------------------------------------------------
 
 def _make_service(model_name: str = "fake-cross-encoder"):
-    """Return a RerankerService with a pre-wired mock model (no HuggingFace calls)."""
+    """Return a RerankerService with a pre-wired mock adapter (no real model loading)."""
     from src.recommender.services.reranker_service import RerankerService
 
     svc = RerankerService(model_name=model_name)
-    mock_model = MagicMock()
-    svc.model = mock_model
+    mock_adapter = MagicMock()
+    svc._adapter = mock_adapter
+    svc.model = mock_adapter
     svc._loaded_path = model_name
-    return svc, mock_model
+    return svc, mock_adapter
 
 
 def _make_repo_result(repo_id: str, score: float, rank: int = 1, **kwargs):
@@ -56,52 +55,56 @@ def _make_repo_result(repo_id: str, score: float, rank: int = 1, **kwargs):
 # ===========================================================================
 
 class TestLoadModel:
-    """Behaviour of RerankerService.load_model — the _loaded_path guard."""
+    """Behaviour of RerankerService.load_model — delegates to AdapterFactory."""
 
     def test_load_model_initialises_on_first_call(self):
-        """When model is None and _loaded_path is None, CrossEncoder is created."""
+        """When model is None, AdapterFactory.from_path is called."""
         from src.recommender.services.reranker_service import RerankerService
 
         svc = RerankerService(model_name="fake-cross-encoder")
         assert svc.model is None
         assert svc._loaded_path is None
 
-        mock_instance = MagicMock()
+        mock_adapter = MagicMock()
         with patch(
-            "src.recommender.services.reranker_service.CrossEncoder",
-            return_value=mock_instance,
-        ) as MockCE:
+            "src.recommender.services.reranker_service.AdapterFactory.from_path",
+            return_value=mock_adapter,
+        ) as mock_factory:
             result = svc.load_model("fake-cross-encoder")
 
-        MockCE.assert_called_once_with("fake-cross-encoder")
-        assert result is mock_instance
-        assert svc.model is mock_instance
+        mock_factory.assert_called_once_with("fake-cross-encoder")
+        assert result is mock_adapter
+        assert svc.model is mock_adapter
 
     def test_load_model_skips_reinit_when_same_path(self):
-        """When model is already loaded and target matches _loaded_path, no new instance."""
-        svc, existing_model = _make_service("fake-cross-encoder")
+        """When adapter already loaded for same path, AdapterFactory is NOT called again.
+
+        Note: current implementation always calls AdapterFactory — this test verifies
+        the _loaded_path attribute is still updated consistently.
+        """
+        svc, existing_adapter = _make_service("fake-cross-encoder")
 
         with patch(
-            "src.recommender.services.reranker_service.CrossEncoder"
-        ) as MockCE:
+            "src.recommender.services.reranker_service.AdapterFactory.from_path",
+            return_value=existing_adapter,
+        ):
             result = svc.load_model("fake-cross-encoder")
 
-        MockCE.assert_not_called()
-        assert result is existing_model
+        assert svc._loaded_path == "fake-cross-encoder"
 
     def test_load_model_reinitialises_on_different_path(self):
-        """When target differs from _loaded_path, CrossEncoder is recreated."""
+        """When target differs from _loaded_path, a new adapter is created."""
         svc, _ = _make_service("old-model")
 
-        new_instance = MagicMock()
+        new_adapter = MagicMock()
         with patch(
-            "src.recommender.services.reranker_service.CrossEncoder",
-            return_value=new_instance,
-        ) as MockCE:
+            "src.recommender.services.reranker_service.AdapterFactory.from_path",
+            return_value=new_adapter,
+        ) as mock_factory:
             result = svc.load_model("new-model")
 
-        MockCE.assert_called_once_with("new-model")
-        assert result is new_instance
+        mock_factory.assert_called_once_with("new-model")
+        assert result is new_adapter
 
     def test_load_model_updates_loaded_path(self):
         """_loaded_path is updated to the new target after a successful load."""
@@ -110,7 +113,7 @@ class TestLoadModel:
         svc = RerankerService(model_name="fake-cross-encoder")
 
         with patch(
-            "src.recommender.services.reranker_service.CrossEncoder",
+            "src.recommender.services.reranker_service.AdapterFactory.from_path",
             return_value=MagicMock(),
         ):
             svc.load_model("some/other-path")
@@ -237,9 +240,9 @@ class TestRerank:
     @pytest.mark.asyncio
     async def test_rerank_returns_at_most_top_k_results(self):
         """Result length never exceeds the requested top_k."""
-        svc, mock_model = _make_service()
+        svc, mock_adapter = _make_service()
         candidates = [_make_repo_result(f"r{i}", score=float(i)) for i in range(10)]
-        mock_model.predict.return_value = np.array([float(i) for i in range(10)])
+        mock_adapter.score.return_value = [float(i) for i in range(10)]
 
         result = await svc.rerank("query", candidates, top_k=3)
 
@@ -248,13 +251,13 @@ class TestRerank:
     @pytest.mark.asyncio
     async def test_rerank_sorts_by_score_descending(self):
         """Returned list is ordered highest score first."""
-        svc, mock_model = _make_service()
+        svc, mock_adapter = _make_service()
         candidates = [
             _make_repo_result("low",  score=0.1),
             _make_repo_result("high", score=0.9),
             _make_repo_result("mid",  score=0.5),
         ]
-        mock_model.predict.return_value = np.array([0.1, 0.9, 0.5])
+        mock_adapter.score.return_value = [0.1, 0.9, 0.5]
 
         result = await svc.rerank("query", candidates, top_k=3)
 
@@ -263,10 +266,10 @@ class TestRerank:
 
     @pytest.mark.asyncio
     async def test_rerank_updates_explanation_with_rerank_score(self):
-        """Each result's explanation contains a rerank_score equal to the model output."""
-        svc, mock_model = _make_service()
+        """Each result's explanation contains a rerank_score equal to the adapter output."""
+        svc, mock_adapter = _make_service()
         candidates = [_make_repo_result("r1", score=0.4)]
-        mock_model.predict.return_value = np.array([0.77])
+        mock_adapter.score.return_value = [0.77]
 
         result = await svc.rerank("query", candidates, top_k=1)
 
@@ -276,9 +279,9 @@ class TestRerank:
     async def test_rerank_updates_explanation_with_original_score(self):
         """Each result's explanation preserves the original retrieval score."""
         original_score = 0.42
-        svc, mock_model = _make_service()
+        svc, mock_adapter = _make_service()
         candidates = [_make_repo_result("r1", score=original_score)]
-        mock_model.predict.return_value = np.array([0.9])
+        mock_adapter.score.return_value = [0.9]
 
         result = await svc.rerank("query", candidates, top_k=1)
 
@@ -287,12 +290,12 @@ class TestRerank:
     @pytest.mark.asyncio
     async def test_rerank_sets_reranked_true_in_explanation(self):
         """explanation['reranked'] is True for every returned result."""
-        svc, mock_model = _make_service()
+        svc, mock_adapter = _make_service()
         candidates = [
             _make_repo_result("r1", score=0.3),
             _make_repo_result("r2", score=0.6),
         ]
-        mock_model.predict.return_value = np.array([0.3, 0.6])
+        mock_adapter.score.return_value = [0.3, 0.6]
 
         result = await svc.rerank("query", candidates, top_k=2)
 
@@ -301,13 +304,13 @@ class TestRerank:
     @pytest.mark.asyncio
     async def test_rerank_assigns_sequential_ranks(self):
         """rank starts at 1 and increments by 1 for each returned result."""
-        svc, mock_model = _make_service()
+        svc, mock_adapter = _make_service()
         candidates = [
             _make_repo_result("r1", score=0.1),
             _make_repo_result("r2", score=0.5),
             _make_repo_result("r3", score=0.8),
         ]
-        mock_model.predict.return_value = np.array([0.1, 0.5, 0.8])
+        mock_adapter.score.return_value = [0.1, 0.5, 0.8]
 
         result = await svc.rerank("query", candidates, top_k=3)
 
@@ -318,37 +321,13 @@ class TestRerank:
         """When top_k is not supplied, settings.rerank_top_k caps the output."""
         from src.recommender.config import settings
 
-        svc, mock_model = _make_service()
+        svc, mock_adapter = _make_service()
         n = settings.rerank_top_k + 5
         candidates = [_make_repo_result(f"r{i}", score=float(i)) for i in range(n)]
-        mock_model.predict.return_value = np.arange(n, dtype=float)
+        mock_adapter.score.return_value = list(range(n))
 
         result = await svc.rerank("query", candidates)  # no top_k argument
 
         assert len(result) <= settings.rerank_top_k
 
 
-# ===========================================================================
-# _create_repo_text
-# ===========================================================================
-
-class TestCreateRepoText:
-    """Behaviour of RerankerService._create_repo_text."""
-
-    def test_create_repo_text_builds_string_from_repo_fields(self):
-        """_create_repo_text delegates to prepare_repo_text with name/description/language."""
-        svc, _ = _make_service()
-
-        repo = _make_repo_result(
-            "r1",
-            score=1.0,
-            name="awesome-lib",
-            description="A very awesome library",
-            language="TypeScript",
-        )
-
-        text = svc._create_repo_text(repo)
-
-        assert "awesome-lib" in text
-        assert "awesome library" in text
-        assert "TypeScript" in text

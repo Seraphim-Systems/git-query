@@ -49,11 +49,20 @@ src/recommender/
     dataset.py             # RepoDataset: fetch, cache, DataFrame
     features.py            # FeatureExtractor: numeric features for ML
   training/
-    unified_pipeline.py    # Indexing pipeline: fetch -> embed -> Qdrant
+    retrain_pipeline.py    # Async orchestrator: embedding indexing + LightGBM reranker
     utils.py               # Canonical prepare_repo_text()
-    embedding_trainer.py   # Fine-tune bi-encoder (needs interaction data)
-    reranker_trainer.py    # Fine-tune cross-encoder (needs interaction data)
-    evaluator.py           # Precision@K, NDCG@K, MRR, CTR
+    data/
+      mongo_data_fetcher.py  # Fetch repos + training pairs from MongoDB via gateway API
+    pipelines/
+      base_pipeline.py                   # Abstract BasePipeline (fetch→train→evaluate→register)
+      embedding_indexing_pipeline.py     # Fetch repos → embed (pretrained) → Qdrant
+      embedding_pipeline.py              # Fine-tune bi-encoder on domain data
+      reranker_lgbm_pipeline.py          # Fetch pairs → LightGBM LambdaRank → register
+      reranker_cross_encoder_pipeline.py # Fine-tune cross-encoder reranker
+    trainers/
+      embedding_trainer.py               # Bi-encoder fine-tuning (sentence-transformers)
+      reranker_cross_encoder_trainer.py  # Cross-encoder fine-tuning
+      reranker_lgbm_trainer.py           # LightGBM LambdaRank trainer
   scripts/
     upload_embeddings.py   # Upload .npy vectors to Qdrant
     create_ab_test.py      # Create A/B test config in MongoDB

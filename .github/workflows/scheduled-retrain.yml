@@ -217,12 +217,11 @@ jobs:
           # Run evaluation if recommender container is available
           if docker ps | grep -q "git-query-recommender"; then
             docker exec git-query-recommender python -c "
-          from recommender.training.evaluator import RecommenderEvaluator
-          import json
+          from recommender.training.pipelines.base_pipeline import BasePipeline
+          from recommender.training.trainers.reranker_lgbm_trainer import RerankerLGBMTrainer
 
-          # Basic evaluation check
-          evaluator = RecommenderEvaluator()
-          print('Evaluation module loaded successfully')
+          # Basic structural health check — verifies new training module layout is importable
+          print('Training module structure OK')
           print('passed=true')
           print('metrics={\"status\": \"evaluation_ready\"}')"
           else

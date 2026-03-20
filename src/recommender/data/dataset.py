@@ -48,7 +48,7 @@ class RepoDataset:
         """Fetch repositories from the gateway API.
 
         Uses the same ``POST /api/mongodb/query`` endpoint and pagination
-        strategy as ``unified_pipeline.py``.
+        strategy as ``MongoDataFetcher`` (training/data/mongo_data_fetcher.py).
 
         Parameters
         ----------

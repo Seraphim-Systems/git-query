@@ -7,8 +7,8 @@ from torch.utils.data import DataLoader
 from datetime import datetime, timezone
 import os
 
-from ..config import settings
-from ..models import ModelMetadata
+from ...config import settings
+from ...models import ModelMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +148,7 @@ class EmbeddingTrainer:
             status="candidate"
         )
 
-        from ..services.registry_service import ModelRegistryService
+        from ...services.registry_service import ModelRegistryService
         registry = ModelRegistryService()
         await registry.register_model(metadata)
 
@@ -214,7 +214,7 @@ class EmbeddingTrainer:
 
     def _repo_to_text(self, repo: Dict[str, Any]) -> str:
         """Convert repository data to text for embedding."""
-        from .utils import prepare_repo_text
+        from ..utils import prepare_repo_text
         return prepare_repo_text(repo)
 
     def _evaluate_validation(self, validation_data: Dict[str, List]) -> float:
@@ -251,4 +251,3 @@ class EmbeddingTrainer:
         except Exception:
             logger.exception("Validation evaluation failed")
             return 0.0
-
