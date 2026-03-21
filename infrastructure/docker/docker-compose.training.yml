@@ -9,8 +9,9 @@ services:
     container_name: git-query-training
     image: git-query-training:latest
     environment:
-      # API Configuration - REQUIRED in .env file
-      - API_BASE_URL=${API_BASE_URL}
+      # API Configuration
+      - API_BASE_URL=${API_BASE_URL:-http://git-query-gateway}
+      - RECOMMENDER_URL=${RECOMMENDER_URL:-http://git-query-recommender:8095}
       - APIKEY_MONGODB=${APIKEY_MONGODB}
 
       # Training Configuration
@@ -44,7 +45,7 @@ services:
     shm_size: '2gb'  # PyTorch multiprocessing needs shared memory for model weights
     volumes:
       # Persist trained models
-      - training-models:/app/models
+      - model-artifacts:/app/models
       # Cache downloaded data
       - training-data:/app/training_data
       # Logs
@@ -55,8 +56,6 @@ services:
       - internal-network
 
 volumes:
-  training-models:
-    name: git-query-training-models
   training-data:
     name: git-query-training-data
   training-logs:
