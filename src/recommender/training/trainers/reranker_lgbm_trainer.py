@@ -84,13 +84,17 @@ class RerankerLGBMTrainer:
             version="1.0.0",
             path=os.path.relpath(model_path, settings.model_path),
             hyperparameters=ranker.params,
-            metrics={k: float(v) for k, v in metrics.items() if isinstance(v, (int, float))},
+            metrics={
+                k: float(v) for k, v in metrics.items() if isinstance(v, (int, float))
+            },
             trained_at=datetime.now(timezone.utc),
             is_active=False,
             status="candidate",
         )
 
         registry = ModelRegistryService()
-        await registry.register_model(metadata)
+        model_id = await registry.register_model(metadata)
 
-        return metrics
+        result = dict(metrics)
+        result["model_id"] = model_id
+        return result

@@ -34,6 +34,8 @@ import os
 import sys
 from pathlib import Path
 
+import requests
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -46,9 +48,23 @@ if str(_app_root) not in sys.path:
     sys.path.insert(0, str(_app_root))
 
 
+def _post_non_fatal(url: str) -> bool:
+    """Best-effort POST helper used for post-training model lifecycle hooks."""
+    try:
+        response = requests.post(url, timeout=10)
+        response.raise_for_status()
+        return True
+    except requests.RequestException as exc:
+        logger.warning("Post-training call failed for %s: %s", url, exc)
+        return False
+
+
 async def main() -> None:
     api_url = os.environ["API_BASE_URL"]
     api_key = os.environ["APIKEY_MONGODB"]
+    recommender_url = os.getenv(
+        "RECOMMENDER_URL", "http://git-query-recommender:8095"
+    ).rstrip("/")
     models_dir = os.getenv("MODELS_DIR", "/app/models")
     max_repos_env = os.getenv("MAX_REPOS")
     max_repos = int(max_repos_env) if max_repos_env else None
@@ -64,7 +80,9 @@ async def main() -> None:
     await EmbeddingIndexingPipeline(
         api_base_url=api_url,
         api_key=api_key,
-        model_name=os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"),
+        model_name=os.getenv(
+            "EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
+        ),
         models_dir=models_dir,
         data_cache_dir=os.getenv("DATA_CACHE_DIR", "/app/training_data"),
         batch_size=int(os.getenv("BATCH_SIZE", "32")),
@@ -94,7 +112,7 @@ async def main() -> None:
         experiment_name=os.getenv("MLFLOW_EXPERIMENT_NAME", "git-query-retrain"),
     )
 
-    await RerankerLGBMPipeline(
+    lgbm_result = await RerankerLGBMPipeline(
         api_base_url=api_url,
         api_key=api_key,
         variant="default",
@@ -105,6 +123,20 @@ async def main() -> None:
         candidates_per_query=int(os.getenv("LGBM_CANDIDATES_PER_QUERY", "100")),
         tracker=tracker,
     ).run()
+
+    model_id = lgbm_result.get("model_id") if isinstance(lgbm_result, dict) else None
+    if model_id:
+        promote_url = f"{recommender_url}/admin/models/promote/{model_id}"
+        if _post_non_fatal(promote_url):
+            logger.info("Promoted reranker model %s", model_id)
+
+        reload_url = f"{recommender_url}/admin/models/reload"
+        if _post_non_fatal(reload_url):
+            logger.info("Triggered recommender model reload")
+    else:
+        logger.warning(
+            "No model_id returned by RerankerLGBMPipeline; skipping promote/reload"
+        )
 
     logger.info("LightGBM training complete.")
     logger.info("Full retraining pipeline complete.")
