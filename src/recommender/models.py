@@ -89,6 +89,10 @@ class UserPreferences(BaseModel):
     topic_preferences: Dict[str, float] = Field(
         default_factory=dict, description="Topic -> preference score"
     )
+    explicit_languages: List[str] = Field(
+        default_factory=list,
+        description="Languages the user explicitly said they use (e.g. during onboarding)",
+    )
     total_interactions: int = 0
     last_updated: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

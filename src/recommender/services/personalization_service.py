@@ -5,6 +5,7 @@ from collections import defaultdict
 from ..models import UserInteraction, UserPreferences, InteractionType
 from ..database import db_manager
 from datetime import datetime, timezone
+from .language_preference_service import LanguagePreferenceService
 
 
 class PersonalizationService:
@@ -17,9 +18,10 @@ class PersonalizationService:
     """
 
     POSITIVE_SIGNALS = {
-        InteractionType.CLICK: 1.0,
-        InteractionType.SAVE: 2.0,
-        InteractionType.THUMBS_UP: 3.0,
+    InteractionType.CLICK: 1.0,
+    InteractionType.SAVE: 2.0,
+    InteractionType.THUMBS_UP: 3.0,
+    InteractionType.VIEW: 0.3,  
     }
 
     NEGATIVE_SIGNALS = {
@@ -48,8 +50,11 @@ class PersonalizationService:
                 total_interactions=0,
             )
 
-        # Get signal weight
-        signal_weight = self._get_signal_weight(interaction.interaction_type)
+        # Get signal weight — apply time decay so recent signals matter more
+        base_weight = self._get_signal_weight(interaction.interaction_type)
+        signal_weight = LanguagePreferenceService.apply_time_decay(
+            base_weight, interaction.timestamp
+        )
 
         # Update language preferences
         if repo_data.get("language"):
@@ -90,7 +95,10 @@ class PersonalizationService:
         topic_scores = defaultdict(float)
 
         for interaction in interactions:
-            signal_weight = self._get_signal_weight(interaction.interaction_type)
+            base_weight = self._get_signal_weight(interaction.interaction_type)
+            signal_weight = LanguagePreferenceService.apply_time_decay(
+                base_weight, interaction.timestamp
+            )
 
             # Use metadata stored with the interaction if available
             if hasattr(interaction, 'metadata') and interaction.metadata:
