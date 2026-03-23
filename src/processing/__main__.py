@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 def run_health_server():
     """Run health check server in separate process"""
     uvicorn.run(
-        "processing.health:app",
+        "processing.server:app",
         host="0.0.0.0",
         port=8090,
         log_level=settings.log_level.lower()
