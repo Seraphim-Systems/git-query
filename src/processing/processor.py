@@ -10,6 +10,7 @@ from qdrant_client import QdrantClient
 
 from processing.config import settings
 from processing.pipelines.ingestion import DataIngestion
+from processing.pipelines.preparation import run_preparation_batch
 from processing.pipelines.transformation import DataTransformer
 from processing.pipelines.vectorization import DataVectorizer
 
@@ -91,36 +92,27 @@ class DataProcessor:
         }
         
         try:
-            # 1. Fetch unprocessed records
-            raw_records = await self.ingestion.fetch_unprocessed(
-                limit=settings.batch_size
+            # 1-3. Fetch raw data, clean it, and persist cleaned records.
+            prep_result = await run_preparation_batch(
+                ingestion=self.ingestion,
+                transformer=self.transformer,
+                limit=settings.batch_size,
+                mark_processed=True,
             )
-            stats["fetched"] = len(raw_records)
-            
-            if not raw_records:
+            stats.update(prep_result["stats"])
+            cleaned_records = prep_result["cleaned_records"]
+
+            if stats["fetched"] == 0:
                 logger.debug("No unprocessed records found")
                 return stats
             
-            logger.info(f"Processing batch of {len(raw_records)} records")
-            
-            # 2. Clean and transform
-            cleaned_records = []
-            for record in raw_records:
-                try:
-                    cleaned = self.transformer.transform(record)
-                    if cleaned:
-                        cleaned_records.append(cleaned)
-                        stats["cleaned"] += 1
-                except Exception as e:
-                    logger.error(f"Error cleaning record {record.get('_id')}: {e}")
-                    stats["errors"] += 1
-                    await self.mark_as_failed(record)
-            
-            # 3. Save cleaned data
-            if cleaned_records:
-                saved_ids = await self.ingestion.save_cleaned(cleaned_records)
-                stats["saved"] = len(saved_ids)
-                logger.info(f"Saved {len(saved_ids)} cleaned records")
+            logger.info(
+                "Prepared batch: fetched=%s cleaned=%s saved=%s errors=%s",
+                stats["fetched"],
+                stats["cleaned"],
+                stats["saved"],
+                stats["errors"],
+            )
             
             # 4. Generate embeddings and index
             for record in cleaned_records:
@@ -130,10 +122,6 @@ class DataProcessor:
                 except Exception as e:
                     logger.error(f"Error vectorizing record: {e}")
                     stats["errors"] += 1
-            
-            # 5. Mark original records as processed
-            record_ids = [r["_id"] for r in raw_records if "_id" in r]
-            await self.ingestion.mark_as_processed(record_ids)
             
             logger.info(f"Batch complete: {stats}")
             
