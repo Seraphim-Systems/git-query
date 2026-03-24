@@ -1,11 +1,15 @@
 """Health check endpoint for processing service."""
 
+import logging
+
 from fastapi import FastAPI
 from motor.motor_asyncio import AsyncIOMotorClient
 from redis.asyncio import Redis
 from qdrant_client import QdrantClient
 
 from processing.config import settings
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Processing Service Health")
 
@@ -26,8 +30,9 @@ async def health_check():
         health["mongodb"] = True
         mongo_client.close()
     except Exception as exc:
+        logger.warning("MongoDB health check failed: %s", exc)
         health["status"] = "unhealthy"
-        health["mongodb_error"] = str(exc)
+        health["mongodb_error"] = "connection failed"
 
     try:
         redis_client = Redis.from_url(settings.redis_url, decode_responses=True)
@@ -35,8 +40,9 @@ async def health_check():
         health["redis"] = True
         await redis_client.close()
     except Exception as exc:
+        logger.warning("Redis health check failed: %s", exc)
         health["status"] = "unhealthy"
-        health["redis_error"] = str(exc)
+        health["redis_error"] = "connection failed"
 
     try:
         qdrant_client = QdrantClient(
@@ -48,8 +54,9 @@ async def health_check():
         health["qdrant"] = True
         qdrant_client.close()
     except Exception as exc:
+        logger.warning("Qdrant health check failed: %s", exc)
         health["status"] = "unhealthy"
-        health["qdrant_error"] = str(exc)
+        health["qdrant_error"] = "connection failed"
 
     return health
 
@@ -63,7 +70,8 @@ async def get_stats():
         await redis_client.close()
         return stats or {"message": "No stats available yet"}
     except Exception as exc:
-        return {"error": str(exc)}
+        logger.warning("Stats fetch failed: %s", exc)
+        return {"error": "failed to retrieve stats"}
 
 
 @app.get("/collections")
@@ -97,7 +105,8 @@ async def get_collection_stats():
             },
         }
     except Exception as exc:
-        return {"error": str(exc)}
+        logger.warning("Collection stats fetch failed: %s", exc)
+        return {"error": "failed to retrieve collection stats"}
 
 
 @app.get("/qdrant")
@@ -120,4 +129,5 @@ async def get_qdrant_stats():
             "status": collection_info.status,
         }
     except Exception as exc:
-        return {"error": str(exc)}
+        logger.warning("Qdrant stats fetch failed: %s", exc)
+        return {"error": "failed to retrieve Qdrant stats"}
