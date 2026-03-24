@@ -166,7 +166,7 @@ class _EmbeddingIndexer:
                 headers=self.headers,
                 json={
                     "database": "gitquery",
-                    "collection": "raw_repositories",
+                    "collection": "repositories",
                     "filter": {},
                     "limit": 1,
                     "skip": 0
@@ -186,7 +186,7 @@ class _EmbeddingIndexer:
                     headers=self.headers,
                     json={
                         "database": "gitquery",
-                        "collection": "raw_repositories",
+                        "collection": "repositories",
                         "filter": {},
                         "limit": 1000,  # Fetch up to 1000 to check
                         "skip": 0
@@ -216,7 +216,7 @@ class _EmbeddingIndexer:
         """Fetch a single batch of repositories."""
         payload = {
             "database": "gitquery",
-            "collection": "raw_repositories",
+            "collection": "repositories",
             "filter": filters or {},
             "limit": limit,
             "skip": skip,

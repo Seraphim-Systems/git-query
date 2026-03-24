@@ -82,7 +82,7 @@ class MongoDataFetcher:
                 headers=self.headers,
                 json={
                     "database": "gitquery",
-                    "collection": "raw_repositories",
+                    "collection": "repositories",
                     "filter": {},
                     "limit": 1,
                     "skip": 0,
@@ -99,7 +99,7 @@ class MongoDataFetcher:
                     headers=self.headers,
                     json={
                         "database": "gitquery",
-                        "collection": "raw_repositories",
+                        "collection": "repositories",
                         "filter": {},
                         "limit": 1000,
                         "skip": 0,
@@ -119,7 +119,7 @@ class MongoDataFetcher:
         """Fetch a single batch of repositories."""
         payload = {
             "database": "gitquery",
-            "collection": "raw_repositories",
+            "collection": "repositories",
             "filter": filters or {},
             "limit": limit,
             "skip": skip,

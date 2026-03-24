@@ -24,6 +24,10 @@ Environment variables:
     LGBM_NUM_BOOST_ROUNDS         LightGBM boosting rounds (default: 300)
     MLFLOW_TRACKING_URI           MLflow server URI (default: file:///app/mlruns)
     MLFLOW_EXPERIMENT_NAME        MLflow experiment name (default: git-query-retrain)
+    RECOMMENDER_URL               Recommender service URL for post-training hooks (default: http://git-query-recommender:8095)
+    PURGE_QDRANT_BEFORE_RETRAIN   Delete Qdrant collection before re-indexing (default: false)
+    QDRANT_COLLECTION             Qdrant collection name to purge (default: repositories_embeddings)
+    APIKEY_QDRANT                 Qdrant API key (default: APIKEY_MONGODB value)
 """
 
 from __future__ import annotations
@@ -59,15 +63,47 @@ def _post_non_fatal(url: str) -> bool:
         return False
 
 
+def _purge_qdrant_collection(api_url: str, api_key: str, collection: str) -> None:
+    """Purge Qdrant collection through gateway API if requested."""
+    endpoint = f"{api_url.rstrip('/')}/api/qdrant/collections/{collection}"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        resp = requests.delete(endpoint, headers=headers, timeout=30)
+        if resp.status_code in (200, 204, 404):
+            logger.info(
+                "Qdrant purge request completed for collection '%s' (status=%s)",
+                collection,
+                resp.status_code,
+            )
+            return
+        resp.raise_for_status()
+    except Exception as exc:
+        logger.warning("Qdrant purge step failed for '%s': %s", collection, exc)
+
+
 async def main() -> None:
     api_url = os.environ["API_BASE_URL"]
     api_key = os.environ["APIKEY_MONGODB"]
     recommender_url = os.getenv(
         "RECOMMENDER_URL", "http://git-query-recommender:8095"
     ).rstrip("/")
+    qdrant_api_key = os.getenv("APIKEY_QDRANT", api_key)
     models_dir = os.getenv("MODELS_DIR", "/app/models")
     max_repos_env = os.getenv("MAX_REPOS")
     max_repos = int(max_repos_env) if max_repos_env else None
+
+    # Optional maintenance step: clear Qdrant collection before full rebuild.
+    if os.getenv("PURGE_QDRANT_BEFORE_RETRAIN", "false").lower() == "true":
+        qdrant_collection = os.getenv("QDRANT_COLLECTION", "repositories_embeddings")
+        _purge_qdrant_collection(
+            api_url=api_url,
+            api_key=qdrant_api_key,
+            collection=qdrant_collection,
+        )
 
     # --- Step 1: Embedding indexing ---
     logger.info("=== Step 1: Embedding indexing ===")

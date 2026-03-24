@@ -4,6 +4,7 @@ import logging
 from typing import List, Dict, Any
 from datetime import datetime
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo import UpdateOne
 
 from processing.config import settings
 
@@ -53,15 +54,54 @@ class DataIngestion:
         if not records:
             return []
         
-        # Add metadata
+        # Upsert by stable identifier so reruns are safe.
+        now = datetime.utcnow()
+        operations = []
+        saved_ids: List[str] = []
+
         for record in records:
-            record["cleaned_at"] = datetime.utcnow()
+            repo_id = record.get("repo_id")
+            full_name = record.get("full_name")
+            name = record.get("name")
+
+            if repo_id:
+                stable_id = str(repo_id)
+            elif full_name:
+                stable_id = str(full_name)
+            elif name:
+                stable_id = str(name)
+            else:
+                logger.debug("Skipping cleaned record without identifier")
+                continue
+
+            record["_id"] = stable_id
+            record["cleaned_at"] = now
             record["source"] = "processing_pipeline"
-        
-        result = await self.dest_collection.insert_many(records)
-        
-        logger.info(f"Saved {len(result.inserted_ids)} cleaned records")
-        return [str(id) for id in result.inserted_ids]
+
+            operations.append(
+                UpdateOne(
+                    {"_id": stable_id},
+                    {
+                        "$set": record,
+                        "$setOnInsert": {"created_at_pipeline": now},
+                    },
+                    upsert=True,
+                )
+            )
+            saved_ids.append(stable_id)
+
+        if not operations:
+            return []
+
+        result = await self.dest_collection.bulk_write(operations, ordered=False)
+
+        logger.info(
+            "Upserted cleaned records: matched=%s modified=%s upserted=%s",
+            result.matched_count,
+            result.modified_count,
+            result.upserted_count,
+        )
+        return saved_ids
     
     async def mark_as_processed(self, record_ids: List):
         """
