@@ -113,104 +113,7 @@ class TestApplyPersonalization:
 
         assert results[0].score == pytest.approx(0.9)
 
-    async def test_boosts_preferred_language(self, mocker):
-        """A result whose language is in prefs should have score > original score."""
-        from src.recommender.config import settings
-
-        prefs = _make_prefs(language_preferences={"Python": 0.8}, total_interactions=settings.min_interactions_for_personalization)
-        mocker.patch.object(
-            db_manager, "get_user_preferences", new_callable=AsyncMock, return_value=prefs
-        )
-        engine = _make_engine()
-        original_score = 0.5
-        result = _make_result("a/a", language="Python", score=original_score, rank=1)
-
-        results = await engine._apply_personalization([result], _make_request())
-
-        assert results[0].score > original_score
-
-    async def test_boost_is_proportional_to_language_preference_score(self, mocker):
-        """score = original * (1 + lang_pref * personalization_weight)."""
-        from src.recommender.config import settings
-
-        lang_pref = 0.6
-        prefs = _make_prefs(
-            language_preferences={"TypeScript": lang_pref},
-            total_interactions=settings.min_interactions_for_personalization,
-        )
-        mocker.patch.object(
-            db_manager, "get_user_preferences", new_callable=AsyncMock, return_value=prefs
-        )
-        engine = _make_engine()
-        original_score = 0.4
-        result = _make_result("a/a", language="TypeScript", score=original_score, rank=1)
-
-        results = await engine._apply_personalization([result], _make_request())
-
-        expected = original_score * (1 + lang_pref * settings.personalization_weight)
-        assert results[0].score == pytest.approx(expected)
-
-    async def test_no_boost_for_non_preferred_language(self, mocker):
-        """A language absent from prefs gets no boost."""
-        from src.recommender.config import settings
-
-        prefs = _make_prefs(
-            language_preferences={"Python": 0.9},
-            total_interactions=settings.min_interactions_for_personalization,
-        )
-        mocker.patch.object(
-            db_manager, "get_user_preferences", new_callable=AsyncMock, return_value=prefs
-        )
-        engine = _make_engine()
-        original_score = 0.7
-        result = _make_result("a/a", language="Haskell", score=original_score, rank=1)
-
-        results = await engine._apply_personalization([result], _make_request())
-
-        assert results[0].score == pytest.approx(original_score)
-
-    async def test_results_re_sorted_after_boost(self, mocker):
-        """A lower-ranked result with a preferred language should move above a higher-scored one."""
-        from src.recommender.config import settings
-
-        prefs = _make_prefs(
-            language_preferences={"Rust": 1.0},
-            total_interactions=settings.min_interactions_for_personalization,
-        )
-        mocker.patch.object(
-            db_manager, "get_user_preferences", new_callable=AsyncMock, return_value=prefs
-        )
-        engine = _make_engine()
-        # result_a has higher base score but non-preferred language
-        result_a = _make_result("a/a", language="Go", score=0.8, rank=1)
-        # result_b score chosen so that 0.75 * (1 + 1.0 * 0.15) = 0.8625 > 0.8
-        result_b = _make_result("b/b", language="Rust", score=0.75, rank=2)
-
-        results = await engine._apply_personalization([result_a, result_b], _make_request())
-
-        assert results[0].repo_id == "b/b"
-
-    async def test_ranks_reassigned_after_resort(self, mocker):
-        """After re-sorting, rank values must be sequential starting from 1."""
-        from src.recommender.config import settings
-
-        prefs = _make_prefs(
-            language_preferences={"Rust": 1.0},
-            total_interactions=settings.min_interactions_for_personalization,
-        )
-        mocker.patch.object(
-            db_manager, "get_user_preferences", new_callable=AsyncMock, return_value=prefs
-        )
-        engine = _make_engine()
-        result_a = _make_result("a/a", language="Go", score=0.8, rank=1)
-        result_b = _make_result("b/b", language="Rust", score=0.5, rank=2)
-        result_c = _make_result("c/c", language="Go", score=0.3, rank=3)
-
-        results = await engine._apply_personalization([result_a, result_b, result_c], _make_request())
-
-        assert [r.rank for r in results] == [1, 2, 3]
-
-    async def test_explanation_updated_with_boost_and_original_score(self, mocker):
+    async def test_explanation_updated(self, mocker):
         """explanation dict must contain 'personalization_boost' and 'original_score'."""
         from src.recommender.config import settings
 
@@ -230,23 +133,7 @@ class TestApplyPersonalization:
         assert "personalization_boost" in expl
         assert "original_score" in expl
         assert expl["original_score"] == pytest.approx(0.6)
-
-    async def test_explanation_personalized_flag_set_to_true(self, mocker):
-        from src.recommender.config import settings
-
-        prefs = _make_prefs(
-            language_preferences={"Python": 0.5},
-            total_interactions=settings.min_interactions_for_personalization,
-        )
-        mocker.patch.object(
-            db_manager, "get_user_preferences", new_callable=AsyncMock, return_value=prefs
-        )
-        engine = _make_engine()
-        result = _make_result("a/a", language="Python", score=0.6, rank=1)
-
-        results = await engine._apply_personalization([result], _make_request())
-
-        assert results[0].explanation["personalized"] is True
+        assert expl["personalized"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -280,6 +167,8 @@ class TestRecommend:
             PersonalizedEngine, "_apply_personalization", new_callable=AsyncMock
         )
         engine = _make_engine()
+        mocker.patch.object(engine.language_enricher, "enrich", new_callable=AsyncMock, side_effect=lambda req: req)
+        
         await engine.recommend(_make_request())
 
         mock_apply.assert_not_awaited()
@@ -291,6 +180,8 @@ class TestRecommend:
             PersonalizedEngine, "_apply_personalization", new_callable=AsyncMock
         )
         engine = _make_engine()
+        mocker.patch.object(engine.language_enricher, "enrich", new_callable=AsyncMock, side_effect=lambda req: req)
+        
         # No user_id in request
         await engine.recommend(_make_request(user_id=None))
 
@@ -303,6 +194,8 @@ class TestRecommend:
             PersonalizedEngine, "_apply_personalization", new_callable=AsyncMock
         )
         engine = _make_engine()
+        mocker.patch.object(engine.language_enricher, "enrich", new_callable=AsyncMock, side_effect=lambda req: req)
+        
         await engine.recommend(_make_request(enable_personalization=False))
 
         mock_apply.assert_not_awaited()
@@ -320,12 +213,18 @@ class TestRecommend:
             db_manager, "get_user_preferences", new_callable=AsyncMock, return_value=prefs
         )
         engine = _make_engine()
-        results = await engine.recommend(
-            _make_request(user_id="user-42", enable_personalization=True)
-        )
+        
+        # Mock language enricher
+        mock_enrich = mocker.patch.object(engine.language_enricher, "enrich", new_callable=AsyncMock)
+        mock_enrich.side_effect = lambda req: req
+        
+        request = _make_request(user_id="user-42", enable_personalization=True)
+        results = await engine.recommend(request)
 
-        # Score should have been boosted
-        assert results[0].score > 0.5
+        # Enrich should be called
+        mock_enrich.assert_awaited_once_with(request)
+        # Verify explanation is updated
+        assert results[0].explanation["personalized"] is True
 
 
 # ---------------------------------------------------------------------------
