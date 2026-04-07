@@ -45,3 +45,8 @@ kagglehub>=0.2.9
 
 # Streaming JSON for large datasets
 ijson>=3.2.3
+
+# Machine Learning & Search Re-ranking
+sentence-transformers>=3.0.0
+pandas>=2.0.0
+lightgbm>=4.0.0
