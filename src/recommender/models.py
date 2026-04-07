@@ -30,6 +30,7 @@ class RecommendationRequest(BaseModel):
     top_k: int = Field(10, description="Number of results to return", ge=1, le=50)
     enable_personalization: bool = Field(True, description="Apply personalization if available")
     variant: Optional[str] = Field(None, description="A/B test variant to use")
+    preferred_languages: Optional[List[str]] = Field(default_factory=list, description="A list of preferred languages for soft boosting")
 
 
 class RepositoryResult(BaseModel):
