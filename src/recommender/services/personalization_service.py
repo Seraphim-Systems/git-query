@@ -18,15 +18,15 @@ class PersonalizationService:
     """
 
     POSITIVE_SIGNALS = {
-    InteractionType.CLICK: 1.0,
-    InteractionType.SAVE: 2.0,
-    InteractionType.THUMBS_UP: 3.0,
-    InteractionType.VIEW: 0.3,  
+        InteractionType.VIEW: 0.1,
+        InteractionType.CLICK: 1.0,
+        InteractionType.SAVE: 3.0,
+        InteractionType.THUMBS_UP: 5.0,
     }
 
     NEGATIVE_SIGNALS = {
-        InteractionType.DISMISS: -1.0,
-        InteractionType.THUMBS_DOWN: -2.0,
+        InteractionType.DISMISS: -2.0,
+        InteractionType.THUMBS_DOWN: -5.0,
     }
 
     async def update_preferences_from_interaction(
