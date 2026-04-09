@@ -86,6 +86,27 @@ class TestRerankerLGBMTrainer:
 
         mock_ranker.save.assert_called_once()
 
+    async def test_train_uses_explicit_model_dir_when_provided(self):
+        from src.recommender.training.trainers.reranker_lgbm_trainer import (
+            RerankerLGBMTrainer,
+        )
+
+        mock_ranker, mock_registry, mock_settings = _make_mocks()
+        training_data = {"grouped_df": _make_grouped_df()}
+
+        with (
+            patch(f"{_MODULE}.LGBMRanker", return_value=mock_ranker),
+            patch(f"{_MODULE}.ModelRegistryService", return_value=mock_registry),
+            patch(f"{_MODULE}.settings", mock_settings),
+        ):
+            await RerankerLGBMTrainer(model_dir="/tmp/explicit-model-dir").train(
+                training_data,
+                variant="default",
+            )
+
+        save_path = mock_ranker.save.call_args.args[0]
+        assert save_path.startswith("/tmp/explicit-model-dir")
+
     async def test_train_calls_registry_register_model(self):
         from src.recommender.training.trainers.reranker_lgbm_trainer import (
             RerankerLGBMTrainer,

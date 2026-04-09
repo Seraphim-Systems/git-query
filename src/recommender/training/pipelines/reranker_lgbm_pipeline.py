@@ -52,7 +52,7 @@ class RerankerLGBMPipeline(BasePipeline):
     async def train(self, training_data: Dict[str, Any]) -> Dict[str, Any]:
         from ..trainers.reranker_lgbm_trainer import RerankerLGBMTrainer
 
-        trainer = RerankerLGBMTrainer()
+        trainer = RerankerLGBMTrainer(model_dir=self.models_dir)
         return await trainer.train(
             training_data=training_data,
             variant=self.variant,
@@ -61,7 +61,9 @@ class RerankerLGBMPipeline(BasePipeline):
             tracker=self.tracker,
         )
 
-    async def evaluate(self, training_data: Dict[str, Any], metrics: Dict[str, Any]) -> Dict[str, Any]:
+    async def evaluate(
+        self, training_data: Dict[str, Any], metrics: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """NDCG evaluation is performed inside LGBMRanker.train() with multi-seed eval."""
         return metrics
 
