@@ -100,6 +100,18 @@ class DriftMonitor:
             return None
 
         try:
+            # Drop columns containing arrays/lists — Evidently can't process them
+            def _is_scalar_col(series):
+                sample = series.dropna().head(10)
+                return not any(isinstance(v, (list, np.ndarray)) for v in sample)
+
+            scalar_cols = [
+                c for c in reference_data.columns
+                if _is_scalar_col(reference_data[c]) and reference_data[c].notna().any()
+            ]
+            reference_data = reference_data[scalar_cols]
+            current_data = current_data[scalar_cols]
+
             report = Report(
                 metrics=[
                     DatasetDriftMetric(),

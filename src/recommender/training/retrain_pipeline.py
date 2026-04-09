@@ -98,12 +98,13 @@ def run_lgbm_pipeline() -> None:
     # -- train --
     num_boost_rounds = int(os.getenv("LGBM_NUM_BOOST_ROUNDS", "300"))
     ranker = LGBMRanker()
-    metrics = ranker.train(
-        grouped,
-        tracker=tracker,
-        dataset_version=dataset_version,
-        num_boost_rounds=num_boost_rounds,
-    )
+    with tracker.start_run(run_name=f"lgbm-{dataset_version}"):
+        metrics = ranker.train(
+            grouped,
+            tracker=tracker,
+            dataset_version=dataset_version,
+            num_boost_rounds=num_boost_rounds,
+        )
 
     logger.info(f"Mean NDCG@10: {metrics['mean_ndcg_at_10']:.4f}")
     logger.info(f"Std  NDCG@10: {metrics['std_ndcg_at_10']:.4f}")
@@ -114,6 +115,11 @@ def run_lgbm_pipeline() -> None:
     ranker.save(model_path)
     ranker.save_registry_entry(model_path, Path("/app/models/metadata"))
     logger.info(f"Model saved to {model_path}")
+
+    # -- save reference snapshot for drift monitoring --
+    reference_path = Path("/app/models/metadata/reference_data.parquet")
+    df.to_parquet(reference_path, index=False)
+    logger.info(f"Reference snapshot saved to {reference_path} ({len(df)} rows)")
 
 
 def main() -> None:

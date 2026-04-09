@@ -166,7 +166,7 @@ class UnifiedTrainingPipeline:
                 headers=self.headers,
                 json={
                     "database": "gitquery",
-                    "collection": "raw_repositories",
+                    "collection": "repositories",
                     "filter": {},
                     "limit": 1,
                     "skip": 0
@@ -622,6 +622,8 @@ class UnifiedTrainingPipeline:
         print(f"  Max repos  {max_repos or 'all'}", flush=True)
         print(f"{'═' * 60}\n", flush=True)
 
+        checkpoint_path = self.models_dir / "checkpoints" / "chunked_progress.json"
+
         start_time = time.time()
         run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -679,6 +681,30 @@ class UnifiedTrainingPipeline:
         total_uploaded = 0
         chunk_num = 0
         offset = 0
+
+        # --- Resume from checkpoint if available ---
+        if checkpoint_path.exists():
+            try:
+                with open(checkpoint_path) as f:
+                    ckpt = json.load(f)
+                resume_offset = ckpt.get("offset", 0)
+                resume_ts = ckpt.get("run_timestamp", "")
+                resume_mapping_path = self.models_dir / "metadata" / f"repo_mapping_{resume_ts}.json"
+                if resume_offset > 0 and resume_mapping_path.exists():
+                    with open(resume_mapping_path) as f:
+                        mapping_accumulator = json.load(f)
+                    run_timestamp = resume_ts
+                    offset = resume_offset
+                    seen_ids = {m["repo_id"] for m in mapping_accumulator if m.get("repo_id")}
+                    logger.info(
+                        f"Resuming from checkpoint — offset={offset:,}, "
+                        f"mapping={len(mapping_accumulator):,} entries, run={run_timestamp}"
+                    )
+                else:
+                    checkpoint_path.unlink(missing_ok=True)
+            except Exception as e:
+                logger.warning(f"Could not load checkpoint ({e}) — starting fresh")
+                checkpoint_path.unlink(missing_ok=True)
 
         # Overall progress bar
         overall_bar = tqdm(
@@ -827,6 +853,12 @@ class UnifiedTrainingPipeline:
 
                 # Checkpoint after every chunk so a crash doesn't lose progress
                 self._save_mapping(mapping_accumulator, run_timestamp)
+                with open(checkpoint_path, "w") as f:
+                    json.dump({
+                        "offset": offset + fetch_limit,
+                        "run_timestamp": run_timestamp,
+                        "total_repos": total_repos,
+                    }, f)
 
                 # 7. Free chunk memory before next iteration
                 del embeddings, texts, chunk_repos
@@ -838,6 +870,9 @@ class UnifiedTrainingPipeline:
             if pool is not None:
                 model.stop_multi_process_pool(pool)
                 logger.info("Multi-process pool stopped")
+
+        # --- Clear checkpoint on successful completion ---
+        checkpoint_path.unlink(missing_ok=True)
 
         # --- Persist final mapping so next run can skip these repos ---
         if mapping_accumulator:

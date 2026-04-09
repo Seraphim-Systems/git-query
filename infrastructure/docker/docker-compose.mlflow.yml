@@ -12,15 +12,13 @@ services:
       - "5000:5000"
     volumes:
       # Persistent storage for experiments and artifacts
-      - mlflow-data:/mlflow/mlruns
+      - mlflow-runs:/mlflow/mlruns
       - mlflow-artifacts:/mlflow/artifacts
-      # Mount models directory for artifact logging
-      - training-models:/mlflow/models:ro
     environment:
       - MLFLOW_BACKEND_STORE_URI=/mlflow/mlruns
       - MLFLOW_DEFAULT_ARTIFACT_ROOT=/mlflow/artifacts
     networks:
-      - web-network
+      - internal-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
@@ -30,13 +28,12 @@ services:
       start_period: 10s
 
 volumes:
-  mlflow-data:
-    driver: local
+  mlflow-runs:
+    external: true
+    name: git-query-mlflow-runs
   mlflow-artifacts:
     driver: local
-  training-models:
-    external: true
 
 networks:
-  web-network:
+  internal-network:
     external: true
