@@ -1,5 +1,5 @@
 import os
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 from typing import List, Optional
 
@@ -36,10 +36,10 @@ class Settings(BaseSettings):
 
     # API Keys
     # API keys - read from new environment variable names (preferred)
-    mongodb_api_key: Optional[str] = Field(None, env="APIKEY_MONGODB")
-    redis_api_key: Optional[str] = Field(None, env="APIKEY_REDIS")
-    qdrant_api_key: Optional[str] = Field(None, env="APIKEY_QDRANT")
-    mcp_api_key: Optional[str] = Field(None, env="APIKEY_MCP")
+    mongodb_api_key: Optional[str] = Field(None, validation_alias="APIKEY_MONGODB")
+    redis_api_key: Optional[str] = Field(None, validation_alias="APIKEY_REDIS")
+    qdrant_api_key: Optional[str] = Field(None, validation_alias="APIKEY_QDRANT")
+    mcp_api_key: Optional[str] = Field(None, validation_alias="APIKEY_MCP")
     # Cosmos support removed; no emulator API key
 
     # CORS - when using credentials, must specify exact origins (not "*")
@@ -50,9 +50,11 @@ class Settings(BaseSettings):
 
     # Admin seed user - created on gateway startup if not already present.
     # Set WEB_ADMIN_EMAIL (and the other two) to enable seeding.
-    web_admin_email: Optional[str] = Field(None, env="WEB_ADMIN_EMAIL")
-    web_admin_password: Optional[str] = Field(None, env="WEB_ADMIN_PASSWORD")
-    web_admin_username: str = Field("admin", env="WEB_ADMIN_USERNAME")
+    web_admin_email: Optional[str] = Field(None, validation_alias="WEB_ADMIN_EMAIL")
+    web_admin_password: Optional[str] = Field(
+        None, validation_alias="WEB_ADMIN_PASSWORD"
+    )
+    web_admin_username: str = Field("admin", validation_alias="WEB_ADMIN_USERNAME")
 
     # Rate limiting
     rate_limit_requests: int = 100
@@ -65,13 +67,14 @@ class Settings(BaseSettings):
     def allowed_origins_list(self) -> List[str]:
         return [origin.strip() for origin in self.allowed_origins.split(",")]
 
-    class Config:
+    model_config = SettingsConfigDict(
         # Check root .env first (Docker passes vars via environment, so the
         # path not existing is fine), then fall back to infrastructure/docker/.env
         # so local dev picks up credentials without needing a root-level .env.
-        env_file = (".env", _DOCKER_ENV)
-        env_prefix = ""
-        extra = "ignore"
+        env_file=(".env", _DOCKER_ENV),
+        env_prefix="",
+        extra="ignore",
+    )
 
 
 settings = Settings()

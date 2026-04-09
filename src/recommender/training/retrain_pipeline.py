@@ -93,6 +93,8 @@ async def main() -> None:
     ).rstrip("/")
     qdrant_api_key = os.getenv("APIKEY_QDRANT", api_key)
     models_dir = os.getenv("MODELS_DIR", "/app/models")
+    # Keep config-driven trainers aligned with orchestrator model directory.
+    os.environ["MODEL_PATH"] = models_dir
     max_repos_env = os.getenv("MAX_REPOS")
     max_repos = int(max_repos_env) if max_repos_env else None
 

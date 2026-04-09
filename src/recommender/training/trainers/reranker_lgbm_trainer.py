@@ -20,8 +20,13 @@ class RerankerLGBMTrainer:
     with LGBMRanker's synchronous API.
     """
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        params: Optional[Dict[str, Any]] = None,
+        model_dir: Optional[str] = None,
+    ):
         self.params = params
+        self.model_dir = model_dir
 
     async def train(
         self,
@@ -72,7 +77,11 @@ class RerankerLGBMTrainer:
         # Save model artifact
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         model_filename = f"lgbm_{variant}_{timestamp}.pkl"
-        model_path = os.path.join(settings.model_path, model_filename)
+        # Prefer explicit pipeline model_dir; fall back to env / static settings.
+        resolved_model_dir = (
+            self.model_dir or os.getenv("MODEL_PATH") or settings.model_path
+        )
+        model_path = os.path.join(resolved_model_dir, model_filename)
         await loop.run_in_executor(None, ranker.save, model_path)
         logger.info("LightGBM model saved to: %s", model_path)
 
@@ -82,7 +91,7 @@ class RerankerLGBMTrainer:
             model_type="reranker",
             variant=variant,
             version="1.0.0",
-            path=os.path.relpath(model_path, settings.model_path),
+            path=os.path.relpath(model_path, resolved_model_dir),
             hyperparameters=ranker.params,
             metrics={
                 k: float(v) for k, v in metrics.items() if isinstance(v, (int, float))

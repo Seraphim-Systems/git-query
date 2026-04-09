@@ -31,6 +31,7 @@ class RerankerService:
         """Load the currently active reranker model from the registry."""
         async with self._load_lock:
             from .registry_service import ModelRegistryService
+
             registry = ModelRegistryService()
             # Prefer explicitly-typed cross_encoder entries, but also allow generic 'reranker' entries
             active_model = await registry.get_active_model("cross_encoder", variant)
@@ -48,21 +49,31 @@ class RerankerService:
                 return
 
             if active_model.model_id == self.current_model_id:
-                logger.info("Reranker model %s is already loaded.", active_model.model_id)
+                logger.info(
+                    "Reranker model %s is already loaded.", active_model.model_id
+                )
                 return
 
             # Load from path (prefer model files stored under settings.model_path)
-            full_path = os.path.join(settings.model_path, active_model.path) if getattr(active_model, 'path', None) else None
+            full_path = (
+                os.path.join(settings.model_path, active_model.path)
+                if getattr(active_model, "path", None)
+                else None
+            )
             loop = asyncio.get_running_loop()
             if full_path and os.path.exists(full_path):
-                logger.info("Loading active reranker model: %s from %s", active_model.model_id, full_path)
+                logger.info(
+                    "Loading active reranker model: %s from %s",
+                    active_model.model_id,
+                    full_path,
+                )
                 await loop.run_in_executor(None, self.load_model, full_path)
                 self.current_model_id = active_model.model_id
             else:
                 logger.warning(
                     "Active reranker model path not found on disk (model_id=%s, path=%s). Falling back to default: %s",
-                    getattr(active_model, 'model_id', None),
-                    getattr(active_model, 'path', None),
+                    getattr(active_model, "model_id", None),
+                    getattr(active_model, "path", None),
                     self.model_name,
                 )
                 await loop.run_in_executor(None, self.load_model, self.model_name)
@@ -89,8 +100,32 @@ class RerankerService:
 
         top_k = top_k or settings.rerank_top_k
 
+        if self._adapter is None:
+            async with self._load_lock:
+                # Double-check inside the lock — another coroutine may have already loaded
+                if self._adapter is None:
+                    logger.warning(
+                        "Reranker adapter is not loaded. Attempting lazy load of default model: %s",
+                        self.model_name,
+                    )
+                    loop = asyncio.get_running_loop()
+                    loaded_adapter = await loop.run_in_executor(
+                        None, self.load_model, self.model_name
+                    )
+                    if loaded_adapter is not None:
+                        self._adapter = loaded_adapter
+                        self.model = loaded_adapter
+                        self._loaded_path = self.model_name
+
+        if self._adapter is None:
+            raise RuntimeError(
+                "Reranker adapter is unavailable after lazy load attempt"
+            )
+
         loop = asyncio.get_running_loop()
-        scores = await loop.run_in_executor(None, self._adapter.score, query, candidates)
+        scores = await loop.run_in_executor(
+            None, self._adapter.score, query, candidates
+        )
 
         for candidate, score in zip(candidates, scores):
             candidate.explanation = candidate.explanation or {}
@@ -105,4 +140,3 @@ class RerankerService:
             result.explanation["reranked"] = True
 
         return reranked[:top_k]
-

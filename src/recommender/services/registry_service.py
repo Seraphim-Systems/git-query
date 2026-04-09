@@ -23,14 +23,18 @@ class ModelRegistryService:
     async def register_model(self, metadata: ModelMetadata) -> str:
         """Register a new model in the registry."""
         logger.info(
-            "Registering new model: %s (type: %s)", metadata.model_id, metadata.model_type
+            "Registering new model: %s (type: %s)",
+            metadata.model_id,
+            metadata.model_type,
         )
         await db_manager.save_model_metadata(metadata)
         return metadata.model_id
 
     async def get_active_model(
         self,
-        model_type: Literal["embedding", "cross_encoder", "personalization"],
+        model_type: Literal[
+            "embedding", "cross_encoder", "personalization", "reranker"
+        ],
         variant: str = "default",
     ) -> Optional[ModelMetadata]:
         """Get the currently active model for a specific type and variant."""

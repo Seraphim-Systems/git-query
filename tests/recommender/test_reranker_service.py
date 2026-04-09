@@ -7,6 +7,7 @@ Covers:
 """
 
 import pytest
+import os
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -14,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_service(model_name: str = "fake-cross-encoder"):
     """Return a RerankerService with a pre-wired mock adapter (no real model loading)."""
@@ -53,6 +55,7 @@ def _make_repo_result(repo_id: str, score: float, rank: int = 1, **kwargs):
 # ===========================================================================
 # load_model
 # ===========================================================================
+
 
 class TestLoadModel:
     """Behaviour of RerankerService.load_model — delegates to AdapterFactory."""
@@ -125,6 +128,7 @@ class TestLoadModel:
 # load_active_model
 # ===========================================================================
 
+
 class TestLoadActiveModel:
     """Behaviour of RerankerService.load_active_model — registry integration."""
 
@@ -182,13 +186,17 @@ class TestLoadActiveModel:
         mock_registry = AsyncMock()
         mock_registry.get_active_model.return_value = active
 
-        full_path = f"{settings.model_path}/{active.path}"
+        full_path = os.path.join(settings.model_path, active.path)
 
         with patch(
             "src.recommender.services.registry_service.ModelRegistryService",
             return_value=mock_registry,
-        ), patch("src.recommender.services.reranker_service.os.path.exists", return_value=True), \
-                patch.object(svc, "load_model") as mock_load:
+        ), patch(
+            "src.recommender.services.reranker_service.os.path.exists",
+            return_value=True,
+        ), patch.object(
+            svc, "load_model"
+        ) as mock_load:
             await svc.load_active_model()
 
         mock_load.assert_called_once_with(full_path)
@@ -212,8 +220,12 @@ class TestLoadActiveModel:
         with patch(
             "src.recommender.services.registry_service.ModelRegistryService",
             return_value=mock_registry,
-        ), patch("src.recommender.services.reranker_service.os.path.exists", return_value=False), \
-                patch.object(svc, "load_model") as mock_load:
+        ), patch(
+            "src.recommender.services.reranker_service.os.path.exists",
+            return_value=False,
+        ), patch.object(
+            svc, "load_model"
+        ) as mock_load:
             await svc.load_active_model()
 
         mock_load.assert_called_once_with("default-cross-encoder")
@@ -225,8 +237,26 @@ class TestLoadActiveModel:
 # rerank
 # ===========================================================================
 
+
 class TestRerank:
     """Behaviour of RerankerService.rerank."""
+
+    @pytest.mark.asyncio
+    async def test_rerank_lazy_loads_adapter_when_missing(self):
+        """If adapter is missing, service loads default model before scoring."""
+        from src.recommender.services.reranker_service import RerankerService
+
+        svc = RerankerService(model_name="default-cross-encoder")
+        svc._adapter = None
+        candidates = [_make_repo_result("r1", score=0.2)]
+
+        mock_adapter = MagicMock()
+        mock_adapter.score.return_value = [0.9]
+        with patch.object(svc, "load_model", return_value=mock_adapter) as mock_load:
+            result = await svc.rerank("query", candidates, top_k=1)
+
+        mock_load.assert_called_once_with("default-cross-encoder")
+        assert result[0].score == pytest.approx(0.9)
 
     @pytest.mark.asyncio
     async def test_rerank_returns_empty_for_empty_candidates(self):
@@ -253,9 +283,9 @@ class TestRerank:
         """Returned list is ordered highest score first."""
         svc, mock_adapter = _make_service()
         candidates = [
-            _make_repo_result("low",  score=0.1),
+            _make_repo_result("low", score=0.1),
             _make_repo_result("high", score=0.9),
-            _make_repo_result("mid",  score=0.5),
+            _make_repo_result("mid", score=0.5),
         ]
         mock_adapter.score.return_value = [0.1, 0.9, 0.5]
 
@@ -329,5 +359,3 @@ class TestRerank:
         result = await svc.rerank("query", candidates)  # no top_k argument
 
         assert len(result) <= settings.rerank_top_k
-
-
