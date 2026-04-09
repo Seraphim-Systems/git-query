@@ -101,18 +101,21 @@ class RerankerService:
         top_k = top_k or settings.rerank_top_k
 
         if self._adapter is None:
-            logger.warning(
-                "Reranker adapter is not loaded. Attempting lazy load of default model: %s",
-                self.model_name,
-            )
-            loop = asyncio.get_running_loop()
-            loaded_adapter = await loop.run_in_executor(
-                None, self.load_model, self.model_name
-            )
-            if self._adapter is None and loaded_adapter is not None:
-                self._adapter = loaded_adapter
-                self.model = loaded_adapter
-                self._loaded_path = self.model_name
+            async with self._load_lock:
+                # Double-check inside the lock — another coroutine may have already loaded
+                if self._adapter is None:
+                    logger.warning(
+                        "Reranker adapter is not loaded. Attempting lazy load of default model: %s",
+                        self.model_name,
+                    )
+                    loop = asyncio.get_running_loop()
+                    loaded_adapter = await loop.run_in_executor(
+                        None, self.load_model, self.model_name
+                    )
+                    if loaded_adapter is not None:
+                        self._adapter = loaded_adapter
+                        self.model = loaded_adapter
+                        self._loaded_path = self.model_name
 
         if self._adapter is None:
             raise RuntimeError(
