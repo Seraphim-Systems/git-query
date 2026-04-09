@@ -17,10 +17,23 @@ services:
       REFERENCE_DATA_PATH: ${REFERENCE_DATA_PATH:-/data/reference.parquet}
       CURRENT_DATA_PATH: ${CURRENT_DATA_PATH:-/data/current.parquet}
       EVIDENTLY_REPORT_PATH: ${EVIDENTLY_REPORT_PATH:-/app/drift_reports}
+      EVIDENTLY_WORKSPACE_PATH: /app/workspace
     volumes:
       - drift-reports:/app/drift_reports
+      - evidently-workspace:/app/workspace
       - ${DATA_DIR:-./data}:/data:ro
     restart: "no"
+
+  evidently-ui:
+    image: python:3.11-slim
+    container_name: git-query-evidently-ui
+    command: >
+      bash -c "pip install -q evidently>=0.4.0 && evidently ui --workspace /app/workspace --host 0.0.0.0 --port 8000"
+    ports:
+      - "8000:8000"
+    volumes:
+      - evidently-workspace:/app/workspace
+    restart: unless-stopped
 
   mlflow:
     build:
@@ -45,6 +58,8 @@ services:
 
 volumes:
   drift-reports:
+    driver: local
+  evidently-workspace:
     driver: local
   mlflow-data:
     driver: local

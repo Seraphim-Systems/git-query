@@ -21,14 +21,8 @@ logger = logging.getLogger(__name__)
 # Check if Evidently is available
 try:
     import pandas as pd
-    from evidently.legacy.base_metric import ColumnMapping
-    from evidently.legacy.metric_preset import TargetDriftPreset
-    from evidently.legacy.metrics import (
-        ColumnDriftMetric,
-        DataDriftTable,
-        DatasetDriftMetric,
-    )
-    from evidently.legacy.report import Report
+    from evidently import Report
+    from evidently.presets import DataDriftPreset
 
     EVIDENTLY_AVAILABLE = True
 except ImportError:
@@ -100,7 +94,7 @@ class DriftMonitor:
             return None
 
         try:
-            # Drop columns containing arrays/lists — Evidently can't process them
+            # Drop columns containing arrays/lists or all-null values
             def _is_scalar_col(series):
                 sample = series.dropna().head(10)
                 return not any(isinstance(v, (list, np.ndarray)) for v in sample)
@@ -112,29 +106,32 @@ class DriftMonitor:
             reference_data = reference_data[scalar_cols]
             current_data = current_data[scalar_cols]
 
-            report = Report(
-                metrics=[
-                    DatasetDriftMetric(),
-                    DataDriftTable(),
-                ]
-            )
+            report = Report([DataDriftPreset()])
+            snapshot = report.run(reference_data=reference_data, current_data=current_data)
 
-            report.run(
-                reference_data=reference_data,
-                current_data=current_data,
-                column_mapping=column_mapping,
-            )
+            # Save to Evidently workspace if configured
+            workspace_path = os.getenv("EVIDENTLY_WORKSPACE_PATH")
+            if workspace_path:
+                try:
+                    from evidently.ui.workspace import Workspace
+                    ws = Workspace(workspace_path)
+                    projects = ws.search_project("git-query-drift")
+                    project = projects[0] if projects else ws.create_project("git-query-drift", description="Repository data drift monitoring")
+                    ws.add_run(project.id, snapshot)
+                    logger.info(f"Drift report saved to Evidently workspace: {workspace_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to save to Evidently workspace: {e}")
 
-            # Extract results
-            result = report.as_dict()
+            # Extract drift status from snapshot
+            snapshot_dict = snapshot.dict() if hasattr(snapshot, "dict") else {}
+            drift_detected = self._extract_drift_status_from_snapshot(snapshot)
 
             drift_info = {
                 "timestamp": datetime.now().isoformat(),
                 "type": "data_drift",
                 "reference_rows": len(reference_data),
                 "current_rows": len(current_data),
-                "drift_detected": self._extract_drift_status(result),
-                "metrics": result.get("metrics", []),
+                "drift_detected": drift_detected,
             }
 
             logger.info(f"Data drift check complete. Drift detected: {drift_info['drift_detected']}")
@@ -321,7 +318,7 @@ class DriftMonitor:
             return {"error": str(e), "timestamp": datetime.now().isoformat()}
 
     def _extract_drift_status(self, result: dict[str, Any]) -> bool:
-        """Extract overall drift detection status from Evidently result."""
+        """Extract overall drift detection status from Evidently legacy result dict."""
         try:
             metrics = result.get("metrics", [])
             for metric in metrics:
@@ -329,6 +326,19 @@ class DriftMonitor:
                 if metric_result.get("dataset_drift", False):
                     return True
                 if metric_result.get("drift_detected", False):
+                    return True
+            return False
+        except Exception:
+            return False
+
+    def _extract_drift_status_from_snapshot(self, snapshot) -> bool:
+        """Extract drift status from new Evidently API snapshot."""
+        try:
+            for metric_result in snapshot.metric_results:
+                result = metric_result.value
+                if hasattr(result, "dataset_drift") and result.dataset_drift:
+                    return True
+                if hasattr(result, "drift_detected") and result.drift_detected:
                     return True
             return False
         except Exception:
