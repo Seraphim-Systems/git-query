@@ -54,6 +54,9 @@ class RecommenderSettings(BaseSettings):
     enable_personalization: bool = True
     personalization_weight: float = 0.15  # How much to boost based on user prefs
     min_interactions_for_personalization: int = 5
+    language_decay_half_life_days: float = 30.0   # Interaction half-life for decay
+    view_interaction_weight: float = 0.3          # Weight for VIEW interactions
+    explicit_language_boost: float = 0.8          # Score floor for explicitly set langs
 
     # Caching
     cache_ttl_seconds: int = 3600  # 1 hour

@@ -77,7 +77,7 @@ class TestReciprocalRankFusion:
     def test_rrf_semantic_only_results(self):
         engine = _make_engine()
         semantic = [{"repo_id": "a/b", "score": 0.9, "source": "semantic", "payload": {}}]
-        results = engine._reciprocal_rank_fusion(semantic, [])
+        results = engine._reciprocal_rank_fusion(semantic, [], _make_request())
 
         assert len(results) == 1
         assert results[0].repo_id == "a/b"
@@ -93,7 +93,7 @@ class TestReciprocalRankFusion:
                 "repo_data": {"name": "d", "full_name": "c/d", "stars": 50, "forks": 2, "url": "https://github.com/c/d"},
             }
         ]
-        results = engine._reciprocal_rank_fusion([], keyword)
+        results = engine._reciprocal_rank_fusion([], keyword, _make_request())
 
         assert len(results) == 1
         assert results[0].repo_id == "c/d"
@@ -113,9 +113,9 @@ class TestReciprocalRankFusion:
             }
         ]
 
-        results_combined = engine._reciprocal_rank_fusion(semantic, keyword)
-        results_semantic_only = engine._reciprocal_rank_fusion(semantic, [])
-        results_keyword_only = engine._reciprocal_rank_fusion([], keyword)
+        results_combined = engine._reciprocal_rank_fusion(semantic, keyword, _make_request())
+        results_semantic_only = engine._reciprocal_rank_fusion(semantic, [], _make_request())
+        results_keyword_only = engine._reciprocal_rank_fusion([], keyword, _make_request())
 
         combined_score = results_combined[0].score
         assert combined_score > results_semantic_only[0].score
@@ -128,7 +128,7 @@ class TestReciprocalRankFusion:
         assert engine.k == 60
         semantic = [{"repo_id": "x/y", "score": 0.99, "source": "semantic", "payload": {}}]
 
-        results = engine._reciprocal_rank_fusion(semantic, [])
+        results = engine._reciprocal_rank_fusion(semantic, [], _make_request())
 
         assert results[0].score == pytest.approx(1 / 61)
 
@@ -153,7 +153,7 @@ class TestReciprocalRankFusion:
             }
         ]
 
-        results = engine._reciprocal_rank_fusion(semantic, keyword)
+        results = engine._reciprocal_rank_fusion(semantic, keyword, _make_request())
 
         assert results[0].name == "from_keyword"
         assert results[0].stars == 999
@@ -170,7 +170,7 @@ class TestReciprocalRankFusion:
             }
         ]
 
-        results = engine._reciprocal_rank_fusion(semantic, [])
+        results = engine._reciprocal_rank_fusion(semantic, [], _make_request())
 
         assert results[0].name == "payload_name"
         assert results[0].stars == 42
@@ -182,7 +182,7 @@ class TestReciprocalRankFusion:
             {"repo_id": "myorg/my-cool-repo", "score": 0.5, "source": "semantic", "payload": {}}
         ]
 
-        results = engine._reciprocal_rank_fusion(semantic, [])
+        results = engine._reciprocal_rank_fusion(semantic, [], _make_request())
 
         assert results[0].name == "my-cool-repo"
 
@@ -203,12 +203,37 @@ class TestReciprocalRankFusion:
             }
         ]
 
-        results = engine._reciprocal_rank_fusion(semantic, keyword)
+        results = engine._reciprocal_rank_fusion(semantic, keyword, _make_request())
 
         # b/b should rank first because it appears in both lists
         scores = [r.score for r in results]
         assert scores == sorted(scores, reverse=True)
         assert results[0].repo_id == "b/b"
+
+    def test_rrf_applies_soft_boost_for_preferred_languages(self, mocker):
+        engine = _make_engine()
+        from src.recommender.config import settings
+        mocker.patch.object(settings, "personalization_weight", 0.15)
+        
+        request = _make_request()
+        request.preferred_languages = ["python"]
+        
+        semantic = [{"repo_id": "a/a", "score": 0.8, "source": "semantic", "payload": {}}]
+        keyword = [
+            {
+                "repo_id": "a/a",
+                "score": 1.0,
+                "source": "keyword",
+                "repo_data": {"name": "repo", "full_name": "a/a", "language": "Python"},
+            }
+        ]
+        
+        results = engine._reciprocal_rank_fusion(semantic, keyword, request)
+        
+        base_score = 2 / 61
+        expected_score = base_score * 1.15
+        assert results[0].score == pytest.approx(expected_score)
+        assert "personalization_boost" in results[0].explanation["sources"]
 
 
 # ---------------------------------------------------------------------------

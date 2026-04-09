@@ -10,6 +10,7 @@ import os
 import time
 from typing import Optional
 from datetime import datetime, timezone
+from typing import List, Optional  
 
 from .config import settings
 from .models import (
@@ -27,6 +28,7 @@ from .services import (
     PersonalizationService,
     ABTestService,
     ModelRegistryService,
+    LanguagePreferenceService,  
 )
 
 logger = logging.getLogger(__name__)
@@ -43,6 +45,7 @@ async def lifespan(app: FastAPI):
     app.state.embedding_service = EmbeddingService()
     app.state.reranker_service = RerankerService()
     app.state.personalization_service = PersonalizationService()
+    app.state.language_preference_service = LanguagePreferenceService()
     app.state.ab_test_service = ABTestService()
     app.state.registry_service = ModelRegistryService()
 
@@ -260,6 +263,74 @@ async def get_user_preferences(user_id: str):
     if not prefs:
         raise HTTPException(status_code=404, detail="User preferences not found")
     return prefs
+
+# ===== Language Preference Endpoints =====
+
+@app.post("/preferences/{user_id}/languages", status_code=200)
+async def set_language_preferences(user_id: str, languages: List[str]):
+    """
+    Set the user's explicitly preferred programming languages.
+
+    Pass a list of language names (case-insensitive).  These languages will
+    receive a score boost and always appear near the top of personalization
+    signals even before the user has interacted with repos in that language.
+
+    Example body: ["Python", "Rust", "TypeScript"]
+    """
+    try:
+        svc: LanguagePreferenceService = app.state.language_preference_service
+        prefs = await svc.set_explicit_languages(user_id, languages)
+        return {
+            "status": "success",
+            "user_id": user_id,
+            "explicit_languages": prefs.explicit_languages,
+            "language_scores": prefs.language_preferences,
+        }
+    except Exception as e:
+        logger.error("Failed to set language preferences for %s: %s", user_id, e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/preferences/{user_id}/languages")
+async def get_language_preferences(user_id: str, top_n: int = 5):
+    """
+    Get a user's top preferred programming languages, ranked by preference score.
+
+    Each entry includes whether the language was explicitly declared by the user
+    or inferred from their interaction history.
+    """
+    svc: LanguagePreferenceService = app.state.language_preference_service
+    languages = await svc.get_top_languages(user_id, top_n=top_n)
+    if not languages:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No language preferences found for user '{user_id}'",
+        )
+    return {"user_id": user_id, "languages": languages}
+
+
+@app.delete("/preferences/{user_id}/languages/{language}", status_code=200)
+async def remove_language_preference(user_id: str, language: str):
+    """
+    Remove a specific language from a user's preferences.
+
+    Removes both the explicit declaration and the learned score so the language
+    will no longer influence recommendations.
+    """
+    try:
+        svc: LanguagePreferenceService = app.state.language_preference_service
+        prefs = await svc.remove_language(user_id, language)
+        return {
+            "status": "success",
+            "user_id": user_id,
+            "removed_language": language.lower(),
+            "remaining_explicit": prefs.explicit_languages,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error("Failed to remove language preference: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ===== Metrics & Evaluation =====

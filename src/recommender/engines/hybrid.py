@@ -55,7 +55,7 @@ class HybridRetrievalEngine(RecommendationEngine):
 
         # Step 2: Fuse results using Reciprocal Rank Fusion
         fused_results = self._reciprocal_rank_fusion(
-            semantic_results, keyword_results
+            semantic_results, keyword_results, request
         )
 
         # Step 3: Apply hard filters
@@ -158,7 +158,7 @@ class HybridRetrievalEngine(RecommendationEngine):
         ]
 
     def _reciprocal_rank_fusion(
-        self, semantic_results: List[Dict], keyword_results: List[Dict]
+        self, semantic_results: List[Dict], keyword_results: List[Dict], request: RecommendationRequest
     ) -> List[RepositoryResult]:
         """Fuse results using Reciprocal Rank Fusion."""
         scores: Dict[str, float] = {}
@@ -183,6 +183,18 @@ class HybridRetrievalEngine(RecommendationEngine):
             if "repo_data" in result:
                 # Keyword data is usually richer, so it takes precedence
                 repo_data[repo_id] = result["repo_data"]
+
+        # Apply soft boost for preferred languages
+        preferred_langs = []
+        if getattr(request, "preferred_languages", None):
+            preferred_langs = [l.lower() for l in request.preferred_languages]
+
+        for repo_id, score in scores.items():
+            data = repo_data.get(repo_id) or {}
+            repo_lang = data.get("language")
+            if repo_lang and str(repo_lang).lower() in preferred_langs:
+                scores[repo_id] *= (1 + getattr(settings, "personalization_weight", 0.15))
+                sources.setdefault(repo_id, set()).add("personalization_boost")
 
         # Sort by fused score
         sorted_repos = sorted(scores.items(), key=lambda x: x[1], reverse=True)
