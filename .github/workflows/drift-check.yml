@@ -26,7 +26,7 @@ on:
 
 jobs:
   build-drift-monitor:
-    name: Build Drift Monitor Image
+    name: Smoke Test Drift Monitor Image
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -41,47 +41,84 @@ jobs:
 
       - name: Smoke test — image starts without error
         run: |
-          # Run without data paths to confirm the container starts and
-          # exits with code 2 (missing env vars) not a crash/import error.
-          docker run --rm \
-            git-query-drift-monitor:latest || [ $? -eq 2 ]
+          # Exit 2 = missing env vars (expected); anything else = crash
+          docker run --rm git-query-drift-monitor:latest || [ $? -eq 2 ]
 
   drift-check:
     name: Run Drift Detection
     runs-on: ubuntu-latest
     needs: build-drift-monitor
-    # Only runs when real data is available (scheduled or manual trigger
-    # with DATA_DIR secret configured). Skipped on regular PRs.
+    # Only runs on schedule or manual dispatch — not on every PR
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     outputs:
       drift_detected: ${{ steps.run-drift.outputs.drift_detected }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Build drift monitor image
+      - name: Setup SSH
         run: |
-          docker build \
-            -f infrastructure/docker/Dockerfile.drift-monitor \
-            -t git-query-drift-monitor:latest \
-            .
+          mkdir -p ~/.ssh
+          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Run drift check
+      - name: Configure drift environment on server
+        run: |
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
+          set -e
+          cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query
+
+          cat > .env.drift << EOF
+          API_BASE_URL=${{ secrets.API_BASE_URL }}
+          APIKEY_MONGODB=${{ secrets.APIKEY_MONGODB }}
+          QDRANT_URL=${{ secrets.QDRANT_URL }}
+          APIKEY_QDRANT=${{ secrets.DB_QDRANT_API_KEY }}
+          EOF
+
+          echo "Drift environment configured"
+          ENDSSH
+
+      - name: Run drift check on server
         id: run-drift
         run: |
-          docker run --rm \
-            -e REFERENCE_DATA_PATH=/data/reference.parquet \
-            -e CURRENT_DATA_PATH=/data/current.parquet \
-            -e EVIDENTLY_REPORT_PATH=/app/drift_reports \
-            -v ${{ github.workspace }}/drift_reports:/app/drift_reports \
-            git-query-drift-monitor:latest || DRIFT_EXIT=$?
+          RESULT=$(ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
+          set -e
+          cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query
 
-          if [ "${DRIFT_EXIT}" = "1" ]; then
-            echo "::warning::Drift detected in recommendation data"
-            echo "drift_detected=true" >> $GITHUB_OUTPUT
+          # Load drift-specific env vars
+          set -a && source .env.drift && set +a
+
+          cd infrastructure/docker
+
+          echo "Building drift monitor image..."
+          docker-compose -f docker-compose.base.yml -f docker-compose.monitoring.yml \
+            build drift-monitor
+
+          echo "Running drift check..."
+          docker-compose -f docker-compose.base.yml -f docker-compose.monitoring.yml \
+            run --rm drift-monitor
+          EXIT=$?
+
+          if [ "$EXIT" = "1" ]; then
+            echo "drift_detected=true"
           else
-            echo "drift_detected=false" >> $GITHUB_OUTPUT
+            echo "drift_detected=false"
           fi
+          ENDSSH
+          )
+
+          DRIFT=$(echo "$RESULT" | grep "drift_detected=" | cut -d= -f2)
+          echo "drift_detected=${DRIFT:-false}" >> $GITHUB_OUTPUT
+
+          if [ "${DRIFT}" = "true" ]; then
+            echo "::warning::Drift detected in recommendation data"
+          fi
+
+      - name: Download drift reports from server
+        if: always()
+        run: |
+          # Copy drift reports back to Actions runner for artifact upload
+          scp -r \
+            ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }}:/tmp/drift_reports_export \
+            ./drift_reports 2>/dev/null || true
         continue-on-error: true
 
       - name: Upload drift reports
@@ -126,10 +163,14 @@ jobs:
             **Run:** ${context.runId}
             **Triggered:** ${new Date().toISOString()}
 
+            ### Checks Run
+            See the drift reports artifact attached to the workflow run for details on which
+            checks (data drift, embedding drift, CTR drift) triggered the alert.
+
             ### Recommended Actions:
             1. Review drift reports uploaded as workflow artifacts
             2. Check model performance metrics in MLflow
-            3. Consider triggering a retraining run if drift is significant
+            3. A retraining run has been automatically dispatched
 
             [View Workflow Run](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
             `;

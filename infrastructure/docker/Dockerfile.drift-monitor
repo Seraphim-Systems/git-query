@@ -22,7 +22,9 @@ RUN pip install --no-cache-dir \
     evidently>=0.4.0 \
     pandas>=2.0.0 \
     numpy>=1.26.3 \
-    pyarrow>=14.0.0
+    pyarrow>=14.0.0 \
+    requests>=2.31.0 \
+    qdrant-client>=1.7.0
 
 # Copy MLOps source
 COPY src/recommender/mlops/ /app/

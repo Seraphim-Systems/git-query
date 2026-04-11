@@ -1,10 +1,10 @@
-# Monitoring stack: drift detection + MLflow tracking server
+# Monitoring stack: drift detection + Evidently UI + MLflow tracking server
 #
 # Usage (one-off drift check):
-#   docker compose -f docker-compose.monitoring.yml run --rm drift-monitor
+#   docker compose -f docker-compose.base.yml -f docker-compose.monitoring.yml run --rm drift-monitor
 #
-# Usage (MLflow UI only):
-#   docker compose -f docker-compose.monitoring.yml up mlflow
+# Usage (persistent UI services):
+#   docker compose -f docker-compose.base.yml -f docker-compose.monitoring.yml up evidently-ui mlflow
 
 services:
   drift-monitor:
@@ -14,21 +14,34 @@ services:
     image: git-query-drift-monitor:latest
     container_name: git-query-drift-monitor
     environment:
-      REFERENCE_DATA_PATH: ${REFERENCE_DATA_PATH:-/data/reference.parquet}
-      CURRENT_DATA_PATH: ${CURRENT_DATA_PATH:-/data/current.parquet}
-      EVIDENTLY_REPORT_PATH: ${EVIDENTLY_REPORT_PATH:-/app/drift_reports}
+      # Reference data written by the training pipeline
+      REFERENCE_DATA_PATH: /app/models/metadata/reference_data.parquet
+      REFERENCE_EMBEDDINGS_PATH: /app/models/vectors/repo_embeddings_latest.npy
+
+      # Live data sources — provide current state for comparison
+      API_BASE_URL: ${API_BASE_URL:-}
+      APIKEY_MONGODB: ${APIKEY_MONGODB:-}
+      QDRANT_URL: ${QDRANT_URL:-http://git-query-qdrant:6333}
+      APIKEY_QDRANT: ${APIKEY_QDRANT:-}
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-repositories_embeddings}
+
+      # Output paths
+      EVIDENTLY_REPORT_PATH: /app/drift_reports
       EVIDENTLY_WORKSPACE_PATH: /app/workspace
     volumes:
       - drift-reports:/app/drift_reports
       - evidently-workspace:/app/workspace
-      - ${DATA_DIR:-./data}:/data:ro
+      # Read-only access to model artifacts (reference data + embeddings)
+      - model-artifacts:/app/models:ro
+    networks:
+      - internal-network
     restart: "no"
 
   evidently-ui:
     image: python:3.11-slim
     container_name: git-query-evidently-ui
     command: >
-      bash -c "pip install -q evidently>=0.4.0 && evidently ui --workspace /app/workspace --host 0.0.0.0 --port 8000"
+      bash -c "pip install -q 'evidently>=0.4.0' && evidently ui --workspace /app/workspace --host 0.0.0.0 --port 8000"
     ports:
       - "8000:8000"
     volumes:
@@ -63,3 +76,6 @@ volumes:
     driver: local
   mlflow-data:
     driver: local
+  model-artifacts:
+    external: true
+    name: git-query-model-artifacts
