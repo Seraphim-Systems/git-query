@@ -19,7 +19,7 @@ WORKDIR /app
 
 # Install dependencies (no torch — keep image small)
 RUN pip install --no-cache-dir \
-    evidently>=0.4.0 \
+    "evidently>=0.4.0,<0.5.0" \
     pandas>=2.0.0 \
     numpy>=1.26.3 \
     pyarrow>=14.0.0 \

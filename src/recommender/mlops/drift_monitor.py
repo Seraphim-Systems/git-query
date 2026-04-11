@@ -21,10 +21,10 @@ logger = logging.getLogger(__name__)
 # Check if Evidently is available
 try:
     import pandas as pd
-    from evidently import Report
+    from evidently.metric_preset import DataDriftPreset, TargetDriftPreset
     from evidently.metrics import ColumnDriftMetric, DatasetDriftMetric
     from evidently.pipeline.column_mapping import ColumnMapping
-    from evidently.presets import DataDriftPreset, TargetDriftPreset
+    from evidently.report import Report
 
     EVIDENTLY_AVAILABLE = True
 except ImportError:
@@ -71,25 +71,38 @@ class DriftMonitor:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _save_to_workspace(self, snapshot, project_name: str) -> None:
-        """Save an Evidently snapshot to the workspace so it appears in the UI."""
+    def _save_to_workspace(self, report: "Report", project_name: str) -> None:
+        """Save an Evidently report to the workspace so it appears in the UI."""
         workspace_path = os.getenv("EVIDENTLY_WORKSPACE_PATH")
         if not workspace_path:
             return
         try:
             from evidently.ui.workspace import Workspace
 
-            ws = Workspace(workspace_path)
+            ws = Workspace.create(workspace_path)
             projects = ws.search_project(project_name)
             project = (
                 projects[0]
                 if projects
-                else ws.create_project(project_name, description=f"Drift monitoring: {project_name}")
+                else ws.create_project(project_name)
             )
-            ws.add_run(project.id, snapshot)
+            ws.add_report(project.id, report)
             logger.info("Drift report saved to Evidently workspace project: %s", project_name)
         except Exception as e:
             logger.warning("Failed to save to Evidently workspace: %s", e)
+
+    def _extract_drift_status(self, result: dict[str, Any]) -> bool:
+        """Extract drift status from Evidently report.as_dict() output."""
+        try:
+            for metric in result.get("metrics", []):
+                metric_result = metric.get("result", {})
+                if metric_result.get("dataset_drift", False):
+                    return True
+                if metric_result.get("drift_detected", False):
+                    return True
+            return False
+        except Exception:
+            return False
 
     # ------------------------------------------------------------------
     # Drift checks
@@ -120,11 +133,11 @@ class DriftMonitor:
             reference_data = reference_data[scalar_cols]
             current_data = current_data[scalar_cols]
 
-            report = Report([DataDriftPreset()])
-            snapshot = report.run(reference_data=reference_data, current_data=current_data)
-            self._save_to_workspace(snapshot, "git-query-data-drift")
+            report = Report(metrics=[DataDriftPreset()])
+            report.run(reference_data=reference_data, current_data=current_data)
+            self._save_to_workspace(report, "git-query-data-drift")
 
-            drift_detected = self._extract_drift_status_from_snapshot(snapshot)
+            drift_detected = self._extract_drift_status(report.as_dict())
 
             drift_info = {
                 "timestamp": datetime.now().isoformat(),
@@ -170,9 +183,9 @@ class DriftMonitor:
                 columns=[f"emb_{i}" for i in range(current_embeddings.shape[1])],
             )
 
-            report = Report([DatasetDriftMetric()])
-            snapshot = report.run(reference_data=ref_df, current_data=cur_df)
-            self._save_to_workspace(snapshot, "git-query-embedding-drift")
+            report = Report(metrics=[DatasetDriftMetric()])
+            report.run(reference_data=ref_df, current_data=cur_df)
+            self._save_to_workspace(report, "git-query-embedding-drift")
 
             ref_norms = np.linalg.norm(reference_embeddings, axis=1)
             cur_norms = np.linalg.norm(current_embeddings, axis=1)
@@ -183,7 +196,7 @@ class DriftMonitor:
                 "reference_samples": len(reference_embeddings),
                 "current_samples": len(current_embeddings),
                 "embedding_dim": reference_embeddings.shape[1],
-                "drift_detected": self._extract_drift_status_from_snapshot(snapshot),
+                "drift_detected": self._extract_drift_status(report.as_dict()),
                 "norm_stats": {
                     "reference_mean_norm": float(np.mean(ref_norms)),
                     "current_mean_norm": float(np.mean(cur_norms)),
@@ -212,9 +225,9 @@ class DriftMonitor:
             ref_df = pd.DataFrame({"score": reference_scores})
             cur_df = pd.DataFrame({"score": current_scores})
 
-            report = Report([ColumnDriftMetric(column_name="score")])
-            snapshot = report.run(reference_data=ref_df, current_data=cur_df)
-            self._save_to_workspace(snapshot, "git-query-prediction-drift")
+            report = Report(metrics=[ColumnDriftMetric(column_name="score")])
+            report.run(reference_data=ref_df, current_data=cur_df)
+            self._save_to_workspace(report, "git-query-prediction-drift")
 
             drift_info = {
                 "timestamp": datetime.now().isoformat(),
@@ -223,7 +236,7 @@ class DriftMonitor:
                 "current_count": len(current_scores),
                 "reference_mean": float(np.mean(reference_scores)),
                 "current_mean": float(np.mean(current_scores)),
-                "drift_detected": self._extract_drift_status_from_snapshot(snapshot),
+                "drift_detected": self._extract_drift_status(report.as_dict()),
             }
 
             logger.info("Prediction drift check complete. Drift detected: %s", drift_info["drift_detected"])
@@ -247,13 +260,13 @@ class DriftMonitor:
         try:
             column_mapping = ColumnMapping(target=target_column)
 
-            report = Report([TargetDriftPreset()])
-            snapshot = report.run(
+            report = Report(metrics=[TargetDriftPreset()])
+            report.run(
                 reference_data=reference_interactions,
                 current_data=current_interactions,
                 column_mapping=column_mapping,
             )
-            self._save_to_workspace(snapshot, "git-query-ctr-drift")
+            self._save_to_workspace(report, "git-query-ctr-drift")
 
             ref_ctr = reference_interactions[target_column].mean() if target_column in reference_interactions else 0
             cur_ctr = current_interactions[target_column].mean() if target_column in current_interactions else 0
@@ -264,7 +277,7 @@ class DriftMonitor:
                 "reference_ctr": float(ref_ctr),
                 "current_ctr": float(cur_ctr),
                 "ctr_change": float(cur_ctr - ref_ctr),
-                "drift_detected": self._extract_drift_status_from_snapshot(snapshot),
+                "drift_detected": self._extract_drift_status(report.as_dict()),
             }
 
             logger.info("Target drift check complete. CTR change: %.4f", drift_info["ctr_change"])
@@ -273,36 +286,6 @@ class DriftMonitor:
         except Exception as e:
             logger.error("Error checking target drift: %s", e)
             return {"error": str(e), "timestamp": datetime.now().isoformat()}
-
-    # ------------------------------------------------------------------
-    # Status extraction
-    # ------------------------------------------------------------------
-
-    def _extract_drift_status(self, result: dict[str, Any]) -> bool:
-        """Extract drift status from legacy Evidently result dict (as_dict() output)."""
-        try:
-            for metric in result.get("metrics", []):
-                metric_result = metric.get("result", {})
-                if metric_result.get("dataset_drift", False):
-                    return True
-                if metric_result.get("drift_detected", False):
-                    return True
-            return False
-        except Exception:
-            return False
-
-    def _extract_drift_status_from_snapshot(self, snapshot) -> bool:
-        """Extract drift status from new Evidently API snapshot object."""
-        try:
-            for metric_result in snapshot.metric_results:
-                result = metric_result.value
-                if hasattr(result, "dataset_drift") and result.dataset_drift:
-                    return True
-                if hasattr(result, "drift_detected") and result.drift_detected:
-                    return True
-            return False
-        except Exception:
-            return False
 
     # ------------------------------------------------------------------
     # Report persistence
