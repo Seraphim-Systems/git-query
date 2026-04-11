@@ -102,7 +102,8 @@ class DriftMonitor:
                 return not any(isinstance(v, (list, np.ndarray)) for v in sample)
 
             scalar_cols = [
-                c for c in reference_data.columns
+                c
+                for c in reference_data.columns
                 if _is_scalar_col(reference_data[c]) and reference_data[c].notna().any()
             ]
             reference_data = reference_data[scalar_cols]
@@ -116,9 +117,14 @@ class DriftMonitor:
             if workspace_path:
                 try:
                     from evidently.ui.workspace import Workspace
+
                     ws = Workspace(workspace_path)
                     projects = ws.search_project("git-query-drift")
-                    project = projects[0] if projects else ws.create_project("git-query-drift", description="Repository data drift monitoring")
+                    project = (
+                        projects[0]
+                        if projects
+                        else ws.create_project("git-query-drift", description="Repository data drift monitoring")
+                    )
                     ws.add_run(project.id, snapshot)
                     logger.info(f"Drift report saved to Evidently workspace: {workspace_path}")
                 except Exception as e:
