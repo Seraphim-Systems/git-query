@@ -22,7 +22,9 @@ logger = logging.getLogger(__name__)
 try:
     import pandas as pd
     from evidently import Report
-    from evidently.presets import DataDriftPreset
+    from evidently.metrics import ColumnDriftMetric, DatasetDriftMetric
+    from evidently.pipeline.column_mapping import ColumnMapping
+    from evidently.presets import DataDriftPreset, TargetDriftPreset
 
     EVIDENTLY_AVAILABLE = True
 except ImportError:
@@ -123,7 +125,6 @@ class DriftMonitor:
                     logger.warning(f"Failed to save to Evidently workspace: {e}")
 
             # Extract drift status from snapshot
-            snapshot_dict = snapshot.dict() if hasattr(snapshot, "dict") else {}
             drift_detected = self._extract_drift_status_from_snapshot(snapshot)
 
             drift_info = {
