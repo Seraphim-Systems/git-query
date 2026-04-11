@@ -168,6 +168,125 @@ class TestDriftMonitor:
                 assert str(monitor.report_dir) == tmpdir
 
 
+class TestExtractDriftStatusFromSnapshot:
+    """_extract_drift_status_from_snapshot uses the new Evidently snapshot API."""
+
+    def test_returns_true_when_dataset_drift_attribute_set(self):
+        from src.recommender.mlops.drift_monitor import DriftMonitor
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            monitor = DriftMonitor(report_dir=tmpdir)
+
+            metric_value = MagicMock()
+            metric_value.dataset_drift = True
+            metric_result = MagicMock()
+            metric_result.value = metric_value
+            snapshot = MagicMock()
+            snapshot.metric_results = [metric_result]
+
+            assert monitor._extract_drift_status_from_snapshot(snapshot) is True
+
+    def test_returns_true_when_drift_detected_attribute_set(self):
+        from src.recommender.mlops.drift_monitor import DriftMonitor
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            monitor = DriftMonitor(report_dir=tmpdir)
+
+            metric_value = MagicMock(spec=[])  # no dataset_drift attribute
+            metric_value.drift_detected = True
+            metric_result = MagicMock()
+            metric_result.value = metric_value
+            snapshot = MagicMock()
+            snapshot.metric_results = [metric_result]
+
+            assert monitor._extract_drift_status_from_snapshot(snapshot) is True
+
+    def test_returns_false_when_no_drift(self):
+        from src.recommender.mlops.drift_monitor import DriftMonitor
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            monitor = DriftMonitor(report_dir=tmpdir)
+
+            metric_value = MagicMock()
+            metric_value.dataset_drift = False
+            metric_value.drift_detected = False
+            metric_result = MagicMock()
+            metric_result.value = metric_value
+            snapshot = MagicMock()
+            snapshot.metric_results = [metric_result]
+
+            assert monitor._extract_drift_status_from_snapshot(snapshot) is False
+
+    def test_returns_false_on_exception(self):
+        """Malformed snapshot does not raise — returns False gracefully."""
+        from src.recommender.mlops.drift_monitor import DriftMonitor
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            monitor = DriftMonitor(report_dir=tmpdir)
+
+            snapshot = MagicMock()
+            snapshot.metric_results = MagicMock(side_effect=RuntimeError("boom"))
+
+            assert monitor._extract_drift_status_from_snapshot(snapshot) is False
+
+
+class TestCheckTargetDrift:
+    def test_returns_none_when_evidently_unavailable(self):
+        from src.recommender.mlops.drift_monitor import EVIDENTLY_AVAILABLE, DriftMonitor
+
+        if EVIDENTLY_AVAILABLE:
+            pytest.skip("Evidently is available; testing unavailable path only")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            monitor = DriftMonitor(report_dir=tmpdir)
+            result = monitor.check_target_drift(None, None)
+
+        assert result is None
+
+    def test_returns_error_dict_on_exception(self):
+        """When Evidently raises internally, returns {"error": ..., "timestamp": ...}."""
+        from src.recommender.mlops.drift_monitor import EVIDENTLY_AVAILABLE, DriftMonitor
+
+        if not EVIDENTLY_AVAILABLE:
+            pytest.skip("Evidently not installed")
+
+        import pandas as pd
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            monitor = DriftMonitor(report_dir=tmpdir)
+
+            # Patch Report.run to raise so we hit the except branch
+            with patch("evidently.Report.run", side_effect=RuntimeError("forced error")):
+                ref = pd.DataFrame({"clicked": [1, 0, 1, 0, 1]})
+                cur = pd.DataFrame({"clicked": [0, 0, 0, 1, 0]})
+                result = monitor.check_target_drift(ref, cur, target_column="clicked")
+
+        assert "error" in result
+        assert "timestamp" in result
+
+    def test_returns_result_dict_with_expected_keys(self):
+        """When Evidently works correctly, drift_info has the required keys."""
+        from src.recommender.mlops.drift_monitor import EVIDENTLY_AVAILABLE, DriftMonitor
+
+        if not EVIDENTLY_AVAILABLE:
+            pytest.skip("Evidently not installed")
+
+        import pandas as pd
+
+        np.random.seed(0)
+        ref = pd.DataFrame({"clicked": np.random.randint(0, 2, 50)})
+        cur = pd.DataFrame({"clicked": np.random.randint(0, 2, 50)})
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            monitor = DriftMonitor(report_dir=tmpdir)
+            result = monitor.check_target_drift(ref, cur, target_column="clicked")
+
+        assert result is not None
+        for key in ("timestamp", "type", "reference_ctr", "current_ctr", "ctr_change", "drift_detected"):
+            assert key in result, f"Missing key: {key}"
+        assert result["type"] == "target_drift"
+
+
 class TestDriftMonitorWithMockedEvidently:
     """Tests using mocked Evidently components."""
 

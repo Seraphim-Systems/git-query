@@ -116,7 +116,6 @@ jobs:
             --cov=src \
             --cov-report=term-missing \
             -v
-        continue-on-error: true
 
   smoke-test:
     name: Smoke Test
@@ -142,14 +141,15 @@ jobs:
   all-tests-pass:
     name: All Tests Pass
     runs-on: ubuntu-latest
-    needs: [lint, unit-tests, smoke-test]
+    needs: [lint, unit-tests, smoke-test, integration-tests]
     if: always()
     steps:
       - name: Check all jobs passed
         run: |
           if [[ "${{ needs.lint.result }}" != "success" ]] || \
              [[ "${{ needs.unit-tests.result }}" != "success" ]] || \
-             [[ "${{ needs.smoke-test.result }}" != "success" ]]; then
+             [[ "${{ needs.smoke-test.result }}" != "success" ]] || \
+             [[ "${{ needs.integration-tests.result }}" == "failure" ]]; then
             echo "One or more required jobs failed"
             exit 1
           fi
