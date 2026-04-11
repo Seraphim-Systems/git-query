@@ -3,6 +3,7 @@ name: Drift Monitoring
 permissions:
   contents: read
   issues: write
+  actions: write
 
 on:
   # Run weekly on Sundays at 3 AM UTC
@@ -52,6 +53,8 @@ jobs:
     # Only runs when real data is available (scheduled or manual trigger
     # with DATA_DIR secret configured). Skipped on regular PRs.
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    outputs:
+      drift_detected: ${{ steps.run-drift.outputs.drift_detected }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -64,6 +67,7 @@ jobs:
             .
 
       - name: Run drift check
+        id: run-drift
         run: |
           docker run --rm \
             -e REFERENCE_DATA_PATH=/data/reference.parquet \
@@ -74,6 +78,9 @@ jobs:
 
           if [ "${DRIFT_EXIT}" = "1" ]; then
             echo "::warning::Drift detected in recommendation data"
+            echo "drift_detected=true" >> $GITHUB_OUTPUT
+          else
+            echo "drift_detected=false" >> $GITHUB_OUTPUT
           fi
         continue-on-error: true
 
@@ -85,11 +92,26 @@ jobs:
           path: drift_reports/
           if-no-files-found: ignore
 
+  trigger-retrain-on-drift:
+    name: Trigger Retraining on Drift
+    runs-on: ubuntu-latest
+    needs: drift-check
+    if: needs.drift-check.outputs.drift_detected == 'true'
+    steps:
+      - name: Dispatch retraining pipeline
+        run: |
+          gh workflow run scheduled-retrain.yml \
+            --ref ${{ github.ref_name }} \
+            --field force_retrain=true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+
   notify-on-drift:
     name: Notify on Drift Detection
     runs-on: ubuntu-latest
     needs: drift-check
-    if: failure()
+    if: needs.drift-check.outputs.drift_detected == 'true'
     steps:
       - name: Create Issue on Drift
         uses: actions/github-script@v7
