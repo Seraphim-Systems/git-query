@@ -4,6 +4,7 @@ from typing import List, Dict, Any
 from ..models import RecommendationRequest, RepositoryResult
 from ..database import db_manager
 from ..config import settings
+from ..services.language_enricher import LanguageEnricherService
 from .hybrid import HybridRetrievalEngine
 
 
@@ -22,11 +23,15 @@ class PersonalizedEngine(HybridRetrievalEngine):
         super().__init__(embedding_service, reranker_service)
         self.name = "personalized"
         self.version = "1.0.0"
+        self.language_enricher = LanguageEnricherService()
 
     async def recommend(
         self, request: RecommendationRequest
     ) -> List[RepositoryResult]:
         """Generate personalized recommendations."""
+
+        # Enrich request with language preferences
+        request = await self.language_enricher.enrich(request)
 
         # Get base recommendations from hybrid engine
         results = await super().recommend(request)
@@ -60,10 +65,7 @@ class PersonalizedEngine(HybridRetrievalEngine):
         for result in results:
             boost = 0.0
 
-            # Language preference boost
-            if result.language and result.language in prefs.language_preferences:
-                lang_pref = prefs.language_preferences[result.language]
-                boost += lang_pref * settings.personalization_weight
+            # Language preference boost is now handled natively by hybrid.py via RRF
 
             # Topic preference boost (if available in repo data)
             # This would require topics to be part of the result
@@ -96,6 +98,8 @@ class PersonalizedEngine(HybridRetrievalEngine):
         explanation["personalization"] = "User preferences applied to boost ranking"
 
         if request.user_id:
+            # Fetch preferences once here; _apply_personalization fetches
+            # independently during recommend() — both paths share no state.
             prefs = await db_manager.get_user_preferences(request.user_id)
             if prefs:
                 explanation["user_interactions"] = prefs.total_interactions

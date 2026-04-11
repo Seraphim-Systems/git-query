@@ -106,7 +106,7 @@ class TestImports:
 
         spec = importlib.util.spec_from_file_location(
             "_lgbm_test",
-            Path("src/recommender/training/lgbm_ranker.py"),
+            Path(__file__).parents[2] / "src/recommender/training/lgbm_ranker.py",
         )
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
@@ -121,7 +121,7 @@ class TestImports:
 
         spec = importlib.util.spec_from_file_location(
             "_lgbm_test2",
-            Path("src/recommender/training/lgbm_ranker.py"),
+            Path(__file__).parents[2] / "src/recommender/training/lgbm_ranker.py",
         )
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
@@ -134,7 +134,7 @@ class TestImports:
 
         spec = importlib.util.spec_from_file_location(
             "_lgbm_test3",
-            Path("src/recommender/training/lgbm_ranker.py"),
+            Path(__file__).parents[2] / "src/recommender/training/lgbm_ranker.py",
         )
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)

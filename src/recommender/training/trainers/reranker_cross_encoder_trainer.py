@@ -3,18 +3,18 @@
 import logging
 from typing import Dict, Any, List
 from sentence_transformers import CrossEncoder, InputExample
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 import shutil
 import glob
 
-from ..config import settings
-from ..models import ModelMetadata
+from ...config import settings
+from ...models import ModelMetadata
 
 logger = logging.getLogger(__name__)
 
 
-class RerankerTrainer:
+class RerankerCrossEncoderTrainer:
     """
     Trainer for cross-encoder reranking models.
 
@@ -63,7 +63,7 @@ class RerankerTrainer:
 
         output_path = os.path.join(
             settings.model_path,
-            f"reranker_{variant}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}",
+            f"reranker_{variant}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}",
         )
 
         def train_callback(score: float, epoch: int, steps: int):
@@ -85,7 +85,7 @@ class RerankerTrainer:
 
         # Save metadata via registry
         metadata = ModelMetadata(
-            model_id=f"reranker_{variant}_{datetime.utcnow().timestamp()}",
+            model_id=f"reranker_{variant}_{datetime.now(timezone.utc).timestamp()}",
             model_type="cross_encoder",
             variant=variant,
             version="1.0.0",
@@ -96,12 +96,12 @@ class RerankerTrainer:
                 "batch_size": batch_size,
             },
             metrics={"num_examples": float(len(train_examples))},
-            trained_at=datetime.utcnow(),
+            trained_at=datetime.now(timezone.utc),
             is_active=False,
             status="candidate"
         )
 
-        from ..services.registry_service import ModelRegistryService
+        from ...services.registry_service import ModelRegistryService
         registry = ModelRegistryService()
         await registry.register_model(metadata)
 
@@ -114,7 +114,7 @@ class RerankerTrainer:
     def _save_checkpoint(self, epoch: int, metrics: Dict[str, Any], variant: str):
         """
         Save training checkpoint and prune old ones.
-        
+
         Args:
             epoch: Current epoch number (1-based)
             metrics: Current metrics
@@ -122,24 +122,24 @@ class RerankerTrainer:
         """
         checkpoint_dir = os.path.join(settings.checkpoint_path, variant)
         os.makedirs(checkpoint_dir, exist_ok=True)
-        
+
         epoch_path = os.path.join(checkpoint_dir, f"epoch_{epoch}")
-        
+
         logger.info(f"Saving checkpoint to {epoch_path}")
         self.model.save(epoch_path)
-        
+
         # Prune old checkpoints
         self._prune_checkpoints(checkpoint_dir)
 
     def _prune_checkpoints(self, checkpoint_dir: str):
         """
         Keep only the latest N checkpoints in the directory.
-        
+
         Args:
             checkpoint_dir: Directory containing checkpoints
         """
         checkpoints = glob.glob(os.path.join(checkpoint_dir, "epoch_*"))
-        
+
         # Sort by epoch number
         def get_epoch_num(path):
             try:
@@ -147,9 +147,9 @@ class RerankerTrainer:
                 return int(dirname.split("_")[-1])
             except (ValueError, IndexError):
                 return -1
-                
+
         checkpoints.sort(key=get_epoch_num)
-        
+
         if len(checkpoints) > self.checkpoint_save_total_limit:
             to_delete = checkpoints[:-self.checkpoint_save_total_limit]
             for path in to_delete:
@@ -189,11 +189,10 @@ class RerankerTrainer:
 
     def _repo_to_text(self, repo: Dict[str, Any]) -> str:
         """Convert repository data to text."""
-        from .utils import prepare_repo_text
+        from ..utils import prepare_repo_text
         return prepare_repo_text(repo)
 
     def _create_dataloader(self, examples: List[InputExample], batch_size: int):
         """Create DataLoader for training."""
         from torch.utils.data import DataLoader
         return DataLoader(examples, shuffle=True, batch_size=batch_size)
-

@@ -10,6 +10,7 @@ Covers:
 
 import asyncio
 import inspect
+import os
 import numpy as np
 import pytest
 from datetime import datetime, timezone
@@ -19,6 +20,7 @@ from unittest.mock import AsyncMock, MagicMock, patch, call
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_service(model_name: str = "fake-model"):
     """Return an EmbeddingService with a pre-wired mock model (no HuggingFace calls)."""
@@ -58,6 +60,7 @@ def _make_repo_result(**kwargs):
 # ===========================================================================
 # load_model
 # ===========================================================================
+
 
 class TestLoadModel:
     """Behaviour of EmbeddingService.load_model — specifically the _loaded_path guard."""
@@ -130,6 +133,7 @@ class TestLoadModel:
 # load_active_model
 # ===========================================================================
 
+
 class TestLoadActiveModel:
     """Behaviour of EmbeddingService.load_active_model — registry integration."""
 
@@ -189,13 +193,17 @@ class TestLoadActiveModel:
         mock_registry = AsyncMock()
         mock_registry.get_active_model.return_value = active
 
-        full_path = f"{settings.model_path}/{active.path}"
+        full_path = os.path.join(settings.model_path, active.path)
 
         with patch(
             "src.recommender.services.registry_service.ModelRegistryService",
             return_value=mock_registry,
-        ), patch("src.recommender.services.embedding_service.os.path.exists", return_value=True), \
-                patch.object(svc, "load_model") as mock_load:
+        ), patch(
+            "src.recommender.services.embedding_service.os.path.exists",
+            return_value=True,
+        ), patch.object(
+            svc, "load_model"
+        ) as mock_load:
             await svc.load_active_model()
 
         mock_load.assert_called_once_with(full_path)
@@ -219,8 +227,12 @@ class TestLoadActiveModel:
         with patch(
             "src.recommender.services.registry_service.ModelRegistryService",
             return_value=mock_registry,
-        ), patch("src.recommender.services.embedding_service.os.path.exists", return_value=False), \
-                patch.object(svc, "load_model") as mock_load:
+        ), patch(
+            "src.recommender.services.embedding_service.os.path.exists",
+            return_value=False,
+        ), patch.object(
+            svc, "load_model"
+        ) as mock_load:
             await svc.load_active_model()
 
         mock_load.assert_called_once_with("default-embed-model")
@@ -231,6 +243,7 @@ class TestLoadActiveModel:
 # ===========================================================================
 # embed_text
 # ===========================================================================
+
 
 class TestEmbedText:
     """Behaviour of EmbeddingService.embed_text."""
@@ -272,6 +285,7 @@ class TestEmbedText:
 # embed_batch
 # ===========================================================================
 
+
 class TestEmbedBatch:
     """Behaviour of EmbeddingService.embed_batch."""
 
@@ -306,6 +320,7 @@ class TestEmbedBatch:
 # ===========================================================================
 # get_dimension
 # ===========================================================================
+
 
 class TestGetDimension:
     """Behaviour of EmbeddingService.get_dimension."""

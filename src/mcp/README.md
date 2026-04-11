@@ -118,6 +118,38 @@ Calls `GET http://recommender:8095/preferences/{user_id}` to retrieve learned pr
 | --------- | ------ | -------- | ------------------------------- |
 | `user_id` | string | yes      | The user whose profile to fetch |
 
+---
+
+### `query_repository_data`
+
+Runs a read-only MongoDB query over repository-related collections.
+
+| Parameter    | Type    | Required | Description                                                       |
+| ------------ | ------- | -------- | ----------------------------------------------------------------- |
+| `collection` | string  | yes      | Collection name, e.g. `repositories`, `raw_repositories`, `users` |
+| `filters`    | object  | no       | MongoDB filter object                                             |
+| `projection` | array   | no       | List of fields to include                                         |
+| `sort_by`    | string  | no       | Field name for sorting                                            |
+| `sort_order` | string  | no       | `asc` or `desc` (default `desc`)                                  |
+| `limit`      | integer | no       | Max number of docs to return (1-100, default 20)                  |
+| `skip`       | integer | no       | Number of matched docs to skip                                    |
+| `database`   | string  | no       | Optional DB name (defaults to configured Mongo database)          |
+
+---
+
+### `explain_repository`
+
+Explains what a repository is about by combining MongoDB metadata and GitHub API/README data.
+
+| Parameter                  | Type    | Required | Description                                        |
+| -------------------------- | ------- | -------- | -------------------------------------------------- |
+| `repo_url`                 | string  | no       | GitHub URL, e.g. `https://github.com/owner/repo`   |
+| `full_name`                | string  | no       | GitHub full name, e.g. `owner/repo`                |
+| `include_database_context` | boolean | no       | Include MongoDB repository metadata when available |
+| `include_readme_excerpt`   | boolean | no       | Fetch and include short README excerpt from GitHub |
+
+If no `repo_url`/`full_name` is provided, this tool falls back to explaining the local Git-Query project from `README.md`.
+
 ## Environment variables (hooks)
 
 All settings are read from the environment (or a `.env` file at repository root).
@@ -198,5 +230,38 @@ curl -X POST http://localhost:8090/tools/execute \
   -d '{
     "tool_name": "get_user_preferences",
     "parameters": { "user_id": "user-123" }
+  }'
+```
+
+**Query repository data (MongoDB)**
+
+```sh
+curl -X POST http://localhost:8090/tools/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tool_name": "query_repository_data",
+    "parameters": {
+      "collection": "repositories",
+      "filters": {"language": "Python", "stars": {"$gte": 500}},
+      "projection": ["full_name", "description", "language", "stars", "url"],
+      "sort_by": "stars",
+      "sort_order": "desc",
+      "limit": 5
+    }
+  }'
+```
+
+**Explain a GitHub repository**
+
+```sh
+curl -X POST http://localhost:8090/tools/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tool_name": "explain_repository",
+    "parameters": {
+      "repo_url": "https://github.com/pallets/flask",
+      "include_database_context": true,
+      "include_readme_excerpt": true
+    }
   }'
 ```

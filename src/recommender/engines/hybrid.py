@@ -1,11 +1,13 @@
 """Hybrid retrieval engine - combines embeddings + keyword search."""
 
+import asyncio
+import hashlib
+import json
 from typing import List, Dict, Any, Set
 from ..models import RecommendationRequest, RepositoryResult
 from ..database import db_manager
 from ..config import settings
 from .base import RecommendationEngine
-import asyncio
 
 
 class HybridRetrievalEngine(RecommendationEngine):
@@ -27,6 +29,22 @@ class HybridRetrievalEngine(RecommendationEngine):
     ) -> List[RepositoryResult]:
         """Generate recommendations using hybrid retrieval."""
 
+        # Build a deterministic cache key from parameters that affect results
+        cache_key_parts = {
+            "query": request.query,
+            "language": request.language,
+            "min_stars": request.min_stars,
+            "license": request.license,
+            "top_k": getattr(request, "top_k", settings.final_top_k),
+        }
+        cache_key = "hybrid:" + hashlib.md5(
+            json.dumps(cache_key_parts, sort_keys=True).encode()
+        ).hexdigest()
+
+        cached = await db_manager.cache_get(cache_key)
+        if cached is not None:
+            return [RepositoryResult(**r) for r in cached]
+
         # Step 1: Parallel retrieval from both sources
         semantic_task = self._semantic_search(request)
         keyword_task = self._keyword_search(request)
@@ -37,7 +55,7 @@ class HybridRetrievalEngine(RecommendationEngine):
 
         # Step 2: Fuse results using Reciprocal Rank Fusion
         fused_results = self._reciprocal_rank_fusion(
-            semantic_results, keyword_results
+            semantic_results, keyword_results, request
         )
 
         # Step 3: Apply hard filters
@@ -59,6 +77,9 @@ class HybridRetrievalEngine(RecommendationEngine):
         # Add rank
         for idx, result in enumerate(final_results):
             result.rank = idx + 1
+
+        # Cache the results for subsequent identical requests
+        await db_manager.cache_set(cache_key, [r.model_dump() for r in final_results])
 
         return final_results
 
@@ -137,7 +158,7 @@ class HybridRetrievalEngine(RecommendationEngine):
         ]
 
     def _reciprocal_rank_fusion(
-        self, semantic_results: List[Dict], keyword_results: List[Dict]
+        self, semantic_results: List[Dict], keyword_results: List[Dict], request: RecommendationRequest
     ) -> List[RepositoryResult]:
         """Fuse results using Reciprocal Rank Fusion."""
         scores: Dict[str, float] = {}
@@ -162,6 +183,18 @@ class HybridRetrievalEngine(RecommendationEngine):
             if "repo_data" in result:
                 # Keyword data is usually richer, so it takes precedence
                 repo_data[repo_id] = result["repo_data"]
+
+        # Apply soft boost for preferred languages
+        preferred_langs = []
+        if getattr(request, "preferred_languages", None):
+            preferred_langs = [l.lower() for l in request.preferred_languages]
+
+        for repo_id, score in scores.items():
+            data = repo_data.get(repo_id) or {}
+            repo_lang = data.get("language")
+            if repo_lang and str(repo_lang).lower() in preferred_langs:
+                scores[repo_id] *= (1 + getattr(settings, "personalization_weight", 0.15))
+                sources.setdefault(repo_id, set()).add("personalization_boost")
 
         # Sort by fused score
         sorted_repos = sorted(scores.items(), key=lambda x: x[1], reverse=True)
@@ -209,16 +242,16 @@ class HybridRetrievalEngine(RecommendationEngine):
         filtered = []
 
         for result in results:
-            # Language filter
-            if request.language and result.language != request.language:
+            # Language filter (case-insensitive)
+            if request.language and (result.language or "").lower() != (request.language or "").lower():
                 continue
 
             # Min stars filter
             if request.min_stars and result.stars < request.min_stars:
                 continue
 
-            # License filter
-            if request.license and result.license != request.license:
+            # License filter (case-insensitive)
+            if request.license and (result.license or "").lower() != (request.license or "").lower():
                 continue
 
             filtered.append(result)

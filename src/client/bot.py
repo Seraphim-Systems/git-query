@@ -20,6 +20,8 @@ You have access to the following tools:
 - recommend_repositories: Find GitHub repos matching a query, with optional filters (language, stars, licence, etc.)
 - log_repository_interaction: Record when a user clicks, saves, or rates a repository
 - get_user_preferences: View a user's learned language/topic preferences
+- query_repository_data: Run read-only MongoDB queries for repository data
+- explain_repository: Explain a repository from URL/full_name using DB + GitHub metadata
 - get_recommendation: Legacy recommendation tool
 - search_items: Generic item search
 
@@ -55,7 +57,7 @@ async def recommend_repositories(
     query: str,
     language: Optional[str] = None,
     min_stars: Optional[int] = None,
-    license: Optional[str] = None,
+    repo_license: Optional[str] = None,
     max_age_days: Optional[int] = None,
     top_k: int = 10,
     enable_personalization: bool = True,
@@ -69,7 +71,7 @@ async def recommend_repositories(
         query: Natural-language description of what to find
         language: Filter by programming language (e.g. Python)
         min_stars: Minimum number of GitHub stars
-        license: Filter by licence type (e.g. MIT)
+        repo_license: Filter by licence type (e.g. MIT)
         max_age_days: Exclude repos not updated in this many days
         top_k: Number of results to return (1-50)
         enable_personalization: Apply user-preference personalisation
@@ -87,8 +89,8 @@ async def recommend_repositories(
         params["language"] = language
     if min_stars is not None:
         params["min_stars"] = min_stars
-    if license:
-        params["license"] = license
+    if repo_license:
+        params["license"] = repo_license
     if max_age_days is not None:
         params["max_age_days"] = max_age_days
     if variant:
@@ -96,7 +98,9 @@ async def recommend_repositories(
 
     logger.info("Tool called: recommend_repositories(query=%s)", query)
     result = await mcp_client.execute_tool("recommend_repositories", params)
-    ctx.deps.tool_calls.append({"tool": "recommend_repositories", "parameters": params, "result": result})
+    ctx.deps.tool_calls.append(
+        {"tool": "recommend_repositories", "parameters": params, "result": result}
+    )
     return result
 
 
@@ -131,9 +135,15 @@ async def log_repository_interaction(
     if position_in_results is not None:
         params["position_in_results"] = position_in_results
 
-    logger.info("Tool called: log_repository_interaction(repo_id=%s, type=%s)", repo_id, interaction_type)
+    logger.info(
+        "Tool called: log_repository_interaction(repo_id=%s, type=%s)",
+        repo_id,
+        interaction_type,
+    )
     result = await mcp_client.execute_tool("log_repository_interaction", params)
-    ctx.deps.tool_calls.append({"tool": "log_repository_interaction", "parameters": params, "result": result})
+    ctx.deps.tool_calls.append(
+        {"tool": "log_repository_interaction", "parameters": params, "result": result}
+    )
     return result
 
 
@@ -148,7 +158,75 @@ async def get_user_preferences(ctx: RunContext[ChatbotDependencies]) -> dict:
 
     logger.info("Tool called: get_user_preferences(user_id=%s)", user_id)
     result = await mcp_client.execute_tool("get_user_preferences", {"user_id": user_id})
-    ctx.deps.tool_calls.append({"tool": "get_user_preferences", "parameters": {"user_id": user_id}, "result": result})
+    ctx.deps.tool_calls.append(
+        {
+            "tool": "get_user_preferences",
+            "parameters": {"user_id": user_id},
+            "result": result,
+        }
+    )
+    return result
+
+
+@agent.tool
+async def query_repository_data(
+    ctx: RunContext[ChatbotDependencies],
+    collection: str,
+    criteria: Optional[dict[str, Any]] = None,
+    projection: Optional[list[str]] = None,
+    sort_by: Optional[str] = None,
+    sort_order: str = "desc",
+    limit: int = 20,
+    skip: int = 0,
+    database: Optional[str] = None,
+) -> dict:
+    """Run a read-only MongoDB query for repository-related data."""
+    params: dict[str, Any] = {
+        "collection": collection,
+        "sort_order": sort_order,
+        "limit": limit,
+        "skip": skip,
+    }
+    if criteria is not None:
+        params["filters"] = criteria
+    if projection is not None:
+        params["projection"] = projection
+    if sort_by is not None:
+        params["sort_by"] = sort_by
+    if database is not None:
+        params["database"] = database
+
+    logger.info("Tool called: query_repository_data(collection=%s)", collection)
+    result = await mcp_client.execute_tool("query_repository_data", params)
+    ctx.deps.tool_calls.append(
+        {"tool": "query_repository_data", "parameters": params, "result": result}
+    )
+    return result
+
+
+@agent.tool
+async def explain_repository(
+    ctx: RunContext[ChatbotDependencies],
+    repo_url: Optional[str] = None,
+    full_name: Optional[str] = None,
+    include_database_context: bool = True,
+    include_readme_excerpt: bool = True,
+) -> dict:
+    """Explain what a repository is about from DB and GitHub metadata."""
+    params: dict[str, Any] = {
+        "include_database_context": include_database_context,
+        "include_readme_excerpt": include_readme_excerpt,
+    }
+    if repo_url is not None:
+        params["repo_url"] = repo_url
+    if full_name is not None:
+        params["full_name"] = full_name
+
+    logger.info("Tool called: explain_repository(repo=%s)", full_name or repo_url)
+    result = await mcp_client.execute_tool("explain_repository", params)
+    ctx.deps.tool_calls.append(
+        {"tool": "explain_repository", "parameters": params, "result": result}
+    )
     return result
 
 
@@ -157,11 +235,19 @@ async def get_recommendation(
     ctx: RunContext[ChatbotDependencies], user_id: str, category: str = "general"
 ) -> dict:
     """Get personalized recommendations for a user (legacy tool)."""
-    logger.info("Tool called: get_recommendation(user_id=%s, category=%s)", user_id, category)
+    logger.info(
+        "Tool called: get_recommendation(user_id=%s, category=%s)", user_id, category
+    )
     result = await mcp_client.execute_tool(
         "get_recommendation", {"user_id": user_id, "category": category}
     )
-    ctx.deps.tool_calls.append({"tool": "get_recommendation", "parameters": {"user_id": user_id, "category": category}, "result": result})
+    ctx.deps.tool_calls.append(
+        {
+            "tool": "get_recommendation",
+            "parameters": {"user_id": user_id, "category": category},
+            "result": result,
+        }
+    )
     return result
 
 
@@ -171,8 +257,16 @@ async def search_items(
 ) -> dict:
     """Search for items in the system (legacy tool)."""
     logger.info("Tool called: search_items(query=%s, limit=%d)", query, limit)
-    result = await mcp_client.execute_tool("search_items", {"query": query, "limit": limit})
-    ctx.deps.tool_calls.append({"tool": "search_items", "parameters": {"query": query, "limit": limit}, "result": result})
+    result = await mcp_client.execute_tool(
+        "search_items", {"query": query, "limit": limit}
+    )
+    ctx.deps.tool_calls.append(
+        {
+            "tool": "search_items",
+            "parameters": {"query": query, "limit": limit},
+            "result": result,
+        }
+    )
     return result
 
 
@@ -188,9 +282,5 @@ async def chat(message: str, user_id: str = None) -> tuple[str, list[dict]]:
         Tuple of (response text, list of tool calls made)
     """
     deps = ChatbotDependencies(user_id=user_id)
-    try:
-        result = await agent.run(message, deps=deps)
-        return result.output, deps.tool_calls
-    except Exception as e:
-        logger.error("Error processing chat message: %s", e)
-        return f"I apologize, but I encountered an error: {str(e)}", deps.tool_calls
+    result = await agent.run(message, deps=deps)
+    return result.output, deps.tool_calls

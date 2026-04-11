@@ -76,8 +76,9 @@ class TestGetSignalWeight:
         thumbs_down = service._get_signal_weight(InteractionType.THUMBS_DOWN)
         assert thumbs_down < service._get_signal_weight(InteractionType.DISMISS)
 
-    def test_view_weight_is_zero(self, service):
-        assert service._get_signal_weight(InteractionType.VIEW) == 0.0
+    def test_view_weight_is_low_positive(self, service):
+        view = service._get_signal_weight(InteractionType.VIEW)
+        assert 0.0 < view < service._get_signal_weight(InteractionType.CLICK)
 
 
 # ---------------------------------------------------------------------------

@@ -23,14 +23,18 @@ class ModelRegistryService:
     async def register_model(self, metadata: ModelMetadata) -> str:
         """Register a new model in the registry."""
         logger.info(
-            "Registering new model: %s (type: %s)", metadata.model_id, metadata.model_type
+            "Registering new model: %s (type: %s)",
+            metadata.model_id,
+            metadata.model_type,
         )
         await db_manager.save_model_metadata(metadata)
         return metadata.model_id
 
     async def get_active_model(
         self,
-        model_type: Literal["embedding", "cross_encoder", "personalization"],
+        model_type: Literal[
+            "embedding", "cross_encoder", "personalization", "reranker"
+        ],
         variant: str = "default",
     ) -> Optional[ModelMetadata]:
         """Get the currently active model for a specific type and variant."""
@@ -39,10 +43,13 @@ class ModelRegistryService:
     async def promote_model(self, model_id: str) -> bool:
         """Promote a model to 'active' status.
 
-        Atomic operation:
+        Steps:
         1. Look up the model to determine its type/variant.
         2. Archive all currently active models of that type/variant.
         3. Activate the specified model.
+
+        NOTE: these two writes are not atomic. On failure between them,
+        call promote_model again to recover (deactivate is idempotent).
         """
         try:
             model = await db_manager.get_model_by_id(model_id)
@@ -57,7 +64,7 @@ class ModelRegistryService:
             return True
 
         except Exception as e:
-            logger.error("Failed to promote model %s: %s", model_id, e)
+            logger.error("Failed to promote model %s: %s", model_id, e, exc_info=True)
             return False
 
     async def list_models(
