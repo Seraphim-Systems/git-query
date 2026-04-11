@@ -83,6 +83,8 @@ jobs:
           set -e
           cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query
 
+          git pull origin ${{ github.ref_name }}
+
           # Load drift-specific env vars
           set -a && source .env.drift && set +a
 

@@ -17,9 +17,8 @@ import logging
 import os
 import sys
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -35,11 +34,11 @@ MIN_SESSION_SIZE = 3
 DEFAULT_EVAL_DAYS = 30
 
 
-def _fetch_interactions(api_base_url: str, api_key: str, days: int) -> List[Dict]:
+def _fetch_interactions(api_base_url: str, api_key: str, days: int) -> list[dict]:
     """Fetch recent interactions from MongoDB via the gateway API."""
     import requests
 
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    cutoff = (datetime.now(UTC) - timedelta(days=days)).isoformat()
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     try:
         response = requests.post(
@@ -63,14 +62,14 @@ def _fetch_interactions(api_base_url: str, api_key: str, days: int) -> List[Dict
         return []
 
 
-def _build_sessions(interactions: List[Dict]) -> Dict[Tuple[str, str], Dict[str, bool]]:
+def _build_sessions(interactions: list[dict]) -> dict[tuple[str, str], dict[str, bool]]:
     """Group interactions into (query, user_id) sessions.
 
     Returns:
         Mapping of (query, user_id) → {repo_id: is_relevant}
         where is_relevant = True if the repo was clicked/saved/thumbs_up.
     """
-    sessions: Dict[Tuple[str, str], Dict[str, bool]] = defaultdict(dict)
+    sessions: dict[tuple[str, str], dict[str, bool]] = defaultdict(dict)
     for doc in interactions:
         query = doc.get("query", "")
         user_id = doc.get("user_id", "")
@@ -88,7 +87,7 @@ def _build_sessions(interactions: List[Dict]) -> Dict[Tuple[str, str], Dict[str,
     return sessions
 
 
-def precision_at_k(relevant_set: set, ranked_ids: List[str], k: int) -> float:
+def precision_at_k(relevant_set: set, ranked_ids: list[str], k: int) -> float:
     """Fraction of top-k results that are relevant."""
     if not ranked_ids or not relevant_set:
         return 0.0
@@ -97,7 +96,7 @@ def precision_at_k(relevant_set: set, ranked_ids: List[str], k: int) -> float:
     return hits / k
 
 
-def ndcg_at_k(relevant_set: set, ranked_ids: List[str], k: int) -> float:
+def ndcg_at_k(relevant_set: set, ranked_ids: list[str], k: int) -> float:
     """Normalised Discounted Cumulative Gain at k."""
     if not ranked_ids or not relevant_set:
         return 0.0
@@ -111,9 +110,9 @@ def ndcg_at_k(relevant_set: set, ranked_ids: List[str], k: int) -> float:
 
 
 def evaluate(
-    sessions: Dict[Tuple[str, str], Dict[str, bool]],
-    k_values: Tuple[int, ...] = (5, 10),
-) -> Dict[str, float]:
+    sessions: dict[tuple[str, str], dict[str, bool]],
+    k_values: tuple[int, ...] = (5, 10),
+) -> dict[str, float]:
     """Compute Precision@K and NDCG@K averaged across all qualifying sessions.
 
     A session qualifies if it has at least MIN_SESSION_SIZE interactions and
@@ -124,11 +123,11 @@ def evaluate(
     original score list stored, we use the order repos appear in the positive
     set as a proxy for "model ranked them and user interacted with them."
     """
-    metrics: Dict[str, List[float]] = {f"precision_at_{k}": [] for k in k_values}
+    metrics: dict[str, list[float]] = {f"precision_at_{k}": [] for k in k_values}
     metrics.update({f"ndcg_at_{k}": [] for k in k_values})
 
     qualifying = 0
-    for (query, user_id), repo_relevance in sessions.items():
+    for (_query, _user_id), repo_relevance in sessions.items():
         if len(repo_relevance) < MIN_SESSION_SIZE:
             continue
         relevant_set = {r for r, is_rel in repo_relevance.items() if is_rel}
@@ -151,7 +150,7 @@ def evaluate(
     return {name: float(np.mean(vals)) for name, vals in metrics.items() if vals}
 
 
-def load_previous_metrics(metrics_path: Path) -> Optional[Dict[str, float]]:
+def load_previous_metrics(metrics_path: Path) -> dict[str, float] | None:
     """Load metrics from the previous evaluation run if available."""
     if not metrics_path.exists():
         return None
@@ -163,8 +162,8 @@ def load_previous_metrics(metrics_path: Path) -> Optional[Dict[str, float]]:
 
 
 def check_regression(
-    current: Dict[str, float],
-    previous: Dict[str, float],
+    current: dict[str, float],
+    previous: dict[str, float],
     threshold: float = 0.10,
 ) -> bool:
     """Return True if any metric dropped by more than *threshold* (relative).
@@ -242,7 +241,7 @@ def main() -> None:
     # --- Save current metrics for next comparison ---
     metrics_path.parent.mkdir(parents=True, exist_ok=True)
     with open(metrics_path, "w") as f:
-        json.dump({**current_metrics, "timestamp": datetime.now(timezone.utc).isoformat()}, f, indent=2)
+        json.dump({**current_metrics, "timestamp": datetime.now(UTC).isoformat()}, f, indent=2)
     logger.info("Offline evaluation passed. Metrics saved to %s", metrics_path)
 
 
