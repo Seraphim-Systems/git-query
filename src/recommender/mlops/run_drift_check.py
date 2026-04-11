@@ -19,9 +19,9 @@ Environment variables (optional — enable additional checks):
     EVIDENTLY_WORKSPACE_PATH  Evidently workspace path for UI display
 
 Exit codes:
-    0 — no drift detected (or insufficient data to evaluate)
+    0 — no drift detected, insufficient data, or reference data not yet available
     1 — drift detected
-    2 — missing required environment variables or data
+    2 — missing required environment variables or invalid configuration
 """
 
 from __future__ import annotations
@@ -210,9 +210,13 @@ def main() -> None:
     logger.info("Loading reference data from: %s", reference_path)
     try:
         reference_df = _load_parquet(reference_path)
-    except FileNotFoundError as e:
-        logger.error("%s", e)
-        sys.exit(2)
+    except FileNotFoundError:
+        logger.warning(
+            "Reference data not found at %s — no training run has completed yet. "
+            "Skipping drift check.",
+            reference_path,
+        )
+        sys.exit(0)
     logger.info("Reference data shape: %s", reference_df.shape)
 
     # --- Current data (live repos from MongoDB or file) ---
