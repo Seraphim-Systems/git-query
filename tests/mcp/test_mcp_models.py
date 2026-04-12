@@ -209,7 +209,6 @@ def test_tool_execute_request_model_dump_contains_parameters():
         "parameters": {"query": "machine learning", "top_k": 3},
     }
 
-
 def test_tool_parameter_required_flag_false():
     param = ToolParameter(
         name="optional_param",
@@ -218,3 +217,11 @@ def test_tool_parameter_required_flag_false():
         required=False,
     )
     assert param.required is False
+
+def test_tool_execute_response_with_both_result_and_error():
+    response = ToolExecuteResponse(
+        success=False,
+        result=None,
+        error="failure"
+    )
+    assert response.error == "failure"
