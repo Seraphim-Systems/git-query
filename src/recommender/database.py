@@ -59,9 +59,8 @@ class DatabaseManager:
         )
         await self.db[settings.user_prefs_collection].create_index([("user_id", 1)], unique=True)
 
-        # Repository text index — created on both collections so keyword search
-        # works whether raw or normalised data is active.
-        for collection_name in {settings.repos_collection, settings.raw_repos_collection}:
+        # Repository text index on the repositories collection.
+        for collection_name in {settings.repos_collection}:
             try:
                 await self.db[collection_name].create_index(
                     [
@@ -150,12 +149,8 @@ class DatabaseManager:
         limit: int = 100,
         skip: int = 0,
     ) -> List[Dict[str, Any]]:
-        """Search repositories with filters.
-
-        Queries repos_collection first; if empty falls back to
-        raw_repos_collection so Kaggle-imported data is always searchable.
-        """
-        for collection_name in [settings.repos_collection, settings.raw_repos_collection]:
+        """Search repositories with filters."""
+        for collection_name in [settings.repos_collection]:
             cursor = (
                 self.db[collection_name]
                 .find(query_filter)

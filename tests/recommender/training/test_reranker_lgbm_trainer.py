@@ -49,7 +49,7 @@ class TestRerankerLGBMTrainer:
         with pytest.raises(ValueError, match="grouped_df"):
             await trainer.train({}, variant="default")
 
-    async def test_train_calls_lgbm_ranker_train(self):
+    async def test_train_calls_lgbm_ranker_train(self, tmp_path):
         from src.recommender.training.trainers.reranker_lgbm_trainer import (
             RerankerLGBMTrainer,
         )
@@ -64,12 +64,13 @@ class TestRerankerLGBMTrainer:
             patch(f"{_MODULE}.LGBMRanker", return_value=mock_ranker),
             patch("src.recommender.services.registry_service.ModelRegistryService", return_value=mock_registry),
             patch("src.recommender.models.ModelMetadata"),
+            patch.dict("os.environ", {"MODEL_PATH": str(tmp_path)}),
         ):
             await RerankerLGBMTrainer().train(training_data, variant="default")
 
         mock_ranker.train.assert_called_once()
 
-    async def test_train_saves_model(self):
+    async def test_train_saves_model(self, tmp_path):
         from src.recommender.training.trainers.reranker_lgbm_trainer import (
             RerankerLGBMTrainer,
         )
@@ -81,6 +82,7 @@ class TestRerankerLGBMTrainer:
             patch(f"{_MODULE}.LGBMRanker", return_value=mock_ranker),
             patch("src.recommender.services.registry_service.ModelRegistryService", return_value=mock_registry),
             patch("src.recommender.models.ModelMetadata"),
+            patch.dict("os.environ", {"MODEL_PATH": str(tmp_path)}),
         ):
             await RerankerLGBMTrainer().train(training_data, variant="default")
 
@@ -107,7 +109,7 @@ class TestRerankerLGBMTrainer:
         save_path = mock_ranker.save.call_args.args[0]
         assert save_path.startswith("/tmp/explicit-model-dir")
 
-    async def test_train_calls_registry_register_model(self):
+    async def test_train_calls_registry_register_model(self, tmp_path):
         from src.recommender.training.trainers.reranker_lgbm_trainer import (
             RerankerLGBMTrainer,
         )
@@ -119,12 +121,13 @@ class TestRerankerLGBMTrainer:
             patch(f"{_MODULE}.LGBMRanker", return_value=mock_ranker),
             patch("src.recommender.services.registry_service.ModelRegistryService", return_value=mock_registry),
             patch("src.recommender.models.ModelMetadata"),
+            patch.dict("os.environ", {"MODEL_PATH": str(tmp_path)}),
         ):
             await RerankerLGBMTrainer().train(training_data, variant="default")
 
         mock_registry.register_model.assert_awaited_once()
 
-    async def test_train_returns_metrics(self):
+    async def test_train_returns_metrics(self, tmp_path):
         from src.recommender.training.trainers.reranker_lgbm_trainer import (
             RerankerLGBMTrainer,
         )
@@ -137,6 +140,7 @@ class TestRerankerLGBMTrainer:
             patch(f"{_MODULE}.LGBMRanker", return_value=mock_ranker),
             patch("src.recommender.services.registry_service.ModelRegistryService", return_value=mock_registry),
             patch("src.recommender.models.ModelMetadata"),
+            patch.dict("os.environ", {"MODEL_PATH": str(tmp_path)}),
         ):
             result = await RerankerLGBMTrainer().train(training_data, variant="default")
 

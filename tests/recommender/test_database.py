@@ -379,31 +379,19 @@ class TestSearchRepositories:
         # raw_repos collection must not be queried
         empty_collection.find.assert_not_called()
 
-    async def test_search_repositories_falls_back_to_raw_collection(self):
+    async def test_search_repositories_returns_empty_when_repos_collection_empty(self):
         from src.recommender.database import db_manager
-
-        raw_doc = {"_id": "xyz789", "name": "raw-repo"}
 
         empty_collection = MagicMock()
         empty_collection.find.return_value = async_cursor([])
 
-        raw_collection = MagicMock()
-        raw_collection.find.return_value = async_cursor([raw_doc])
-
-        def _getitem(name):
-            from src.recommender.config import settings
-            if name == settings.repos_collection:
-                return empty_collection
-            return raw_collection
-
         mock_db = MagicMock()
-        mock_db.__getitem__ = MagicMock(side_effect=_getitem)
+        mock_db.__getitem__ = MagicMock(return_value=empty_collection)
         db_manager.db = mock_db
 
         results = await db_manager.search_repositories({})
 
-        assert len(results) == 1
-        assert results[0]["name"] == "raw-repo"
+        assert results == []
 
     async def test_search_repositories_returns_empty_when_both_empty(self):
         from src.recommender.database import db_manager

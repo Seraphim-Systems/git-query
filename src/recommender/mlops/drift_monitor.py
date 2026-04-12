@@ -83,6 +83,7 @@ class DriftMonitor:
             # validation rejects them. Patch uuid7 to emit UUID4 instead.
             try:
                 import uuid6
+
                 uuid6.uuid7 = lambda: uuid.uuid4()
             except ImportError:
                 pass
@@ -155,9 +156,7 @@ class DriftMonitor:
             scalar_cols = [
                 c
                 for c in shared_cols
-                if c not in TRAINING_ONLY_COLS
-                and _is_scalar_col(reference_data[c])
-                and reference_data[c].notna().any()
+                if c not in TRAINING_ONLY_COLS and _is_scalar_col(reference_data[c]) and reference_data[c].notna().any()
             ]
             reference_data = reference_data[scalar_cols]
             current_data = current_data[scalar_cols]

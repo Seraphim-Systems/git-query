@@ -379,3 +379,186 @@ class TestDriftMonitorIntegration:
             # Check that reports were saved
             report_files = list(Path(tmpdir).glob("*.json"))
             assert len(report_files) > 0
+
+
+# ---------------------------------------------------------------------------
+# P3: Column filtering in check_data_drift
+# ---------------------------------------------------------------------------
+
+
+class TestCheckDataDriftColumnFiltering:
+    """Verify that training-only and non-scalar columns are excluded."""
+
+    def _monitor(self, tmpdir):
+        from src.recommender.mlops.drift_monitor import DriftMonitor
+
+        return DriftMonitor(report_dir=tmpdir)
+
+    def test_training_only_columns_excluded(self):
+        """interaction_score, query_id, query_text must never reach Evidently."""
+        from src.recommender.mlops.drift_monitor import EVIDENTLY_AVAILABLE, DriftMonitor
+
+        if not EVIDENTLY_AVAILABLE:
+            pytest.skip("Evidently not installed")
+
+        import pandas as pd
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            monitor = DriftMonitor(report_dir=tmpdir)
+
+            ref = pd.DataFrame({
+                "stars": [100, 200, 300, 400, 500],
+                "interaction_score": [0.9, 0.8, 0.7, 0.6, 0.5],  # training-only
+                "query_id": [1, 2, 3, 4, 5],                       # training-only
+                "query_text": ["a", "b", "c", "d", "e"],            # training-only
+            })
+            cur = pd.DataFrame({
+                "stars": [110, 210, 310, 410, 510],
+                # training-only cols absent in live data — this must not raise
+            })
+
+            result = monitor.check_data_drift(ref, cur)
+
+        assert result is not None
+        assert "error" not in result
+
+    def test_array_columns_excluded(self):
+        """Columns containing lists/arrays must be dropped before drift check."""
+        from src.recommender.mlops.drift_monitor import EVIDENTLY_AVAILABLE, DriftMonitor
+
+        if not EVIDENTLY_AVAILABLE:
+            pytest.skip("Evidently not installed")
+
+        import pandas as pd
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            monitor = DriftMonitor(report_dir=tmpdir)
+
+            ref = pd.DataFrame({
+                "stars": [100, 200, 300, 400, 500],
+                "topics": [[1, 2], [3], [4, 5], [6], [7, 8]],  # array col
+            })
+            cur = pd.DataFrame({
+                "stars": [110, 210, 310, 410, 510],
+                "topics": [[9], [10, 11], [12], [13, 14], [15]],
+            })
+
+            result = monitor.check_data_drift(ref, cur)
+
+        assert result is not None
+        assert "error" not in result
+
+    def test_all_null_columns_excluded(self):
+        """All-null columns in reference must be dropped."""
+        from src.recommender.mlops.drift_monitor import EVIDENTLY_AVAILABLE, DriftMonitor
+
+        if not EVIDENTLY_AVAILABLE:
+            pytest.skip("Evidently not installed")
+
+        import pandas as pd
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            monitor = DriftMonitor(report_dir=tmpdir)
+
+            ref = pd.DataFrame({
+                "stars": [100, 200, 300, 400, 500],
+                "all_null": [None, None, None, None, None],
+            })
+            cur = pd.DataFrame({
+                "stars": [110, 210, 310, 410, 510],
+                "all_null": [None, None, None, None, None],
+            })
+
+            result = monitor.check_data_drift(ref, cur)
+
+        assert result is not None
+        assert "error" not in result
+
+
+# ---------------------------------------------------------------------------
+# P3: run_full_drift_check orchestration
+# ---------------------------------------------------------------------------
+
+
+class TestRunFullDriftCheckOrchestration:
+    def test_overall_drift_detected_true_when_any_check_fires(self):
+        """overall_drift_detected must be True if any single check returns drift=True."""
+        from src.recommender.mlops.drift_monitor import DriftMonitor
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            monitor = DriftMonitor(report_dir=tmpdir)
+
+            # Stub individual checks: data_drift fires, prediction_drift does not
+            monitor.check_data_drift = MagicMock(
+                return_value={"drift_detected": True, "type": "data_drift", "timestamp": "t"}
+            )
+            monitor.check_prediction_drift = MagicMock(
+                return_value={"drift_detected": False, "type": "prediction_drift", "timestamp": "t"}
+            )
+
+            import pandas as pd
+
+            report = monitor.run_full_drift_check(
+                reference_data=pd.DataFrame({"x": [1]}),
+                current_data=pd.DataFrame({"x": [2]}),
+                reference_scores=[0.5, 0.6],
+                current_scores=[0.4, 0.5],
+            )
+
+        assert report["overall_drift_detected"] is True
+
+    def test_overall_drift_detected_false_when_all_checks_pass(self):
+        from src.recommender.mlops.drift_monitor import DriftMonitor
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            monitor = DriftMonitor(report_dir=tmpdir)
+
+            monitor.check_data_drift = MagicMock(
+                return_value={"drift_detected": False, "type": "data_drift", "timestamp": "t"}
+            )
+            monitor.check_prediction_drift = MagicMock(
+                return_value={"drift_detected": False, "type": "prediction_drift", "timestamp": "t"}
+            )
+
+            import pandas as pd
+
+            report = monitor.run_full_drift_check(
+                reference_data=pd.DataFrame({"x": [1]}),
+                current_data=pd.DataFrame({"x": [2]}),
+                reference_scores=[0.5],
+                current_scores=[0.5],
+            )
+
+        assert report["overall_drift_detected"] is False
+
+    def test_skips_check_when_inputs_are_none(self):
+        """Checks with None inputs must not be called."""
+        from src.recommender.mlops.drift_monitor import DriftMonitor
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            monitor = DriftMonitor(report_dir=tmpdir)
+            monitor.check_embedding_drift = MagicMock()
+
+            monitor.run_full_drift_check(
+                reference_embeddings=None,
+                current_embeddings=None,
+            )
+
+        monitor.check_embedding_drift.assert_not_called()
+
+    def test_checks_dict_contains_run_check_keys(self):
+        from src.recommender.mlops.drift_monitor import DriftMonitor
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            monitor = DriftMonitor(report_dir=tmpdir)
+
+            monitor.check_prediction_drift = MagicMock(
+                return_value={"drift_detected": False, "type": "prediction_drift", "timestamp": "t"}
+            )
+
+            report = monitor.run_full_drift_check(
+                reference_scores=[0.5, 0.6],
+                current_scores=[0.4, 0.5],
+            )
+
+        assert "prediction_drift" in report["checks"]
