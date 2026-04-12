@@ -101,9 +101,7 @@ def ndcg_at_k(relevant_set: set, ranked_ids: list[str], k: int) -> float:
     if not ranked_ids or not relevant_set:
         return 0.0
     top_k = ranked_ids[:k]
-    dcg = sum(
-        1.0 / np.log2(i + 2) for i, r in enumerate(top_k) if r in relevant_set
-    )
+    dcg = sum(1.0 / np.log2(i + 2) for i, r in enumerate(top_k) if r in relevant_set)
     ideal_hits = min(len(relevant_set), k)
     idcg = sum(1.0 / np.log2(i + 2) for i in range(ideal_hits))
     return dcg / idcg if idcg > 0 else 0.0
@@ -178,16 +176,17 @@ def check_regression(
         if drop > threshold:
             logger.error(
                 "Metric regression detected: %s dropped %.1f%% (%.4f → %.4f)",
-                key, 100 * drop, prev_val, current_val,
+                key,
+                100 * drop,
+                prev_val,
+                current_val,
             )
             return True
     return False
 
 
 def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
-    )
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
     api_url = os.getenv("API_BASE_URL")
     api_key = os.getenv("APIKEY_MONGODB")

@@ -23,6 +23,8 @@ volumes:
     name: git-query-training-data
   training-logs:
     name: git-query-training-logs
+  mlflow-runs:
+    name: git-query-mlflow-runs
   huggingface-cache:
     name: git-query-huggingface-cache
 

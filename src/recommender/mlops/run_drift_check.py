@@ -14,6 +14,8 @@ Environment variables (optional — enable additional checks):
     APIKEY_QDRANT             Qdrant API key (falls back to APIKEY_MONGODB)
     QDRANT_COLLECTION         Qdrant collection name (default: repositories_embeddings)
     REFERENCE_EMBEDDINGS_PATH Path to reference embeddings .npy file
+    REFERENCE_SCORES_PATH     Path to reference prediction scores .npy file (enables prediction drift)
+    MODELS_DIR                Directory to search for latest lgbm_*.pkl (default: /app/models)
     CURRENT_DATA_PATH         Path to current data parquet (alternative to live fetch)
     EVIDENTLY_REPORT_PATH     Directory for JSON drift reports (default: /app/drift_reports)
     EVIDENTLY_WORKSPACE_PATH  Evidently workspace path for UI display
@@ -123,19 +125,15 @@ def _fetch_current_embeddings(
         return None
 
 
-def _fetch_interactions_for_ctr(
+def _fetch_raw_interactions(
     api_url: str,
     api_key: str,
-) -> tuple[pd.DataFrame | None, pd.DataFrame | None]:
-    """Fetch user interactions and split into (reference, current) DataFrames.
+) -> pd.DataFrame:
+    """Fetch all user interaction documents from MongoDB as a raw DataFrame.
 
-    Derives a binary ``clicked`` column:
-      - click / save / thumbs_up  → 1
-      - dismiss / thumbs_down / other → 0
-
-    Splits the interaction log in half by time so reference = older half,
-    current = newer half.  Returns (None, None) when fewer than 20 interactions
-    exist — not enough for a meaningful statistical test.
+    Returns an empty DataFrame when the collection is unreachable or empty —
+    callers must handle this gracefully (CTR drift and query derivation both
+    skip cleanly when interactions are absent).
     """
     import requests
 
@@ -156,18 +154,42 @@ def _fetch_interactions_for_ctr(
         resp.raise_for_status()
         docs = resp.json().get("documents", [])
     except Exception as e:
-        logger.warning("Could not fetch interactions for CTR drift: %s", e)
-        return None, None
+        logger.warning("Could not fetch interactions: %s", e)
+        return pd.DataFrame()
 
-    if len(docs) < 20:
-        logger.info("Too few interactions (%d) for CTR drift — skipping", len(docs))
-        return None, None
+    if not docs:
+        logger.info("No user interactions recorded yet — interaction-dependent checks will be skipped")
+        return pd.DataFrame()
 
     df = pd.DataFrame(docs)
+    logger.info("Fetched %d interaction records", len(df))
+    return df
+
+
+def _split_interactions_for_ctr(
+    interactions_df: pd.DataFrame,
+) -> tuple[pd.DataFrame | None, pd.DataFrame | None]:
+    """Derive binary CTR labels and split into (reference, current) halves.
+
+    Derives a binary ``clicked`` column:
+      - click / save / thumbs_up  → 1
+      - dismiss / thumbs_down / other → 0
+
+    Splits chronologically so reference = older half, current = newer half.
+    Returns (None, None) when fewer than 20 interactions exist — not enough
+    for a meaningful statistical test.
+    """
+    if interactions_df.empty:
+        return None, None
+
+    if len(interactions_df) < 20:
+        logger.info("Too few interactions (%d) for CTR drift — skipping", len(interactions_df))
+        return None, None
+
+    df = interactions_df.copy()
     positive_types = {"click", "save", "thumbs_up"}
     df["clicked"] = df.get("interaction_type", pd.Series(dtype=str)).isin(positive_types).astype(int)
 
-    # Sort by timestamp if available so the split is chronological
     if "timestamp" in df.columns:
         df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
         df = df.sort_values("timestamp")
@@ -187,6 +209,107 @@ def _fetch_interactions_for_ctr(
 
 
 # ---------------------------------------------------------------------------
+# Prediction scoring
+# ---------------------------------------------------------------------------
+
+
+def _find_latest_lgbm_model(models_dir: str) -> str | None:
+    """Return the most recently modified lgbm_*.pkl file under models_dir."""
+    import glob
+
+    pattern = os.path.join(models_dir, "lgbm_*.pkl")
+    files = glob.glob(pattern)
+    if not files:
+        return None
+    return max(files, key=os.path.getmtime)
+
+
+def _derive_interaction_query(
+    interactions_df: pd.DataFrame,
+    current_df: pd.DataFrame,
+) -> str:
+    """Derive a representative query string from recent positive user interactions.
+
+    The recommender scores repos by computing the dot product between repo
+    feature vectors and a user interaction profile (weighted mean of feature
+    vectors of positively-interacted repos).  This function approximates that
+    profile as a text query built from the names, languages, and descriptions
+    of the most-clicked/saved repos — giving ``LGBMRanker.predict()`` a
+    meaningful query context instead of an empty string.
+
+    Falls back to the most common language in ``current_df`` when interaction
+    data is absent or too sparse.
+    """
+    positive_types = {"click", "save", "thumbs_up"}
+
+    # Try to identify top positively-interacted repos
+    top_repo_ids: list = []
+    if not interactions_df.empty and "interaction_type" in interactions_df.columns:
+        pos = interactions_df[interactions_df["interaction_type"].isin(positive_types)]
+        id_col = next((c for c in ("repo_id", "repository_id", "full_name") if c in pos.columns), None)
+        if id_col and not pos.empty:
+            top_repo_ids = pos[id_col].value_counts().head(20).index.tolist()
+
+    if top_repo_ids and not current_df.empty:
+        # Match top-interacted repo IDs against current data.
+        # repo_id checked first — it's the same field used in user_interactions.
+        match_col = next((c for c in ("repo_id", "full_name", "name", "_id", "id") if c in current_df.columns), None)
+        if match_col:
+            matched = current_df[current_df[match_col].isin(top_repo_ids)]
+            if not matched.empty:
+                terms: list[str] = []
+                for col in ("name", "language", "description"):
+                    if col in matched.columns:
+                        terms.extend(matched[col].dropna().astype(str).head(10).tolist())
+                query = " ".join(terms[:60])
+                logger.info(
+                    "Derived interaction query from %d positively-interacted repos: %r...",
+                    len(matched),
+                    query[:60],
+                )
+                return query
+
+    # Fallback: most common language in current corpus
+    if not current_df.empty and "language" in current_df.columns:
+        counts = current_df["language"].dropna().value_counts()
+        if not counts.empty:
+            fallback = str(counts.index[0])
+            logger.info("No interaction data — using fallback query: %r", fallback)
+            return fallback
+
+    return ""
+
+
+def _score_current_repos(
+    model_path: str,
+    current_df: pd.DataFrame,
+    interaction_query: str = "",
+) -> list[float] | None:
+    """Score all current repos with the production LightGBM model.
+
+    Uses ``interaction_query`` as the query context so scores reflect the
+    dot-product relationship between repo features and the user interaction
+    profile — the same mechanism used in production ranking.
+    Returns None on any failure so the caller can skip prediction drift.
+    """
+    try:
+        from training.lgbm_ranker import LGBMRanker
+
+        ranker = LGBMRanker.load(model_path)
+        scores = ranker.predict(current_df, query_text=interaction_query)
+        logger.info(
+            "Scored %d current repos for prediction drift (model=%s, query=%r...)",
+            len(scores),
+            os.path.basename(model_path),
+            interaction_query[:40],
+        )
+        return scores.tolist()
+    except Exception as e:
+        logger.warning("Could not score current repos for prediction drift: %s", e)
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -200,6 +323,8 @@ def main() -> None:
     qdrant_key = os.getenv("APIKEY_QDRANT") or api_key
     qdrant_collection = os.getenv("QDRANT_COLLECTION", "repositories_embeddings")
     embeddings_path = os.getenv("REFERENCE_EMBEDDINGS_PATH")
+    scores_path = os.getenv("REFERENCE_SCORES_PATH")
+    models_dir = os.getenv("MODELS_DIR", "/app/models")
     report_dir = os.getenv("EVIDENTLY_REPORT_PATH", "/app/drift_reports")
 
     if not reference_path:
@@ -212,8 +337,7 @@ def main() -> None:
         reference_df = _load_parquet(reference_path)
     except FileNotFoundError:
         logger.warning(
-            "Reference data not found at %s — no training run has completed yet. "
-            "Skipping drift check.",
+            "Reference data not found at %s — no training run has completed yet. Skipping drift check.",
             reference_path,
         )
         sys.exit(0)
@@ -251,10 +375,34 @@ def main() -> None:
     elif reference_embeddings is not None:
         logger.info("QDRANT_URL not set — skipping embedding drift")
 
-    # --- Interactions for CTR drift ---
-    ref_interactions, cur_interactions = None, None
+    # --- Interactions (fetched once, used for both CTR drift and interaction query) ---
+    # Falls back cleanly to empty DataFrame when no interactions are recorded yet.
+    all_interactions: pd.DataFrame = pd.DataFrame()
     if api_url and api_key:
-        ref_interactions, cur_interactions = _fetch_interactions_for_ctr(api_url, api_key)
+        all_interactions = _fetch_raw_interactions(api_url, api_key)
+
+    ref_interactions, cur_interactions = _split_interactions_for_ctr(all_interactions)
+
+    # --- Reference prediction scores (saved by training pipeline) ---
+    reference_scores: list[float] | None = None
+    if scores_path and Path(scores_path).exists():
+        reference_scores = np.load(scores_path).tolist()
+        logger.info("Loaded reference scores: %d samples", len(reference_scores))
+    else:
+        logger.info("REFERENCE_SCORES_PATH not set or not found — skipping prediction drift")
+
+    # --- Current prediction scores (model scores on full live repo set) ---
+    # interaction_query approximates the user interaction profile used in production
+    # so score distributions are comparable to real serving behaviour.
+    current_scores: list[float] | None = None
+    if reference_scores is not None:
+        model_path = _find_latest_lgbm_model(models_dir)
+        if model_path:
+            interaction_query = _derive_interaction_query(all_interactions, current_df)
+            logger.info("Scoring %d current repos with model: %s", len(current_df), os.path.basename(model_path))
+            current_scores = _score_current_repos(model_path, current_df, interaction_query)
+        else:
+            logger.info("No lgbm_*.pkl found in %s — skipping prediction drift", models_dir)
 
     # --- Run all checks ---
     from drift_monitor import DriftMonitor
@@ -267,6 +415,8 @@ def main() -> None:
         current_data=current_df,
         reference_embeddings=reference_embeddings,
         current_embeddings=current_embeddings,
+        reference_scores=reference_scores,
+        current_scores=current_scores,
         reference_interactions=ref_interactions,
         current_interactions=cur_interactions,
     )

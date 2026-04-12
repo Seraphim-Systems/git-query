@@ -4,8 +4,10 @@ RUN pip install --no-cache-dir mlflow>=2.10.0
 
 EXPOSE 5000
 
-CMD ["mlflow", "server", \
-     "--backend-store-uri", "/mlflow/mlruns", \
-     "--default-artifact-root", "/mlflow/artifacts", \
-     "--host", "0.0.0.0", \
-     "--port", "5000"]
+# Shell form so MLFLOW_BACKEND_STORE_URI / MLFLOW_DEFAULT_ARTIFACT_ROOT
+# env vars set by docker-compose are expanded at runtime.
+CMD mlflow server \
+    --backend-store-uri "${MLFLOW_BACKEND_STORE_URI:-/mlflow}" \
+    --default-artifact-root "${MLFLOW_DEFAULT_ARTIFACT_ROOT:-/mlflow/artifacts}" \
+    --host 0.0.0.0 \
+    --port 5000

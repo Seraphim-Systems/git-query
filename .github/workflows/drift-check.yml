@@ -71,6 +71,8 @@ jobs:
           APIKEY_MONGODB=${{ secrets.APIKEY_MONGODB }}
           QDRANT_URL=${{ secrets.QDRANT_URL }}
           APIKEY_QDRANT=${{ secrets.DB_QDRANT_API_KEY }}
+          REFERENCE_SCORES_PATH=/app/models/metadata/reference_scores.npy
+          MODELS_DIR=/app/models
           EOF
 
           echo "Drift environment configured"
