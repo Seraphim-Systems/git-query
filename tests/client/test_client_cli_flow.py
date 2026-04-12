@@ -38,3 +38,21 @@ async def test_interactive_chat_happy_path_then_exit(monkeypatch):
     assert "Tools used:" in flattened
     assert "recommend_repositories" in flattened
     assert "Goodbye!" in flattened
+
+@pytest.mark.asyncio
+async def test_interactive_chat_only_exit(monkeypatch):
+    fake_console = FakeConsole()
+    monkeypatch.setattr(cli, "console", fake_console)
+
+    inputs = iter(["exit"])
+    monkeypatch.setattr(cli.Prompt, "ask", lambda *args, **kwargs: next(inputs))
+
+    async def fake_check():
+        return True
+
+    monkeypatch.setattr(cli, "check_mcp_connection", fake_check)
+
+    await cli.interactive_chat()
+
+    flattened = " ".join(str(x) for call in fake_console.messages for x in call)
+    assert "Goodbye!" in flattened
