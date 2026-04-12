@@ -208,3 +208,13 @@ def test_tool_execute_request_model_dump_contains_parameters():
         "tool_name": "recommend_repositories",
         "parameters": {"query": "machine learning", "top_k": 3},
     }
+
+
+def test_tool_parameter_required_flag_false():
+    param = ToolParameter(
+        name="optional_param",
+        type="string",
+        description="Optional",
+        required=False,
+    )
+    assert param.required is False
