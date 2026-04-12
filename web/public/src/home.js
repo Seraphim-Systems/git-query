@@ -1,7 +1,31 @@
 // Home page (Chat) functionality
 document.addEventListener('DOMContentLoaded', () => {
     // Use empty string for same-origin (webserver proxies API calls to gateway)
-    const API_BASE = '';
+    const API_BASE = '/api';
+
+    // ── Example repos for dev preview ────────────────────────────────────
+    const EXAMPLE_REPOS = [
+        {
+            id: 'DVelascoHerruzo/Portfolio-Website',
+            name: 'Portfolio-Website',
+            owner: 'DVelascoHerruzo',
+            description: 'Online portfolio and website geared towards CD Projekt RED — features custom HLSL shaders, an animated skills component, and GitHub Actions CI/CD.',
+            stars: 0,
+            forks: 0,
+            language: 'TypeScript',
+            url: 'https://github.com/DVelascoHerruzo/Portfolio-Website'
+        },
+        {
+            id: 'DVelascoHerruzo/KarsusInitiative',
+            name: 'KarsusInitiative',
+            owner: 'DVelascoHerruzo',
+            description: 'Full-stack D&D initiative tracker deployed on Azure — React 18 + TypeScript frontend, Azure Functions v4 API, Cosmos DB, Blob Storage, and Bicep IaC.',
+            stars: 0,
+            forks: 0,
+            language: 'TypeScript',
+            url: 'https://github.com/DVelascoHerruzo/KarsusInitiative'
+        }
+    ];
     const messageInput = document.getElementById('messageInput');
     const sendBtn = document.getElementById('sendBtn');
     const messagesContainer = document.getElementById('messages');
@@ -19,6 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const themeToggle = document.getElementById('themeToggle');
     const repoSearchInput = document.getElementById('repoSearchInput');
     const closeRepoBtn = document.getElementById('closeRepoView');
+    const loadExamplesBtn = document.getElementById('loadExamplesBtn');
     
     // Sidebar elements
     const sidebar = document.querySelector('.sidebar');
@@ -130,6 +155,18 @@ document.addEventListener('DOMContentLoaded', () => {
     closeRepoBtn.addEventListener('click', () => {
         backToWelcome();
     });
+
+    // Load example repos (dev preview button)
+    if (loadExamplesBtn) {
+        loadExamplesBtn.addEventListener('click', () => {
+            welcomeScreen.style.display = 'none';
+            messagesContainer.style.display = 'none';
+            repoRecommendations.style.display = 'block';
+            closeRepoBtn.style.display = 'flex';
+            currentView = 'repos';
+            displayRepos(EXAMPLE_REPOS);
+        });
+    }
     
     // Modal events
     modalClose.addEventListener('click', () => {
@@ -472,10 +509,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const chatItem = document.createElement('div');
             chatItem.className = 'chat-item';
             chatItem.innerHTML = `
-                <span class="item-text">${chat.title || 'New Chat'}</span>
+                <span class="item-text">${chat.title || 'New Session'}</span>
                 <div class="item-actions">
-                    <button class="item-action-btn" title="Add to folder">➜</button>
-                    <button class="item-action-btn" title="Delete chat">✕</button>
+                    <button class="item-action-btn" title="Add to collection">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+                    </button>
+                    <button class="item-action-btn" title="Delete session">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
                 </div>
             `;
             
@@ -583,18 +624,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // Theme Management
+    const ICON_MOON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>`;
+    const ICON_SUN  = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
+
     function initializeTheme() {
         const savedTheme = localStorage.getItem('theme') || 'dark';
         if (savedTheme === 'light') {
             document.body.classList.add('light-theme');
-            themeToggle.querySelector('.theme-icon').textContent = '☀️';
+            document.getElementById('themeIconSvg').outerHTML = ICON_SUN;
+            themeToggle.querySelector('.theme-icon').innerHTML = ICON_SUN;
         }
     }
-    
+
     function toggleTheme() {
         document.body.classList.toggle('light-theme');
         const isLight = document.body.classList.contains('light-theme');
-        themeToggle.querySelector('.theme-icon').textContent = isLight ? '☀️' : '🌙';
+        themeToggle.querySelector('.theme-icon').innerHTML = isLight ? ICON_SUN : ICON_MOON;
         localStorage.setItem('theme', isLight ? 'light' : 'dark');
     }
     
@@ -841,7 +886,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const ids = rawItems.map(r => r.repo_id || r.id).filter(Boolean);
         if (ids.length === 0) return [];
         try {
-            const res = await fetch(`${API_BASE}/api/repos/lookup`, {
+            const res = await fetch(`${API_BASE}/repos/lookup`, {
                 method: 'POST',
                 headers: authHeaders(),
                 credentials: 'include',
@@ -938,6 +983,11 @@ document.addEventListener('DOMContentLoaded', () => {
         card.className = 'repo-card';
         
         const isFavorite = favorites.some(f => f.id === repo.id);
+
+        const starSvg = `<svg viewBox="0 0 24 24" fill="${isFavorite ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
+        const folderSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>`;
+        const starStatSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
+        const forkSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M18 9a9 9 0 01-9 9"/></svg>`;
         
         card.innerHTML = `
             <div class="repo-card-header">
@@ -946,18 +996,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="repo-card-owner">${repo.owner}</div>
                 </div>
                 <div class="repo-card-actions">
-                    <button class="repo-action-btn star-btn ${isFavorite ? 'active' : ''}" data-repo-id="${repo.id}" title="Add to favorites">
-                        ⭐
+                    <button class="repo-action-btn star-btn ${isFavorite ? 'active' : ''}" data-repo-id="${repo.id}" title="Save to favorites">
+                        ${starSvg}
                     </button>
-                    <button class="repo-action-btn folder-btn" data-repo-id="${repo.id}" title="Add to folder">
-                        ➜
+                    <button class="repo-action-btn folder-btn" data-repo-id="${repo.id}" title="Add to collection">
+                        ${folderSvg}
                     </button>
                 </div>
             </div>
             <div class="repo-card-description">${repo.description}</div>
             <div class="repo-card-stats">
-                <div class="repo-card-stat">⭐ ${formatNumber(repo.stars)}</div>
-                <div class="repo-card-stat">🔄 ${formatNumber(repo.forks)}</div>
+                <div class="repo-card-stat">${starStatSvg} ${formatNumber(repo.stars)}</div>
+                <div class="repo-card-stat">${forkSvg} ${formatNumber(repo.forks)}</div>
             </div>
             <div class="repo-card-language">${repo.language}</div>
         `;
@@ -1009,8 +1059,12 @@ document.addEventListener('DOMContentLoaded', () => {
             repoItem.innerHTML = `
                 <span class="item-text">${repo.name}</span>
                 <div class="item-actions">
-                    <button class="item-action-btn" title="Add to folder">➜</button>
-                    <button class="item-action-btn" title="Remove from favorites">✕</button>
+                    <button class="item-action-btn" title="Add to collection">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+                    </button>
+                    <button class="item-action-btn" title="Remove from saved">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
                 </div>
             `;
             
@@ -1096,11 +1150,16 @@ document.addEventListener('DOMContentLoaded', () => {
             folderItem.innerHTML = `
                 <div class="folder-header">
                     <div class="folder-info">
-                        <span class="folder-icon ${isExpanded ? 'expanded' : ''}">▶</span>
-                        <span class="item-text">📁 ${folder.name} (${folder.items.length})</span>
+                        <span class="folder-icon ${isExpanded ? 'expanded' : ''}">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="11" height="11"><polyline points="9 18 15 12 9 6"/></svg>
+                        </span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" style="flex-shrink:0;opacity:0.7"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+                        <span class="item-text">${folder.name} <span style="opacity:0.5;font-size:11px">(${folder.items.length})</span></span>
                     </div>
                     <div class="item-actions">
-                        <button class="item-action-btn" title="Delete folder">✕</button>
+                        <button class="item-action-btn" title="Delete collection">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
                     </div>
                 </div>
                 <div class="folder-content ${isExpanded ? 'expanded' : ''}"></div>
@@ -1155,18 +1214,23 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Determine item type and icon
             const isChat = item.title || item.messages;
-            const icon = isChat ? '💬' : '📦';
+            const iconSvg = isChat
+                ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13" style="flex-shrink:0;opacity:0.7"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>`
+                : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13" style="flex-shrink:0;opacity:0.7"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg>`;
             const name = item.title || item.name || 'Untitled';
             
             const itemContent = document.createElement('span');
-            itemContent.textContent = `${icon} ${name}`;
+            itemContent.style.display = 'flex';
+            itemContent.style.alignItems = 'center';
+            itemContent.style.gap = '6px';
+            itemContent.innerHTML = `${iconSvg}<span>${name}</span>`;
             itemContent.style.flex = '1';
             itemContent.style.cursor = 'pointer';
             
             const removeBtn = document.createElement('button');
             removeBtn.className = 'item-action-btn';
-            removeBtn.innerHTML = '✕';
-            removeBtn.title = 'Remove from folder';
+            removeBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+            removeBtn.title = 'Remove from collection';
             removeBtn.style.opacity = '0.7';
             
             itemContent.addEventListener('click', (e) => {
@@ -1229,7 +1293,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const folderItems = folders.map(f => ({
             id: f.id,
             name: f.name,
-            icon: '📁'
+            icon: ''
         }));
         
         const selectedFolder = await showListSelection('Add to Folder', folderItems);

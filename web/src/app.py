@@ -42,7 +42,12 @@ PUBLIC_DIR = WEBFRONTEND_DIR
 @app.route("/")
 @app.route("/index.html")
 def index():
-    return send_from_directory(PAGES_DIR, "login.html")
+    return send_from_directory(PAGES_DIR, "landing.html")
+
+
+@app.route("/landing.html")
+def landing():
+    return send_from_directory(PAGES_DIR, "landing.html")
 
 
 @app.route("/login.html")
