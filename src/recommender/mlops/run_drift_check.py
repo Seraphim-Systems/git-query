@@ -60,13 +60,13 @@ def _load_parquet(path: str) -> pd.DataFrame:
     raise ValueError(f"Unsupported format: {p.suffix}. Use .parquet or .json")
 
 
-def _fetch_current_repos(api_url: str, api_key: str, max_repos: int = 50_000) -> pd.DataFrame:
+def _fetch_current_repos(api_url: str, api_key: str, max_repos: int = 5_000) -> pd.DataFrame:
     """Fetch a sample of current repos from MongoDB as the live current dataset."""
     import requests
 
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     all_docs: list[dict] = []
-    batch_size = 5_000
+    batch_size = 1_000
 
     for skip in range(0, max_repos, batch_size):
         limit = min(batch_size, max_repos - skip)
@@ -138,24 +138,31 @@ def _fetch_raw_interactions(
     import requests
 
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    docs: list[dict] = []
+    batch_size = 1_000
     try:
-        resp = requests.post(
-            f"{api_url.rstrip('/')}/api/mongodb/query",
-            headers=headers,
-            json={
-                "database": "gitquery",
-                "collection": "user_interactions",
-                "filter": {},
-                "limit": 100_000,
-                "skip": 0,
-            },
-            timeout=30,
-        )
-        resp.raise_for_status()
-        docs = resp.json().get("documents", [])
+        while True:
+            resp = requests.post(
+                f"{api_url.rstrip('/')}/api/mongodb/query",
+                headers=headers,
+                json={
+                    "database": "gitquery",
+                    "collection": "user_interactions",
+                    "filter": {},
+                    "limit": batch_size,
+                    "skip": len(docs),
+                },
+                timeout=30,
+            )
+            resp.raise_for_status()
+            batch = resp.json().get("documents", [])
+            if not batch:
+                break
+            docs.extend(batch)
     except Exception as e:
         logger.warning("Could not fetch interactions: %s", e)
-        return pd.DataFrame()
+        if not docs:
+            return pd.DataFrame()
 
     if not docs:
         logger.info("No user interactions recorded yet — interaction-dependent checks will be skipped")

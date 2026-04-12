@@ -97,7 +97,7 @@ async def get_collection_stats():
         mongo_client.close()
 
         return {
-            "raw_repositories": raw_count,
+            "repositories": raw_count,
             "cleaned_repositories": cleaned_count,
             "status_breakdown": {
                 item["_id"] or "pending": item["count"]

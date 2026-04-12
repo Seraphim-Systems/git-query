@@ -70,10 +70,9 @@ async def lookup_repos(
 
     Body: ``{"repo_ids": ["owner/repo", ...]}``
 
-    Queries ``gitquery.raw_repositories`` by ``_id`` (which equals
-    ``nameWithOwner`` / ``repo_id`` written by kaggle_to_mongo.py).
-    Falls back to querying by the ``repo_id`` field for documents whose
-    ``_id`` was written differently.
+    Queries ``gitquery.repositories`` by ``_id`` (which equals
+    ``nameWithOwner`` / ``repo_id``) and falls back to querying by
+    the ``repo_id`` field for documents whose ``_id`` was written differently.
     """
     repo_ids: List[str] = body.get("repo_ids", [])
     if not repo_ids:
@@ -85,7 +84,7 @@ async def lookup_repos(
 
     try:
         db = mongo_client.get_database("gitquery")
-        coll = db.get_collection("raw_repositories")
+        coll = db.get_collection("repositories")
 
         # Primary lookup: _id field (set by kaggle_to_mongo to nameWithOwner)
         docs: List[Dict[str, Any]] = list(

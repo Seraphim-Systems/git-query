@@ -77,15 +77,21 @@ class DriftMonitor:
         if not workspace_path:
             return
         try:
+            import uuid
+
+            # Evidently 0.4.30 generates UUID7 for project IDs but its own
+            # validation rejects them. Patch uuid7 to emit UUID4 instead.
+            try:
+                import uuid6
+                uuid6.uuid7 = lambda: uuid.uuid4()
+            except ImportError:
+                pass
+
             from evidently.ui.workspace import Workspace
 
             ws = Workspace.create(workspace_path)
             projects = ws.search_project(project_name)
-            project = (
-                projects[0]
-                if projects
-                else ws.create_project(project_name)
-            )
+            project = projects[0] if projects else ws.create_project(project_name)
             ws.add_report(project.id, report)
             logger.info("Drift report saved to Evidently workspace project: %s", project_name)
         except Exception as e:
@@ -99,6 +105,23 @@ class DriftMonitor:
                 if metric_result.get("dataset_drift", False):
                     return True
                 if metric_result.get("drift_detected", False):
+                    return True
+            return False
+        except Exception:
+            return False
+
+    def _extract_drift_status_from_snapshot(self, snapshot: Any) -> bool:
+        """Extract drift status from an Evidently snapshot object.
+
+        Handles the snapshot API (metric_results with .value attributes)
+        as opposed to the dict-based report.as_dict() output.
+        """
+        try:
+            for metric_result in snapshot.metric_results:
+                value = metric_result.value
+                if getattr(value, "dataset_drift", False):
+                    return True
+                if getattr(value, "drift_detected", False):
                     return True
             return False
         except Exception:
@@ -120,15 +143,21 @@ class DriftMonitor:
             return None
 
         try:
-            # Drop columns containing arrays/lists or all-null values
+            # Drop training-only columns not present in live data, and columns
+            # containing arrays/lists or all-null values.
+            TRAINING_ONLY_COLS = {"interaction_score", "query_id", "query_text"}
+
             def _is_scalar_col(series):
                 sample = series.dropna().head(10)
                 return not any(isinstance(v, (list, np.ndarray)) for v in sample)
 
+            shared_cols = set(reference_data.columns) & set(current_data.columns)
             scalar_cols = [
                 c
-                for c in reference_data.columns
-                if _is_scalar_col(reference_data[c]) and reference_data[c].notna().any()
+                for c in shared_cols
+                if c not in TRAINING_ONLY_COLS
+                and _is_scalar_col(reference_data[c])
+                and reference_data[c].notna().any()
             ]
             reference_data = reference_data[scalar_cols]
             current_data = current_data[scalar_cols]

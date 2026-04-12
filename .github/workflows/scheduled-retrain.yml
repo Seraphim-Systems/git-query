@@ -74,7 +74,7 @@ jobs:
             --password ${{ secrets.DB_MONGODB_PASSWORD }} \
             --authenticationDatabase admin \
             gitquery \
-            --eval "db.raw_repositories.countDocuments({})" 2>/dev/null || echo "0")
+            --eval "db.repositories.countDocuments({})" 2>/dev/null || echo "0")
 
           # Get last training count from metadata
           LAST_COUNT=0

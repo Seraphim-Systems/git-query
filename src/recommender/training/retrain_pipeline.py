@@ -168,6 +168,14 @@ async def main() -> None:
         if model_id:
             run_id = tracker.get_run_id()
 
+            # Log training metrics from the main thread — LGBMRanker.train() runs in
+            # a thread-pool executor where MLflow's thread-local run context is absent,
+            # so metrics logged there are silently dropped. Re-logging here guarantees
+            # they appear in the UI.
+            candidate_metrics = {k: float(v) for k, v in lgbm_result.items() if isinstance(v, (int, float))}
+            tracker.log_metrics(candidate_metrics)
+            tracker.log_params({"model_id": model_id, "variant": "default"})
+
             # Log model artifact and register in MLflow Model Registry as Staging
             mlflow_version = None
             if run_id and model_path and Path(model_path).exists():
@@ -180,7 +188,6 @@ async def main() -> None:
                 )
 
             # Champion/challenger: promote only if better than current production
-            candidate_metrics = {k: float(v) for k, v in lgbm_result.items() if isinstance(v, (int, float))}
             promoter = ModelPromoter(
                 recommender_url=recommender_url,
                 mlflow_tracker=tracker,
@@ -190,6 +197,8 @@ async def main() -> None:
                 candidate_metrics=candidate_metrics,
                 candidate_mlflow_version=mlflow_version,
             )
+            tracker.set_tag("promoted", str(promoted))
+            tracker.set_tag("mlflow_version", str(mlflow_version) if mlflow_version else "none")
             if promoted:
                 logger.info("Model %s promoted to production", model_id)
             else:

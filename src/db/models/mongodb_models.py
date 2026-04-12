@@ -13,7 +13,7 @@ class MongoQuery(BaseModel):
     projection: Optional[Dict[str, int]] = Field(
         default=None, description="Fields to return"
     )
-    limit: int = Field(default=100, le=1000, description="Maximum number of documents")
+    limit: int = Field(default=100, description="Maximum number of documents")
     skip: int = Field(default=0, description="Number of documents to skip")
     sort: Optional[Dict[str, int]] = Field(default=None, description="Sort criteria")
 

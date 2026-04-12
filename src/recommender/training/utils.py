@@ -10,7 +10,7 @@ def prepare_repo_text(repo: Dict) -> str:
     Fields: name, description, topics, language, readme (truncated to 500 chars).
 
     Args:
-        repo: Repository dict from MongoDB (raw_repositories collection).
+        repo: Repository dict from MongoDB (repositories collection).
 
     Returns:
         Pipe-separated text suitable for embedding.

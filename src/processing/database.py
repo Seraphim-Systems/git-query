@@ -15,12 +15,8 @@ class DatabaseHelper:
     async def ensure_indexes(db: AsyncIOMotorDatabase):
         """Create indexes for processing collections"""
         try:
-            # Raw data collection
-            await db.raw_repositories.create_index("processing_status")
-            await db.raw_repositories.create_index("scraped_at")
-            await db.raw_repositories.create_index("repo_id", unique=True)
-            
-            # Cleaned data collection
+            await db.repositories.create_index("processing_status")
+            await db.repositories.create_index("scraped_at")
             await db.repositories.create_index("repo_id", unique=True)
             await db.repositories.create_index("full_name")
             await db.repositories.create_index("language")

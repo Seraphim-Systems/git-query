@@ -68,7 +68,6 @@ class RecommenderSettings(BaseSettings):
 
     # Collections
     repos_collection: str = "repositories"
-    raw_repos_collection: str = "raw_repositories"
     interactions_collection: str = "user_interactions"
     user_prefs_collection: str = "user_preferences"
     models_collection: str = "ml_models"

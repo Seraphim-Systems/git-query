@@ -324,7 +324,7 @@ TOOL_DEFINITIONS = [
             {
                 "name": "collection",
                 "type": "string",
-                "description": "MongoDB collection name (e.g. repositories, raw_repositories, users)",
+                "description": "MongoDB collection name (e.g. repositories, users)",
                 "required": True,
             },
             {

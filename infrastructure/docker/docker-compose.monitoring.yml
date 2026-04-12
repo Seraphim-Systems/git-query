@@ -40,10 +40,12 @@ services:
     restart: "no"
 
   evidently-ui:
-    image: python:3.11-slim
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.evidently-ui
+    image: git-query-evidently-ui:latest
     container_name: git-query-evidently-ui
-    command: >
-      bash -c "pip install -q 'evidently>=0.4.0,<0.5.0' && evidently ui --workspace /app/workspace --host 0.0.0.0 --port 8000"
+    command: ["evidently", "ui", "--workspace", "/app/workspace", "--host", "0.0.0.0", "--port", "8000"]
     ports:
       - "8000:8000"
     volumes:

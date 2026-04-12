@@ -173,7 +173,7 @@ class DatabaseManager:
     async def get_repositories_by_repo_ids(
         self, repo_ids: List[str]
     ) -> Dict[str, Any]:
-        """Fetch full repo metadata from raw_repositories by repo_id / _id.
+        """Fetch full repo metadata from repositories by repo_id / _id.
 
         Returns a mapping of repo_id → document for any IDs found.
         """
@@ -189,12 +189,12 @@ class DatabaseManager:
 
         docs: List[Dict[str, Any]] = []
         try:
-            cursor = self.db[settings.raw_repos_collection].find(query_filter).limit(len(repo_ids))
+            cursor = self.db[settings.repos_collection].find(query_filter).limit(len(repo_ids))
             async for doc in cursor:
                 doc["_id"] = str(doc["_id"])
                 docs.append(doc)
         except Exception as exc:
-            logger.warning("raw_repositories lookup failed: %s", exc)
+            logger.warning("repositories lookup failed: %s", exc)
             return {}
 
         result_map: Dict[str, Any] = {}

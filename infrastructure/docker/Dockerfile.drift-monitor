@@ -17,9 +17,12 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# libgomp is required by LightGBM for OpenMP support
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 && rm -rf /var/lib/apt/lists/*
+
 # Install dependencies (no torch — keep image small)
 RUN pip install --no-cache-dir \
-    "evidently>=0.4.0,<0.5.0" \
+    "evidently==0.4.33" \
     pandas>=2.0.0 \
     numpy>=1.26.3 \
     pyarrow>=14.0.0 \

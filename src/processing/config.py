@@ -12,7 +12,7 @@ class ProcessingSettings(BaseSettings):
     # MongoDB (source)
     mongodb_url: str
     mongodb_db: str = "gitquery"
-    source_collection: str = "raw_repositories"
+    source_collection: str = "repositories"
     
     # MongoDB (destination - cleaned data)
     dest_collection: str = "repositories"
