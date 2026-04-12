@@ -449,3 +449,16 @@ def test_get_profile_returns_error_when_user_missing():
 
     assert response.status_code == 200
     assert response.json() == {"error": "User not found"}
+
+def test_recommendations_missing_query_returns_200_with_fallback_shape():
+    app = build_app()
+    client = TestClient(app)
+
+    response = client.post("/recommend/", json={})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "recommendations" in body
+    assert "personalized" in body
+    assert "user_id" in body
+    assert isinstance(body["recommendations"], list)
