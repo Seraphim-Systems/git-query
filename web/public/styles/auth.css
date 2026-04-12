@@ -25,6 +25,7 @@ body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
     color: var(--text-primary);
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     min-height: 100vh;
@@ -81,6 +82,23 @@ body {
     75%  { transform: translate(-4vw,  -6vw) scale(1.10); }
     100% { transform: translate(0,     0)    scale(1); }
 }
+
+.auth-logo {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    text-decoration: none;
+    color: var(--text-primary);
+    font-size: 17px;
+    font-weight: 650;
+    letter-spacing: -0.2px;
+    margin-bottom: 24px;
+    transition: color 0.2s var(--ease);
+}
+.auth-logo svg { color: var(--accent-color); }
+.auth-logo:hover { color: var(--accent-color); }
 
 .auth-container {
     position: relative;
