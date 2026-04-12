@@ -101,6 +101,8 @@ class ModelPromoter:
                     cand_val,
                 )
                 self.tracker.log_metrics({"promotion_blocked": 1.0})
+                if candidate_mlflow_version is not None:
+                    self.tracker.transition_model_stage(self.model_name, candidate_mlflow_version, "Archived")
                 return False
 
         # Require improvement on the primary metric (mean_ndcg_at_10)
@@ -115,6 +117,8 @@ class ModelPromoter:
                     candidate_metrics[primary],
                 )
                 self.tracker.log_metrics({"promotion_blocked": 1.0})
+                if candidate_mlflow_version is not None:
+                    self.tracker.transition_model_stage(self.model_name, candidate_mlflow_version, "Archived")
                 return False
 
         return self._do_promote(candidate_model_id, candidate_mlflow_version)
@@ -147,8 +151,9 @@ class ModelPromoter:
         except requests.RequestException:
             pass  # Non-fatal
 
-        # Update MLflow Model Registry stage
+        # Update MLflow Model Registry stage — archive any existing Production versions first
         if mlflow_version is not None:
+            self.tracker.archive_production_versions(self.model_name, keep_version=mlflow_version)
             self.tracker.transition_model_stage(self.model_name, mlflow_version, "Production")
 
         self.tracker.log_metrics({"promotion_blocked": 0.0})

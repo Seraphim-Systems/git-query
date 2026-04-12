@@ -304,6 +304,21 @@ class MLflowTracker:
         except Exception as e:
             logger.warning("Failed to transition model stage: %s", e)
 
+    def archive_production_versions(self, model_name: str, keep_version: int) -> None:
+        """Move all current Production versions (except keep_version) to Archived."""
+        if not MLFLOW_AVAILABLE or not self._client:
+            return
+        try:
+            versions = self._client.get_latest_versions(model_name, stages=["Production"])
+            for v in versions:
+                if int(v.version) != keep_version:
+                    self._client.transition_model_version_stage(
+                        name=model_name, version=v.version, stage="Archived"
+                    )
+                    logger.info("Archived model '%s' version %s", model_name, v.version)
+        except Exception as e:
+            logger.warning("Failed to archive previous production versions: %s", e)
+
     def get_production_metrics(self, model_name: str, metric_keys: list[str]) -> dict[str, float]:
         """Return metrics from the current Production version of a registered model.
 
