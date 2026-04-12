@@ -241,3 +241,8 @@ def test_tools_list_invalid_method():
     with TestClient(mcp_server.app) as client:
         response = client.get("/tools/list")
     assert response.status_code in (405, 404)
+
+def test_execute_tool_empty_body():
+    with TestClient(mcp_server.app) as client:
+        response = client.post("/tools/execute", json={})
+    assert response.status_code == 422
