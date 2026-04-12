@@ -89,14 +89,6 @@ class DriftMonitor:
                 pass
 
             from evidently.ui.workspace import Workspace
-            from evidently.ui.dashboards import (
-                DashboardPanelCounter,
-                DashboardPanelPlot,
-                PanelValue,
-                PlotType,
-                ReportFilter,
-                CounterAgg,
-            )
 
             ws = Workspace.create(workspace_path)
             projects = ws.search_project(project_name)
@@ -115,15 +107,15 @@ class DriftMonitor:
     def _add_default_panels(self, project: Any, project_name: str) -> None:
         """Add default dashboard panels to a newly created Evidently project."""
         try:
+            from evidently.renderers.html_widgets import WidgetSize
             from evidently.ui.dashboards import (
+                CounterAgg,
                 DashboardPanelCounter,
                 DashboardPanelPlot,
                 PanelValue,
                 PlotType,
                 ReportFilter,
-                CounterAgg,
             )
-            from evidently.renderers.html_widgets import WidgetSize
 
             is_prediction = "prediction" in project_name
 
