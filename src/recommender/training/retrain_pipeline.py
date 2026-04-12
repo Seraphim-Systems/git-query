@@ -150,7 +150,7 @@ async def main() -> None:
         experiment_name=os.getenv("MLFLOW_EXPERIMENT_NAME", "git-query-retrain"),
     )
 
-    lgbm_result = await RerankerLGBMPipeline(
+    pipeline = RerankerLGBMPipeline(
         api_base_url=api_url,
         api_key=api_key,
         variant="default",
@@ -160,7 +160,9 @@ async def main() -> None:
         top_n_queries=int(os.getenv("LGBM_TOP_N_QUERIES", "100")),
         candidates_per_query=int(os.getenv("LGBM_CANDIDATES_PER_QUERY", "100")),
         tracker=tracker,
-    ).run()
+    )
+    with tracker.start_run(run_name="lgbm-retrain"):
+        lgbm_result = await pipeline.run()
 
     model_id = lgbm_result.get("model_id") if isinstance(lgbm_result, dict) else None
     if model_id:

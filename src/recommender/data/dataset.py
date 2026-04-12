@@ -89,7 +89,7 @@ class RepoDataset:
             limit = min(batch_size, total - skip)
             payload = {
                 "database": "gitquery",
-                "collection": "raw_repositories",
+                "collection": "repositories",
                 "filter": {},
                 "limit": limit,
                 "skip": skip,
@@ -363,7 +363,7 @@ class RepoDataset:
                 headers=headers,
                 json={
                     "database": "gitquery",
-                    "collection": "raw_repositories",
+                    "collection": "repositories",
                     "filter": {},
                     "limit": 1,
                     "skip": 0,

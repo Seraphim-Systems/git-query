@@ -16,7 +16,7 @@ services:
 
       # Training Configuration
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
-      - BATCH_SIZE=${BATCH_SIZE:-32}
+      - BATCH_SIZE=${BATCH_SIZE:-256}
       - FETCH_BATCH_SIZE=${FETCH_BATCH_SIZE:-100}
       - MAX_REPOS=${MAX_REPOS:-}
       - SKIP_IF_NO_NEW_DATA=${SKIP_IF_NO_NEW_DATA:-true}
@@ -42,7 +42,14 @@ services:
 
     # No network needed - training only connects to external API via internet
     restart: "no"  # Run once, don't restart
-    shm_size: '2gb'  # PyTorch multiprocessing needs shared memory for model weights
+    shm_size: '2gb'
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]  # PyTorch multiprocessing needs shared memory for model weights
     volumes:
       # Persist trained models
       - model-artifacts:/app/models

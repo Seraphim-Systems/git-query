@@ -187,28 +187,71 @@ class LGBMRanker:
         grouped_df: pd.DataFrame,
         feature_extractor,
     ) -> tuple[pd.DataFrame, pd.Series, list[int]]:
-        """Extract features and proxy relevance labels from a grouped DataFrame.
+        """Extract features and relevance labels from a grouped DataFrame.
 
-        For each query group, relevance is derived from star counts: repos in
-        the top quartile are labelled 1, the rest 0.
+        When ``grouped_df`` contains an ``interaction_score`` column (populated
+        by MongoDataFetcher.fetch_training_pairs), relevance is derived from a
+        dot-product similarity between each repo's feature vector and an
+        interaction profile — the weighted mean of feature vectors of positively
+        interacted repos.  This uses cosine similarity to avoid magnitude bias.
+
+        Falls back to star-quartile labels when interaction data is sparse
+        (<3 positive repos in the group).
         """
         feature_frames: list[pd.DataFrame] = []
         labels: list[pd.Series] = []
         group_sizes: list[int] = []
+        has_interaction_col = "interaction_score" in grouped_df.columns
+        dot_product_groups = 0
 
         for _, grp in grouped_df.groupby("query_id", sort=True):
             qtext = str(grp["query_text"].iloc[0])
             feats = feature_extractor.extract_all(grp, query=qtext)
+            feat_vals = feats.values.astype(float)
 
+            # --- Star-quartile labels (always computed as fallback) ---
             stars = pd.to_numeric(grp.get("stars", 0), errors="coerce").fillna(0)
             threshold = stars.quantile(0.75)
-            rel = (stars >= threshold).astype(int)
-            if rel.sum() == 0:
-                rel = (stars == stars.max()).astype(int)
+            star_rel = (stars >= threshold).astype(int)
+            if star_rel.sum() == 0:
+                star_rel = (stars == stars.max()).astype(int)
+
+            rel = star_rel
+
+            # --- Dot-product labels from interaction profile ---
+            if has_interaction_col:
+                interaction_scores = pd.to_numeric(
+                    grp["interaction_score"], errors="coerce"
+                ).fillna(0.0).values
+                pos_mask = interaction_scores > 0
+                if pos_mask.sum() >= 3:
+                    # Interaction profile = weighted mean of positively interacted repo features
+                    pos_weights = interaction_scores[pos_mask]
+                    profile = np.average(feat_vals[pos_mask], axis=0, weights=pos_weights)
+
+                    # Cosine similarity: normalise both profile and repo vectors
+                    profile_norm = np.linalg.norm(profile)
+                    if profile_norm > 0:
+                        profile = profile / profile_norm
+                    row_norms = np.linalg.norm(feat_vals, axis=1, keepdims=True)
+                    feat_norm = feat_vals / np.where(row_norms > 0, row_norms, 1.0)
+
+                    dot_scores = feat_norm @ profile  # shape: (n_repos,)
+                    threshold_dot = np.percentile(dot_scores, 60)  # top 40% = relevant
+                    rel = pd.Series(
+                        (dot_scores >= threshold_dot).astype(int), index=grp.index
+                    )
+                    dot_product_groups += 1
 
             feature_frames.append(feats)
             labels.append(rel)
             group_sizes.append(len(feats))
+
+        if has_interaction_col:
+            logger.info(
+                "Dot-product labels used for %d / %d query groups; star fallback for the rest",
+                dot_product_groups, len(group_sizes),
+            )
 
         X = pd.concat(feature_frames, axis=0).reset_index(drop=True)
         y = pd.concat(labels, axis=0).reset_index(drop=True)

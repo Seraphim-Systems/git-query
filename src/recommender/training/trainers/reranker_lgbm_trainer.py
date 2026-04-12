@@ -85,6 +85,14 @@ class RerankerLGBMTrainer:
         await loop.run_in_executor(None, ranker.save, model_path)
         logger.info("LightGBM model saved to: %s", model_path)
 
+        # Save reference snapshot for drift monitoring
+        grouped_df = training_data.get("grouped_df")
+        if grouped_df is not None:
+            reference_path = os.path.join(resolved_model_dir, "metadata", "reference_data.parquet")
+            os.makedirs(os.path.dirname(reference_path), exist_ok=True)
+            await loop.run_in_executor(None, lambda: grouped_df.to_parquet(reference_path, index=False))
+            logger.info("Reference snapshot saved to %s (%d rows)", reference_path, len(grouped_df))
+
         # Register in model registry
         metadata = ModelMetadata(
             model_id=f"lgbm_{variant}_{datetime.now(timezone.utc).timestamp()}",

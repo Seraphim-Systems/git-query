@@ -186,6 +186,15 @@ class TestBuildQueryGroups:
         for _, grp in result.groupby("query_id"):
             assert grp["query_text"].nunique() == 1
 
+    def test_random_state_produces_reproducible_output(self):
+        from src.recommender.training.lgbm_ranker import build_query_groups
+
+        raw = _make_raw_df(n_per_lang=20)
+        result1 = build_query_groups(raw, top_n_queries=3, random_state=99)
+        result2 = build_query_groups(raw, top_n_queries=3, random_state=99)
+
+        pd.testing.assert_frame_equal(result1.reset_index(drop=True), result2.reset_index(drop=True))
+
 
 # ---------------------------------------------------------------------------
 # LGBMRanker — no-training tests (fast)
@@ -279,6 +288,19 @@ class TestLGBMRankerTraining:
         logged_metrics = mock_tracker.log_metrics.call_args[0][0]
         assert "mean_ndcg_at_10" in logged_metrics
 
+    def test_train_without_holdout_when_fewer_than_five_groups(self):
+        """With <5 query groups training completes without a holdout split."""
+        from src.recommender.training.lgbm_ranker import LGBMRanker
+
+        grouped = _make_grouped_df(n_queries=3, repos_per_query=15)
+        fe = _mock_feature_extractor(n_features=5)
+
+        ranker = LGBMRanker()
+        metrics = ranker.train(grouped, feature_extractor=fe, seeds=[42], num_boost_rounds=20)
+
+        assert ranker.model is not None
+        assert "mean_ndcg_at_10" in metrics
+
     def test_train_without_tracker_does_not_raise(self):
         from src.recommender.training.lgbm_ranker import LGBMRanker
 
@@ -347,3 +369,129 @@ class TestLGBMRankerTraining:
         assert reg["variant"] == "lightgbm_lambdarank"
         assert "feature_cols" in reg
         assert isinstance(reg["feature_cols"], list)
+
+
+# ---------------------------------------------------------------------------
+# _build_rank_data — dot-product label path (no LightGBM required)
+# ---------------------------------------------------------------------------
+
+
+def _make_grouped_df_with_interactions(
+    n_queries: int = 3, repos_per_query: int = 12, n_positives: int = 4, seed: int = 42
+) -> pd.DataFrame:
+    """Grouped DataFrame that includes an interaction_score column."""
+    rng = np.random.default_rng(seed)
+    rows = []
+    for qid in range(n_queries):
+        for i in range(repos_per_query):
+            score = float(rng.integers(1, 5)) if i < n_positives else 0.0
+            rows.append(
+                {
+                    "query_id": qid,
+                    "query_text": f"lang_{qid}",
+                    "name": f"repo_{qid}_{i}",
+                    "description": "a repo",
+                    "stars": int(rng.integers(0, 5000)),
+                    "forks": int(rng.integers(0, 500)),
+                    "language": f"lang_{qid}",
+                    "license": "MIT",
+                    "topics": [],
+                    "readme": "readme text",
+                    "updated_at": "2024-01-01",
+                    "interaction_score": score,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+class TestBuildRankDataDotProduct:
+    def test_labels_are_binary(self):
+        """Output labels must be 0/1 regardless of which path is taken."""
+        from src.recommender.training.lgbm_ranker import LGBMRanker
+
+        grouped = _make_grouped_df_with_interactions(n_positives=4)
+        fe = _mock_feature_extractor(n_features=5)
+
+        ranker = LGBMRanker()
+        _, y, groups = ranker._build_rank_data(grouped, fe)
+
+        assert set(y.unique()).issubset({0, 1})
+        assert sum(groups) == len(grouped)
+
+    def test_group_sizes_sum_to_row_count(self):
+        from src.recommender.training.lgbm_ranker import LGBMRanker
+
+        grouped = _make_grouped_df_with_interactions(n_positives=4)
+        fe = _mock_feature_extractor(n_features=5)
+
+        ranker = LGBMRanker()
+        _, _, groups = ranker._build_rank_data(grouped, fe)
+
+        assert sum(groups) == len(grouped)
+
+    def test_falls_back_to_star_labels_when_few_positives(self):
+        """With <3 positive interactions per group, labels equal star-quartile labels."""
+        from src.recommender.training.lgbm_ranker import LGBMRanker
+
+        grouped_with_scores = _make_grouped_df_with_interactions(n_positives=2)
+        star_only = grouped_with_scores.drop(columns=["interaction_score"])
+        fe = _mock_feature_extractor(n_features=5)
+
+        ranker = LGBMRanker()
+        _, y_dot, _ = ranker._build_rank_data(grouped_with_scores, fe)
+        _, y_star, _ = ranker._build_rank_data(star_only, fe)
+
+        pd.testing.assert_series_equal(
+            y_dot.reset_index(drop=True), y_star.reset_index(drop=True)
+        )
+
+    def test_all_zero_interaction_scores_uses_star_labels(self):
+        """All-zero interaction_score → pos_mask empty → star fallback."""
+        from src.recommender.training.lgbm_ranker import LGBMRanker
+
+        grouped_zeros = _make_grouped_df_with_interactions(n_positives=0)
+        star_only = grouped_zeros.drop(columns=["interaction_score"])
+        fe = _mock_feature_extractor(n_features=5)
+
+        ranker = LGBMRanker()
+        _, y_dot, _ = ranker._build_rank_data(grouped_zeros, fe)
+        _, y_star, _ = ranker._build_rank_data(star_only, fe)
+
+        pd.testing.assert_series_equal(
+            y_dot.reset_index(drop=True), y_star.reset_index(drop=True)
+        )
+
+    def test_zero_norm_profile_does_not_raise(self):
+        """All-zero feature vectors must not cause ZeroDivisionError."""
+        from src.recommender.training.lgbm_ranker import LGBMRanker
+
+        grouped = _make_grouped_df_with_interactions(n_positives=4)
+
+        fe = MagicMock()
+
+        def extract_all_zeros(df: pd.DataFrame, query: str = "") -> pd.DataFrame:
+            return pd.DataFrame(
+                np.zeros((len(df), 5)),
+                columns=[f"feat_{i}" for i in range(5)],
+                index=df.index,
+            )
+
+        fe.extract_all.side_effect = extract_all_zeros
+
+        ranker = LGBMRanker()
+        _, y, groups = ranker._build_rank_data(grouped, fe)  # must not raise
+
+        assert len(y) == len(grouped)
+
+    def test_no_interaction_col_uses_star_labels(self):
+        """Without interaction_score column, the dot-product path is never entered."""
+        from src.recommender.training.lgbm_ranker import LGBMRanker
+
+        grouped = _make_grouped_df(n_queries=3, repos_per_query=12)
+        fe = _mock_feature_extractor(n_features=5)
+
+        ranker = LGBMRanker()
+        _, y, groups = ranker._build_rank_data(grouped, fe)
+
+        assert set(y.unique()).issubset({0, 1})
+        assert sum(groups) == len(grouped)

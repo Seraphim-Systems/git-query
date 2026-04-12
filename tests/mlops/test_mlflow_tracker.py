@@ -121,6 +121,64 @@ class TestMLflowTracker:
         assert tracker.get_run_id() is None
 
 
+class TestLogArtifact:
+    def test_no_op_without_active_run(self, tmp_path):
+        """log_artifact is a silent no-op when no MLflow run is active."""
+        from src.recommender.mlops.mlflow_tracker import MLflowTracker
+
+        tracker = MLflowTracker(experiment_name="test")
+        f = tmp_path / "artifact.txt"
+        f.write_text("data")
+
+        # Should not raise
+        tracker.log_artifact(str(f))
+
+    def test_calls_log_artifact_for_file(self, tmp_path):
+        from src.recommender.mlops.mlflow_tracker import MLFLOW_AVAILABLE, MLflowTracker
+
+        if not MLFLOW_AVAILABLE:
+            pytest.skip("MLflow not installed")
+
+        tracker = MLflowTracker(experiment_name="test")
+        tracker._run = MagicMock()  # simulate active run
+        f = tmp_path / "model.pkl"
+        f.write_text("model")
+
+        with patch("mlflow.log_artifact") as mock_log:
+            tracker.log_artifact(str(f))
+
+        mock_log.assert_called_once_with(str(f), None)
+
+    def test_calls_log_artifacts_for_directory(self, tmp_path):
+        from src.recommender.mlops.mlflow_tracker import MLFLOW_AVAILABLE, MLflowTracker
+
+        if not MLFLOW_AVAILABLE:
+            pytest.skip("MLflow not installed")
+
+        tracker = MLflowTracker(experiment_name="test")
+        tracker._run = MagicMock()  # simulate active run
+
+        with patch("mlflow.log_artifacts") as mock_log:
+            tracker.log_artifact(str(tmp_path), artifact_path="models/")
+
+        mock_log.assert_called_once_with(str(tmp_path), "models/")
+
+    def test_swallows_mlflow_exception(self, tmp_path):
+        """Errors from MLflow are caught and don't propagate."""
+        from src.recommender.mlops.mlflow_tracker import MLFLOW_AVAILABLE, MLflowTracker
+
+        if not MLFLOW_AVAILABLE:
+            pytest.skip("MLflow not installed")
+
+        tracker = MLflowTracker(experiment_name="test")
+        tracker._run = MagicMock()
+        f = tmp_path / "artifact.txt"
+        f.write_text("data")
+
+        with patch("mlflow.log_artifact", side_effect=RuntimeError("mlflow error")):
+            tracker.log_artifact(str(f))  # must not raise
+
+
 class TestMLflowTrackerContextManager:
     """Test the context manager functionality."""
 

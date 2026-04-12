@@ -9,13 +9,24 @@ import json
 import logging
 import random
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import requests
 
 logger = logging.getLogger(__name__)
+
+# Mirrors PersonalizationService signal weights (services/personalization_service.py)
+# Keyed on InteractionType string values to avoid importing the serving layer.
+INTERACTION_WEIGHTS: Dict[str, float] = {
+    "thumbs_up": 5.0,
+    "save": 3.0,
+    "click": 1.0,
+    "view": 0.1,
+    "dismiss": -2.0,
+    "thumbs_down": -5.0,
+}
 
 
 class MongoDataFetcher:
@@ -192,11 +203,50 @@ class MongoDataFetcher:
             logger.warning("Could not read previous mapping: %s", e)
             return True, repositories
 
+    def fetch_interactions(self, days: int = 90) -> Dict[str, float]:
+        """Fetch user interactions and return a repo_id → weighted score mapping.
+
+        Queries the ``user_interactions`` collection for the last *days* days and
+        aggregates per-repo interaction scores using ``INTERACTION_WEIGHTS``.
+        Returns an empty dict (gracefully) if the collection is unreachable.
+        """
+        cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+        try:
+            response = requests.post(
+                f"{self.api_base_url}/api/mongodb/query",
+                headers=self.headers,
+                json={
+                    "database": "gitquery",
+                    "collection": "user_interactions",
+                    "filter": {"timestamp": {"$gte": cutoff}},
+                    "limit": 100000,
+                    "skip": 0,
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+            docs = response.json().get("documents", [])
+            scores: Dict[str, float] = {}
+            for doc in docs:
+                repo_id = doc.get("repo_id", "")
+                weight = INTERACTION_WEIGHTS.get(doc.get("interaction_type", ""), 0.0)
+                if repo_id and weight != 0.0:
+                    scores[repo_id] = scores.get(repo_id, 0.0) + weight
+            logger.info(
+                "Fetched %d interactions → %d repos with non-zero scores (last %d days)",
+                len(docs), len(scores), days,
+            )
+            return scores
+        except Exception as e:
+            logger.warning("Could not fetch interactions — falling back to star-based labels: %s", e)
+            return {}
+
     def fetch_training_pairs(
         self,
         max_repos: Optional[int] = None,
         top_n_queries: int = 100,
         candidates_per_query: int = 100,
+        interaction_days: int = 90,
     ) -> Dict:
         """Fetch repositories and build training pair structures.
 
@@ -209,7 +259,8 @@ class MongoDataFetcher:
           - "queries": list of query strings
           - "positive_repos": list of repo dicts (positive examples)
           - "negative_repos": list of repo dicts (negative examples)
-          - "grouped_df": pd.DataFrame for LGBMRanker (from build_query_groups)
+          - "grouped_df": pd.DataFrame for LGBMRanker (from build_query_groups),
+            includes an ``interaction_score`` column (0.0 where no data)
           - "dataset_version": deterministic hash string
         """
         import pandas as pd
@@ -224,6 +275,22 @@ class MongoDataFetcher:
         for col in ("name", "description", "language", "stars"):
             if col not in df.columns:
                 df[col] = None
+
+        # Join interaction scores — enables dot-product relevance labels in LGBMRanker
+        interaction_scores = self.fetch_interactions(days=interaction_days)
+        if interaction_scores:
+            df["interaction_score"] = df.apply(
+                lambda row: interaction_scores.get(self._stable_id(row.to_dict()), 0.0),
+                axis=1,
+            )
+            coverage = (df["interaction_score"] != 0).sum()
+            logger.info(
+                "Interaction coverage: %d / %d repos (%.1f%%)",
+                coverage, len(df), 100 * coverage / max(len(df), 1),
+            )
+        else:
+            df["interaction_score"] = 0.0
+            logger.info("No interaction data — training will use star-based labels")
 
         grouped_df = build_query_groups(df, top_n_queries=top_n_queries, candidates_per_query=candidates_per_query)
 
