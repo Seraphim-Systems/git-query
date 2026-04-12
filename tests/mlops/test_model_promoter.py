@@ -8,10 +8,7 @@ import pytest
 
 # Import model_promoter directly so we don't trigger src.recommender.__init__
 # (which pulls in torch via the engines package).
-_PROMOTER_PATH = (
-    pathlib.Path(__file__).parents[2]
-    / "src" / "recommender" / "mlops" / "model_promoter.py"
-)
+_PROMOTER_PATH = pathlib.Path(__file__).parents[2] / "src" / "recommender" / "mlops" / "model_promoter.py"
 _spec = importlib.util.spec_from_file_location("model_promoter", _PROMOTER_PATH)
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
@@ -108,9 +105,7 @@ class TestPromoteIfBetterCandidateWins:
                 candidate_mlflow_version=3,
             )
 
-        tracker.transition_model_stage.assert_called_once_with(
-            "git-query-lgbm-reranker", 3, "Production"
-        )
+        tracker.transition_model_stage.assert_called_once_with("git-query-lgbm-reranker", 3, "Production")
 
     def test_logs_promotion_blocked_zero_on_success(self):
         tracker = _make_tracker(production_metrics={"mean_ndcg_at_10": 0.70})
@@ -171,9 +166,7 @@ class TestPromoteIfBetterCandidateLoses:
 
     def test_blocked_when_std_ndcg_rises_beyond_threshold(self):
         """Higher std_ndcg is worse — a large rise must be blocked."""
-        tracker = _make_tracker(
-            production_metrics={"mean_ndcg_at_10": 0.82, "std_ndcg_at_10": 0.10}
-        )
+        tracker = _make_tracker(production_metrics={"mean_ndcg_at_10": 0.82, "std_ndcg_at_10": 0.10})
         promoter = _make_promoter(tracker)
 
         promoted = promoter.promote_if_better(

@@ -312,9 +312,7 @@ class MLflowTracker:
             versions = self._client.get_latest_versions(model_name, stages=["Production"])
             for v in versions:
                 if int(v.version) != keep_version:
-                    self._client.transition_model_version_stage(
-                        name=model_name, version=v.version, stage="Archived"
-                    )
+                    self._client.transition_model_version_stage(name=model_name, version=v.version, stage="Archived")
                     logger.info("Archived model '%s' version %s", model_name, v.version)
         except Exception as e:
             logger.warning("Failed to archive previous production versions: %s", e)

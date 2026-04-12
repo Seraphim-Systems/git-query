@@ -117,9 +117,7 @@ async def startup_db_clients():
     # Qdrant (optional)
     qdrant_host = os.getenv("QDRANT_HOST", os.getenv("QDRANT_HTTP_HOST", "localhost"))
     qdrant_port = int(os.getenv("QDRANT_PORT", os.getenv("QDRANT_HTTP_PORT", "6333")))
-    qdrant_api_key = getattr(settings, "qdrant_api_key", None) or os.getenv(
-        "QDRANT_API_KEY"
-    )
+    qdrant_api_key = getattr(settings, "qdrant_api_key", None) or os.getenv("QDRANT_API_KEY")
     qdrant_use_tls = os.getenv("QDRANT_USE_TLS", "false").lower() in (
         "1",
         "true",
@@ -168,9 +166,7 @@ async def shutdown_db_clients():
         logger.error(f"Error closing Redis client: {e}")
 
     try:
-        if getattr(clients_mod, "qdrant_client", None) and hasattr(
-            clients_mod.qdrant_client, "close"
-        ):
+        if getattr(clients_mod, "qdrant_client", None) and hasattr(clients_mod.qdrant_client, "close"):
             clients_mod.qdrant_client.close()
             logger.info("Qdrant client closed")
     except Exception as e:

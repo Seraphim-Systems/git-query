@@ -32,9 +32,7 @@ class ModelRegistryService:
 
     async def get_active_model(
         self,
-        model_type: Literal[
-            "embedding", "cross_encoder", "personalization", "reranker"
-        ],
+        model_type: Literal["embedding", "cross_encoder", "personalization", "reranker"],
         variant: str = "default",
     ) -> Optional[ModelMetadata]:
         """Get the currently active model for a specific type and variant."""

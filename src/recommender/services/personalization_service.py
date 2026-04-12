@@ -29,9 +29,7 @@ class PersonalizationService:
         InteractionType.THUMBS_DOWN: -5.0,
     }
 
-    async def update_preferences_from_interaction(
-        self, interaction: UserInteraction, repo_data: Dict
-    ):
+    async def update_preferences_from_interaction(self, interaction: UserInteraction, repo_data: Dict):
         """
         Update user preferences based on a new interaction.
 
@@ -52,9 +50,7 @@ class PersonalizationService:
 
         # Get signal weight — apply time decay so recent signals matter more
         base_weight = self._get_signal_weight(interaction.interaction_type)
-        signal_weight = LanguagePreferenceService.apply_time_decay(
-            base_weight, interaction.timestamp
-        )
+        signal_weight = LanguagePreferenceService.apply_time_decay(base_weight, interaction.timestamp)
 
         # Update language preferences
         if repo_data.get("language"):
@@ -69,12 +65,8 @@ class PersonalizationService:
                 prefs.topic_preferences[topic] = current + signal_weight
 
         # Normalize preferences to prevent unbounded growth
-        prefs.language_preferences = self._normalize_preferences(
-            prefs.language_preferences
-        )
-        prefs.topic_preferences = self._normalize_preferences(
-            prefs.topic_preferences
-        )
+        prefs.language_preferences = self._normalize_preferences(prefs.language_preferences)
+        prefs.topic_preferences = self._normalize_preferences(prefs.topic_preferences)
 
         # Update metadata
         prefs.total_interactions += 1
@@ -96,12 +88,10 @@ class PersonalizationService:
 
         for interaction in interactions:
             base_weight = self._get_signal_weight(interaction.interaction_type)
-            signal_weight = LanguagePreferenceService.apply_time_decay(
-                base_weight, interaction.timestamp
-            )
+            signal_weight = LanguagePreferenceService.apply_time_decay(base_weight, interaction.timestamp)
 
             # Use metadata stored with the interaction if available
-            if hasattr(interaction, 'metadata') and interaction.metadata:
+            if hasattr(interaction, "metadata") and interaction.metadata:
                 meta = interaction.metadata
                 if meta.get("language"):
                     language_scores[meta["language"]] += signal_weight
@@ -152,4 +142,3 @@ class PersonalizationService:
             normalized[key] = shifted / (max_val - min_val)
 
         return normalized
-

@@ -31,9 +31,7 @@ class SessionManager:
         self.redis = redis
         self.session_ttl = ttl
 
-    async def create_session(
-        self, user_id: str, ip_address: str, user_agent: str
-    ) -> str:
+    async def create_session(self, user_id: str, ip_address: str, user_agent: str) -> str:
         """
         Create a new session.
 
@@ -55,9 +53,7 @@ class SessionManager:
             user_agent=user_agent,
         )
 
-        await self.redis.setex(
-            f"session:{session_id}", self.session_ttl, session_data.model_dump_json()
-        )
+        await self.redis.setex(f"session:{session_id}", self.session_ttl, session_data.model_dump_json())
 
         return session_id
 

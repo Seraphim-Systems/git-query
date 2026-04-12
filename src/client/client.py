@@ -37,9 +37,7 @@ async def check_mcp_connection():
                 console.print(f"  • {tool['name']}: {tool['description']}")
     else:
         console.print("[red]✗ Failed to connect to MCP server[/red]")
-        console.print(
-            f"[yellow]Make sure the MCP server is running at {settings.mcp_server_url}[/yellow]"
-        )
+        console.print(f"[yellow]Make sure the MCP server is running at {settings.mcp_server_url}[/yellow]")
         return False
 
     return True
@@ -58,9 +56,7 @@ async def interactive_chat():
 
     # Check MCP connection
     if not await check_mcp_connection():
-        console.print(
-            "\n[yellow]Continuing anyway... (some features may not work)[/yellow]"
-        )
+        console.print("\n[yellow]Continuing anyway... (some features may not work)[/yellow]")
 
     console.print("\n[green]Ready! Start chatting...[/green]\n")
 
@@ -90,9 +86,7 @@ async def interactive_chat():
             if tool_calls:
                 console.print("\n[dim]Tools used:[/dim]")
                 for call in tool_calls:
-                    console.print(
-                        f"[dim]  • {call['tool']}({call['parameters']})[/dim]"
-                    )
+                    console.print(f"[dim]  • {call['tool']}({call['parameters']})[/dim]")
 
         except KeyboardInterrupt:
             console.print("\n\n[yellow]Interrupted. Goodbye! 👋[/yellow]\n")

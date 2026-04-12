@@ -15,6 +15,7 @@ from src.recommender.services.ab_test_service import ABTestService
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_ab_test(
     variants=("baseline", "hybrid"),
     traffic_split=None,
@@ -48,9 +49,7 @@ def service() -> ABTestService:
 class TestExplicitVariantPassthrough:
     async def test_explicit_variant_bypasses_ab_test(self, service, mocker):
         """When request_variant is supplied the db is never queried."""
-        mock_get = mocker.patch.object(
-            db_manager, "get_active_ab_test", new_callable=AsyncMock
-        )
+        mock_get = mocker.patch.object(db_manager, "get_active_ab_test", new_callable=AsyncMock)
 
         result = await service.get_variant_for_user("user-1", request_variant="hybrid")
 
@@ -66,9 +65,7 @@ class TestExplicitVariantPassthrough:
 class TestABTestingDisabled:
     async def test_returns_default_variant_when_ab_disabled(self, service, mocker):
         """With ab_test_enabled=False the default_variant is returned immediately."""
-        mocker.patch.object(
-            db_manager, "get_active_ab_test", new_callable=AsyncMock
-        )
+        mocker.patch.object(db_manager, "get_active_ab_test", new_callable=AsyncMock)
         mocker.patch(
             "src.recommender.services.ab_test_service.settings",
             ab_test_enabled=False,

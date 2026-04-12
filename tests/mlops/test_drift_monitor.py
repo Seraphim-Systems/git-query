@@ -406,16 +406,20 @@ class TestCheckDataDriftColumnFiltering:
         with tempfile.TemporaryDirectory() as tmpdir:
             monitor = DriftMonitor(report_dir=tmpdir)
 
-            ref = pd.DataFrame({
-                "stars": [100, 200, 300, 400, 500],
-                "interaction_score": [0.9, 0.8, 0.7, 0.6, 0.5],  # training-only
-                "query_id": [1, 2, 3, 4, 5],                       # training-only
-                "query_text": ["a", "b", "c", "d", "e"],            # training-only
-            })
-            cur = pd.DataFrame({
-                "stars": [110, 210, 310, 410, 510],
-                # training-only cols absent in live data — this must not raise
-            })
+            ref = pd.DataFrame(
+                {
+                    "stars": [100, 200, 300, 400, 500],
+                    "interaction_score": [0.9, 0.8, 0.7, 0.6, 0.5],  # training-only
+                    "query_id": [1, 2, 3, 4, 5],  # training-only
+                    "query_text": ["a", "b", "c", "d", "e"],  # training-only
+                }
+            )
+            cur = pd.DataFrame(
+                {
+                    "stars": [110, 210, 310, 410, 510],
+                    # training-only cols absent in live data — this must not raise
+                }
+            )
 
             result = monitor.check_data_drift(ref, cur)
 
@@ -434,14 +438,18 @@ class TestCheckDataDriftColumnFiltering:
         with tempfile.TemporaryDirectory() as tmpdir:
             monitor = DriftMonitor(report_dir=tmpdir)
 
-            ref = pd.DataFrame({
-                "stars": [100, 200, 300, 400, 500],
-                "topics": [[1, 2], [3], [4, 5], [6], [7, 8]],  # array col
-            })
-            cur = pd.DataFrame({
-                "stars": [110, 210, 310, 410, 510],
-                "topics": [[9], [10, 11], [12], [13, 14], [15]],
-            })
+            ref = pd.DataFrame(
+                {
+                    "stars": [100, 200, 300, 400, 500],
+                    "topics": [[1, 2], [3], [4, 5], [6], [7, 8]],  # array col
+                }
+            )
+            cur = pd.DataFrame(
+                {
+                    "stars": [110, 210, 310, 410, 510],
+                    "topics": [[9], [10, 11], [12], [13, 14], [15]],
+                }
+            )
 
             result = monitor.check_data_drift(ref, cur)
 
@@ -460,14 +468,18 @@ class TestCheckDataDriftColumnFiltering:
         with tempfile.TemporaryDirectory() as tmpdir:
             monitor = DriftMonitor(report_dir=tmpdir)
 
-            ref = pd.DataFrame({
-                "stars": [100, 200, 300, 400, 500],
-                "all_null": [None, None, None, None, None],
-            })
-            cur = pd.DataFrame({
-                "stars": [110, 210, 310, 410, 510],
-                "all_null": [None, None, None, None, None],
-            })
+            ref = pd.DataFrame(
+                {
+                    "stars": [100, 200, 300, 400, 500],
+                    "all_null": [None, None, None, None, None],
+                }
+            )
+            cur = pd.DataFrame(
+                {
+                    "stars": [110, 210, 310, 410, 510],
+                    "all_null": [None, None, None, None, None],
+                }
+            )
 
             result = monitor.check_data_drift(ref, cur)
 

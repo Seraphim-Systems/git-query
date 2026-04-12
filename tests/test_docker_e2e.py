@@ -36,6 +36,7 @@ HEALTH_POLL_INTERVAL_S = 3
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _load_env_for_container() -> list[str]:
     """Load .env and return as list of -e KEY=VALUE strings for docker run."""
     env_path = os.path.join(PROJECT_ROOT, ".env")
@@ -45,10 +46,16 @@ def _load_env_for_container() -> list[str]:
     values = dotenv_values(env_path)
     # Pass only the vars the recommender needs
     relevant_keys = {
-        "QDRANT_URL", "QDRANT_API_KEY", "APIKEY_QDRANT",
-        "QDRANT_HOST", "QDRANT_HTTP_PORT", "QDRANT_COLLECTION",
-        "MONGODB_URL", "REDIS_URL",
-        "EMBEDDING_API_KEY", "LOG_LEVEL",
+        "QDRANT_URL",
+        "QDRANT_API_KEY",
+        "APIKEY_QDRANT",
+        "QDRANT_HOST",
+        "QDRANT_HTTP_PORT",
+        "QDRANT_COLLECTION",
+        "MONGODB_URL",
+        "REDIS_URL",
+        "EMBEDDING_API_KEY",
+        "LOG_LEVEL",
     }
     args = []
     for key in relevant_keys:
@@ -59,9 +66,7 @@ def _load_env_for_container() -> list[str]:
 
 def _docker_available() -> bool:
     try:
-        result = subprocess.run(
-            ["docker", "info"], capture_output=True, timeout=10
-        )
+        result = subprocess.run(["docker", "info"], capture_output=True, timeout=10)
         return result.returncode == 0
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return False
@@ -69,8 +74,7 @@ def _docker_available() -> bool:
 
 def _container_running(name: str) -> bool:
     result = subprocess.run(
-        ["docker", "inspect", "--format", "{{.State.Running}}", name],
-        capture_output=True, text=True
+        ["docker", "inspect", "--format", "{{.State.Running}}", name], capture_output=True, text=True
     )
     return result.stdout.strip() == "true"
 
@@ -97,6 +101,7 @@ def _wait_for_health(url: str, timeout: int, interval: int) -> bool:
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture(scope="module")
 def docker_available():
     if not _docker_available():
@@ -109,9 +114,12 @@ def built_image(docker_available):
     print(f"\nBuilding Docker image: {IMAGE_TAG}")
     result = subprocess.run(
         [
-            "docker", "build",
-            "-f", DOCKERFILE,
-            "-t", IMAGE_TAG,
+            "docker",
+            "build",
+            "-f",
+            DOCKERFILE,
+            "-t",
+            IMAGE_TAG,
             ".",
         ],
         cwd=PROJECT_ROOT,
@@ -120,9 +128,7 @@ def built_image(docker_available):
         timeout=600,  # 10 min — first build downloads model weights
     )
     if result.returncode != 0:
-        pytest.fail(
-            f"Docker build failed:\n{result.stdout[-2000:]}\n{result.stderr[-2000:]}"
-        )
+        pytest.fail(f"Docker build failed:\n{result.stdout[-2000:]}\n{result.stderr[-2000:]}")
     print(f"Image built: {IMAGE_TAG}")
     return IMAGE_TAG
 
@@ -138,10 +144,13 @@ def running_container(built_image):
         pytest.skip("No .env found — cannot pass credentials to container")
 
     cmd = [
-        "docker", "run",
-        "--name", CONTAINER_NAME,
+        "docker",
+        "run",
+        "--name",
+        CONTAINER_NAME,
         "-d",
-        "-p", f"{HOST_PORT}:{CONTAINER_PORT}",
+        "-p",
+        f"{HOST_PORT}:{CONTAINER_PORT}",
         *env_args,
         built_image,
     ]
@@ -156,15 +165,9 @@ def running_container(built_image):
 
     if not healthy:
         # Capture logs for debugging
-        logs = subprocess.run(
-            ["docker", "logs", "--tail", "50", CONTAINER_NAME],
-            capture_output=True, text=True
-        ).stdout
+        logs = subprocess.run(["docker", "logs", "--tail", "50", CONTAINER_NAME], capture_output=True, text=True).stdout
         _stop_and_remove_container(CONTAINER_NAME)
-        pytest.fail(
-            f"Container did not become healthy within {HEALTH_TIMEOUT_S}s.\n"
-            f"Last logs:\n{logs}"
-        )
+        pytest.fail(f"Container did not become healthy within {HEALTH_TIMEOUT_S}s.\nLast logs:\n{logs}")
 
     print(f"Container healthy at {BASE_URL}")
     yield BASE_URL
@@ -175,6 +178,7 @@ def running_container(built_image):
 
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.e2e
 class TestDockerE2E:
@@ -226,9 +230,7 @@ class TestDockerE2E:
         overlap = ids1 & ids2
 
         print(f"\n[diversity] ML overlap with DevOps: {len(overlap)}/5 repos shared")
-        assert len(overlap) < 4, (
-            f"Too much overlap ({len(overlap)}/5) — search may not be query-sensitive"
-        )
+        assert len(overlap) < 4, f"Too much overlap ({len(overlap)}/5) — search may not be query-sensitive"
 
     def test_recommend_language_filter(self, running_container):
         """language filter is enforced in the containerised service."""
@@ -283,6 +285,7 @@ class TestDockerE2E:
     def test_log_interaction(self, running_container):
         """POST /interaction logs without error."""
         from datetime import datetime, timezone
+
         payload = {
             "user_id": "e2e-test-user",
             "query": "machine learning python",
@@ -308,9 +311,7 @@ class TestDockerE2E:
             json={"top_k": 5},  # missing required 'query'
             timeout=10,
         )
-        assert resp.status_code == 422, (
-            f"Expected 422 for invalid request, got {resp.status_code}"
-        )
+        assert resp.status_code == 422, f"Expected 422 for invalid request, got {resp.status_code}"
 
     def test_response_time_is_acceptable(self, running_container):
         """Warm queries complete within 10 seconds."""
@@ -335,17 +336,12 @@ class TestDockerE2E:
 
     def test_container_logs_show_no_import_errors(self, running_container):
         """Container logs must not contain ImportError or ModuleNotFoundError."""
-        logs = subprocess.run(
-            ["docker", "logs", CONTAINER_NAME],
-            capture_output=True, text=True
-        ).stdout + subprocess.run(
-            ["docker", "logs", CONTAINER_NAME],
-            capture_output=True, text=True
-        ).stderr
-
-        assert "ImportError" not in logs, (
-            "Container logs contain ImportError — check Dockerfile COPY paths"
+        logs = (
+            subprocess.run(["docker", "logs", CONTAINER_NAME], capture_output=True, text=True).stdout
+            + subprocess.run(["docker", "logs", CONTAINER_NAME], capture_output=True, text=True).stderr
         )
+
+        assert "ImportError" not in logs, "Container logs contain ImportError — check Dockerfile COPY paths"
         assert "ModuleNotFoundError" not in logs, (
             "Container logs contain ModuleNotFoundError — check Dockerfile COPY paths"
         )

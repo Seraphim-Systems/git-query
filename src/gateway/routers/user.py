@@ -29,9 +29,7 @@ async def update_preferences(
 
 
 @router.get("/interactions")
-async def get_interactions(
-    request: Request, user_id: str = Depends(get_current_user), limit: int = 100
-):
+async def get_interactions(request: Request, user_id: str = Depends(get_current_user), limit: int = 100):
     """Get user interaction history."""
     user_service = request.app.state.user_service
     interactions = await user_service.get_interaction_history(user_id, limit)

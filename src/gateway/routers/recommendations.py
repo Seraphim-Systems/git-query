@@ -52,7 +52,7 @@ async def post_recommendations(
         "top_k": rec_request.top_k,
         "enable_personalization": rec_request.enable_personalization,
     }
-    
+
     # Add optional filters if provided
     if rec_request.language:
         payload["language"] = rec_request.language
@@ -68,11 +68,7 @@ async def post_recommendations(
     # Call recommender service
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.post(
-                f"{settings.recommender_url}/recommend", 
-                json=payload, 
-                timeout=30.0
-            )
+            response = await client.post(f"{settings.recommender_url}/recommend", json=payload, timeout=30.0)
             response.raise_for_status()
             result = response.json()
         except httpx.HTTPError as e:
@@ -110,11 +106,7 @@ async def get_recommendations(
 
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.post(
-                f"{settings.recommender_url}/recommend",
-                json=payload,
-                timeout=30.0
-            )
+            response = await client.post(f"{settings.recommender_url}/recommend", json=payload, timeout=30.0)
             response.raise_for_status()
             result = response.json()
         except httpx.HTTPError:

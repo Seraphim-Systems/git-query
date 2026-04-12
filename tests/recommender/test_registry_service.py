@@ -51,9 +51,7 @@ def service() -> ModelRegistryService:
 class TestRegisterModel:
     async def test_register_model_calls_save_metadata(self, service, mocker):
         """register_model must delegate to db_manager.save_model_metadata."""
-        mock_save = mocker.patch.object(
-            db_manager, "save_model_metadata", new_callable=AsyncMock
-        )
+        mock_save = mocker.patch.object(db_manager, "save_model_metadata", new_callable=AsyncMock)
         metadata = _make_metadata()
 
         await service.register_model(metadata)
@@ -62,9 +60,7 @@ class TestRegisterModel:
 
     async def test_register_model_returns_model_id(self, service, mocker):
         """register_model must return the model_id from the supplied metadata."""
-        mocker.patch.object(
-            db_manager, "save_model_metadata", new_callable=AsyncMock
-        )
+        mocker.patch.object(db_manager, "save_model_metadata", new_callable=AsyncMock)
         metadata = _make_metadata(model_id="unique-model-xyz")
 
         result = await service.register_model(metadata)
@@ -135,12 +131,8 @@ class TestPromoteModel:
             new_callable=AsyncMock,
             return_value=model,
         )
-        mock_deactivate = mocker.patch.object(
-            db_manager, "deactivate_models", new_callable=AsyncMock
-        )
-        mock_activate = mocker.patch.object(
-            db_manager, "activate_model", new_callable=AsyncMock
-        )
+        mock_deactivate = mocker.patch.object(db_manager, "deactivate_models", new_callable=AsyncMock)
+        mock_activate = mocker.patch.object(db_manager, "activate_model", new_callable=AsyncMock)
 
         result = await service.promote_model("model-A")
 
@@ -157,17 +149,11 @@ class TestPromoteModel:
         assert deactivate_order == 1
         assert activate_order == 1
 
-    async def test_promote_model_calls_deactivate_with_correct_type_and_variant(
-        self, service, mocker
-    ):
+    async def test_promote_model_calls_deactivate_with_correct_type_and_variant(self, service, mocker):
         """deactivate_models must receive the model's type and variant."""
         model = _make_metadata(model_id="model-B", model_type="cross_encoder", variant="hybrid")
-        mocker.patch.object(
-            db_manager, "get_model_by_id", new_callable=AsyncMock, return_value=model
-        )
-        mock_deactivate = mocker.patch.object(
-            db_manager, "deactivate_models", new_callable=AsyncMock
-        )
+        mocker.patch.object(db_manager, "get_model_by_id", new_callable=AsyncMock, return_value=model)
+        mock_deactivate = mocker.patch.object(db_manager, "deactivate_models", new_callable=AsyncMock)
         mocker.patch.object(db_manager, "activate_model", new_callable=AsyncMock)
 
         await service.promote_model("model-B")
@@ -177,13 +163,9 @@ class TestPromoteModel:
     async def test_promote_model_calls_activate_with_correct_id(self, service, mocker):
         """activate_model must receive the exact model_id that was requested."""
         model = _make_metadata(model_id="model-C")
-        mocker.patch.object(
-            db_manager, "get_model_by_id", new_callable=AsyncMock, return_value=model
-        )
+        mocker.patch.object(db_manager, "get_model_by_id", new_callable=AsyncMock, return_value=model)
         mocker.patch.object(db_manager, "deactivate_models", new_callable=AsyncMock)
-        mock_activate = mocker.patch.object(
-            db_manager, "activate_model", new_callable=AsyncMock
-        )
+        mock_activate = mocker.patch.object(db_manager, "activate_model", new_callable=AsyncMock)
 
         await service.promote_model("model-C")
 
@@ -205,9 +187,7 @@ class TestPromoteModel:
     async def test_promote_model_does_NOT_access_db_manager_db_directly(self, service, mocker):
         """promote_model must only call named db_manager methods, never db_manager.db."""
         model = _make_metadata(model_id="model-E")
-        mocker.patch.object(
-            db_manager, "get_model_by_id", new_callable=AsyncMock, return_value=model
-        )
+        mocker.patch.object(db_manager, "get_model_by_id", new_callable=AsyncMock, return_value=model)
         mocker.patch.object(db_manager, "deactivate_models", new_callable=AsyncMock)
         mocker.patch.object(db_manager, "activate_model", new_callable=AsyncMock)
 
@@ -219,9 +199,7 @@ class TestPromoteModel:
         class _DbSentinel:
             def __getattr__(self, name):
                 access_tracker.append(name)
-                raise AssertionError(
-                    f"promote_model must not access db_manager.db.{name} directly"
-                )
+                raise AssertionError(f"promote_model must not access db_manager.db.{name} directly")
 
         db_manager.db = _DbSentinel()
         try:
@@ -230,9 +208,7 @@ class TestPromoteModel:
             db_manager.db = original_db
 
         assert result is True
-        assert access_tracker == [], (
-            f"db_manager.db was accessed directly: {access_tracker}"
-        )
+        assert access_tracker == [], f"db_manager.db was accessed directly: {access_tracker}"
 
 
 # ---------------------------------------------------------------------------

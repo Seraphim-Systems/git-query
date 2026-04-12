@@ -27,12 +27,8 @@ def serialize_collection_description(col: Any) -> Dict[str, Any]:
 
     # Fallback to attribute access
     name = getattr(col, "name", None) or getattr(col, "collection_name", "")
-    vectors_count = (
-        getattr(col, "vectors_count", None) or getattr(col, "vectors", None) or 0
-    )
-    points_count = (
-        getattr(col, "points_count", None) or getattr(col, "points", None) or 0
-    )
+    vectors_count = getattr(col, "vectors_count", None) or getattr(col, "vectors", None) or 0
+    points_count = getattr(col, "points_count", None) or getattr(col, "points", None) or 0
 
     # Some client models nest counts under summary/dictionary fields
     if isinstance(vectors_count, dict):

@@ -34,10 +34,7 @@ except ImportError:
 
 from .base_pipeline import BasePipeline
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -49,9 +46,9 @@ class _EmbeddingIndexer:
         api_base_url: str,
         api_key: str,
         models_dir: str = "/app/models",
-        data_cache_dir: str = "/app/training_data"
+        data_cache_dir: str = "/app/training_data",
     ):
-        self.api_base_url = api_base_url.rstrip('/')
+        self.api_base_url = api_base_url.rstrip("/")
         self.api_key = api_key
         self.models_dir = Path(models_dir)
         self.data_cache_dir = Path(data_cache_dir)
@@ -63,19 +60,12 @@ class _EmbeddingIndexer:
         (self.models_dir / "metadata").mkdir(exist_ok=True)
         (self.models_dir / "checkpoints").mkdir(exist_ok=True)
 
-        self.headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
+        self.headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         logger.info(f"Using device: {self.device}")
 
-    def fetch_repositories(
-        self,
-        batch_size: int = 100,
-        max_repos: Optional[int] = None
-    ) -> List[Dict]:
+    def fetch_repositories(self, batch_size: int = 100, max_repos: Optional[int] = None) -> List[Dict]:
         """Fetch all repositories from API."""
         logger.info("=" * 60)
         logger.info("FETCHING DATA FROM SERVER")
@@ -100,7 +90,7 @@ class _EmbeddingIndexer:
 
         while skip < total_repos:
             current_batch_size = min(batch_size, total_repos - skip)
-            logger.info(f"Fetching batch {skip//batch_size + 1} (repos {skip+1}-{skip+current_batch_size})...")
+            logger.info(f"Fetching batch {skip // batch_size + 1} (repos {skip + 1}-{skip + current_batch_size})...")
 
             batch = self._fetch_batch(skip=skip, limit=current_batch_size)
 
@@ -164,14 +154,8 @@ class _EmbeddingIndexer:
             response = requests.post(
                 f"{self.api_base_url}/api/mongodb/query",
                 headers=self.headers,
-                json={
-                    "database": "gitquery",
-                    "collection": "repositories",
-                    "filter": {},
-                    "limit": 1,
-                    "skip": 0
-                },
-                timeout=10
+                json={"database": "gitquery", "collection": "repositories", "filter": {}, "limit": 1, "skip": 0},
+                timeout=10,
             )
             response.raise_for_status()
             result = response.json()
@@ -189,9 +173,9 @@ class _EmbeddingIndexer:
                         "collection": "repositories",
                         "filter": {},
                         "limit": 1000,  # Fetch up to 1000 to check
-                        "skip": 0
+                        "skip": 0,
                     },
-                    timeout=30
+                    timeout=30,
                 )
                 test_response.raise_for_status()
                 test_result = test_response.json()
@@ -207,12 +191,7 @@ class _EmbeddingIndexer:
             # Return large number to try fetching anyway
             return 10_000_000
 
-    def _fetch_batch(
-        self,
-        skip: int,
-        limit: int,
-        filters: Optional[Dict] = None
-    ) -> List[Dict]:
+    def _fetch_batch(self, skip: int, limit: int, filters: Optional[Dict] = None) -> List[Dict]:
         """Fetch a single batch of repositories."""
         payload = {
             "database": "gitquery",
@@ -220,15 +199,12 @@ class _EmbeddingIndexer:
             "filter": filters or {},
             "limit": limit,
             "skip": skip,
-            "sort": {"_id": 1}
+            "sort": {"_id": 1},
         }
 
         try:
             response = requests.post(
-                f"{self.api_base_url}/api/mongodb/query",
-                headers=self.headers,
-                json=payload,
-                timeout=30
+                f"{self.api_base_url}/api/mongodb/query", headers=self.headers, json=payload, timeout=30
             )
             response.raise_for_status()
 
@@ -250,7 +226,7 @@ class _EmbeddingIndexer:
             return True, repositories
 
         try:
-            with open(latest_mapping, 'r') as f:
+            with open(latest_mapping, "r") as f:
                 mapping_list = json.load(f)
 
             prev_ids = {m.get("repo_id") for m in mapping_list if m.get("repo_id")}
@@ -275,14 +251,14 @@ class _EmbeddingIndexer:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         cache_path = self.data_cache_dir / f"repositories_{timestamp}.json"
 
-        with open(cache_path, 'w', encoding='utf-8') as f:
+        with open(cache_path, "w", encoding="utf-8") as f:
             json.dump(repositories, f, indent=2, default=str)
 
         logger.info(f"✓ Cached {len(repositories)} repositories to {cache_path}")
 
         # Save as latest
         latest_path = self.data_cache_dir / "repositories_latest.json"
-        with open(latest_path, 'w', encoding='utf-8') as f:
+        with open(latest_path, "w", encoding="utf-8") as f:
             json.dump(repositories, f, indent=2, default=str)
 
     def prepare_repo_text(self, repo: Dict) -> str:
@@ -294,10 +270,7 @@ class _EmbeddingIndexer:
         return _prepare_repo_text(repo)
 
     def train_embeddings(
-        self,
-        repositories: List[Dict],
-        model_name: str = "sentence-transformers/all-MiniLM-L6-v2",
-        batch_size: int = 32
+        self, repositories: List[Dict], model_name: str = "sentence-transformers/all-MiniLM-L6-v2", batch_size: int = 32
     ) -> Tuple[np.ndarray, List[str], Dict]:
         """Train/generate embeddings for repositories."""
         logger.info("=" * 60)
@@ -329,6 +302,7 @@ class _EmbeddingIndexer:
             # Compute lightweight content hash for change detection
             try:
                 import hashlib as _hashlib
+
                 h = _hashlib.sha256(text.encode("utf-8")).hexdigest()
             except Exception:
                 h = ""
@@ -345,13 +319,13 @@ class _EmbeddingIndexer:
             batch_size=batch_size,
             show_progress_bar=True,
             convert_to_numpy=True,
-            normalize_embeddings=True  # Important for cosine similarity
+            normalize_embeddings=True,  # Important for cosine similarity
         )
 
         elapsed = time.time() - start_time
         logger.info(f"✓ Generated {len(embeddings)} embeddings in {elapsed:.2f}s")
         logger.info(f"  Embedding dimension: {embeddings.shape[1]}")
-        logger.info(f"  Speed: {len(embeddings)/elapsed:.2f} repos/sec")
+        logger.info(f"  Speed: {len(embeddings) / elapsed:.2f} repos/sec")
 
         # Create metadata
         metadata = {
@@ -362,7 +336,7 @@ class _EmbeddingIndexer:
             "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S"),
             "batch_size": batch_size,
             "training_time_seconds": elapsed,
-            "normalized": True
+            "normalized": True,
         }
 
         # Include per-repo hashes in metadata for convenient access
@@ -370,12 +344,7 @@ class _EmbeddingIndexer:
 
         return embeddings, repo_ids, metadata
 
-    def save_model(
-        self,
-        embeddings: np.ndarray,
-        repo_ids: List[str],
-        metadata: Dict
-    ):
+    def save_model(self, embeddings: np.ndarray, repo_ids: List[str], metadata: Dict):
         """Save trained model to disk."""
         logger.info("=" * 60)
         logger.info("SAVING MODEL")
@@ -398,35 +367,37 @@ class _EmbeddingIndexer:
         repo_hashes = metadata.get("repo_hashes") or [""] * len(repo_ids)
         mapping_list = []
         for idx, repo_id in enumerate(repo_ids):
-            mapping_list.append({
-                "repo_id": repo_id,
-                "index": idx,
-                "hash": repo_hashes[idx] if idx < len(repo_hashes) else "",
-                "full_name": None
-            })
+            mapping_list.append(
+                {
+                    "repo_id": repo_id,
+                    "index": idx,
+                    "hash": repo_hashes[idx] if idx < len(repo_hashes) else "",
+                    "full_name": None,
+                }
+            )
 
         mapping_path = self.models_dir / "metadata" / f"repo_mapping_{timestamp}.json"
-        with open(mapping_path, 'w') as f:
+        with open(mapping_path, "w") as f:
             json.dump(mapping_list, f, indent=2)
         logger.info(f"✓ Saved mapping list: {mapping_path}")
 
         # Save latest mapping atomically
         latest_mapping_path = self.models_dir / "metadata" / "repo_mapping_latest.json"
-        tmp_latest = latest_mapping_path.with_suffix('.json.tmp')
-        with open(tmp_latest, 'w') as f:
+        tmp_latest = latest_mapping_path.with_suffix(".json.tmp")
+        with open(tmp_latest, "w") as f:
             json.dump(mapping_list, f, indent=2)
         os.replace(tmp_latest, latest_mapping_path)
 
         # Save metadata
         metadata_path = self.models_dir / "metadata" / f"training_metadata_{timestamp}.json"
-        with open(metadata_path, 'w') as f:
+        with open(metadata_path, "w") as f:
             json.dump(metadata, f, indent=2)
         logger.info(f"✓ Saved metadata: {metadata_path}")
 
         # Save latest metadata atomically
         latest_metadata_path = self.models_dir / "metadata" / "training_metadata_latest.json"
-        tmp_meta = latest_metadata_path.with_suffix('.json.tmp')
-        with open(tmp_meta, 'w') as f:
+        tmp_meta = latest_metadata_path.with_suffix(".json.tmp")
+        with open(tmp_meta, "w") as f:
             json.dump(metadata, f, indent=2)
         os.replace(tmp_meta, latest_metadata_path)
 
@@ -467,7 +438,7 @@ class _EmbeddingIndexer:
         }
 
         reg_path = self.models_dir / "metadata" / "model_registry_latest.json"
-        with open(reg_path, 'w') as f:
+        with open(reg_path, "w") as f:
             json.dump(registration, f, indent=2)
         logger.info(f"✓ Model registered: {reg_path}")
 
@@ -482,15 +453,10 @@ class _EmbeddingIndexer:
         batch_size = int(os.getenv("UPLOAD_BATCH_SIZE", "100"))
 
         uploader = EmbeddingUploader(
-            base_url=self.api_base_url,
-            qdrant_api_key=qdrant_api_key,
-            models_dir=str(self.models_dir)
+            base_url=self.api_base_url, qdrant_api_key=qdrant_api_key, models_dir=str(self.models_dir)
         )
 
-        uploaded = uploader.upload_all(
-            collection=collection,
-            batch_size=batch_size
-        )
+        uploaded = uploader.upload_all(collection=collection, batch_size=batch_size)
 
         logger.info(f"Qdrant upload finished — {uploaded} points uploaded")
 
@@ -521,7 +487,7 @@ class _EmbeddingIndexer:
             logger.info(f"\nStar statistics:")
             logger.info(f"  Min: {min(stars):,}")
             logger.info(f"  Max: {max(stars):,}")
-            logger.info(f"  Avg: {sum(stars)/len(stars):,.0f}")
+            logger.info(f"  Avg: {sum(stars) / len(stars):,.0f}")
 
         logger.info(f"\nModel:")
         logger.info(f"  Model name: {metadata['model_name']}")
@@ -674,7 +640,7 @@ class _EmbeddingIndexer:
             pool = model.start_multi_process_pool(["cpu"] * n_workers)
 
         # --- State across chunks ---
-        seen_ids: set = set()         # Cross-chunk dedup within this run
+        seen_ids: set = set()  # Cross-chunk dedup within this run
         mapping_accumulator: List[Dict] = []
         total_fetched = 0
         total_embedded = 0
@@ -713,8 +679,7 @@ class _EmbeddingIndexer:
             unit="repo",
             dynamic_ncols=True,
             bar_format=(
-                "  {desc}: {percentage:5.1f}%  [{bar:30}]  "
-                "{n_fmt}/{total_fmt}  elapsed {elapsed}  eta {remaining}"
+                "  {desc}: {percentage:5.1f}%  [{bar:30}]  {n_fmt}/{total_fmt}  elapsed {elapsed}  eta {remaining}"
             ),
             file=sys.stdout,
         )
@@ -725,10 +690,9 @@ class _EmbeddingIndexer:
                 fetch_limit = min(chunk_size, total_repos - offset)
 
                 overall_bar.write(
-                    f"\n  ── Chunk {chunk_num}/{total_chunks}  "
-                    f"repos {offset+1:,}–{offset+fetch_limit:,} ──"
+                    f"\n  ── Chunk {chunk_num}/{total_chunks}  repos {offset + 1:,}–{offset + fetch_limit:,} ──"
                 )
-                logger.info(f"CHUNK {chunk_num}/{total_chunks} — repos {offset+1:,}–{offset+fetch_limit:,}")
+                logger.info(f"CHUNK {chunk_num}/{total_chunks} — repos {offset + 1:,}–{offset + fetch_limit:,}")
 
                 # Fetch chunk in sub-batches (keeps individual requests small)
                 chunk_repos: List[Dict] = []
@@ -792,10 +756,7 @@ class _EmbeddingIndexer:
                 )
                 embed_elapsed = time.time() - embed_start
                 embed_speed = len(embeddings) / embed_elapsed
-                logger.info(
-                    f"✓ {len(embeddings):,} embeddings in {embed_elapsed:.1f}s "
-                    f"({embed_speed:.0f} repos/sec)"
-                )
+                logger.info(f"✓ {len(embeddings):,} embeddings in {embed_elapsed:.1f}s ({embed_speed:.0f} repos/sec)")
                 total_embedded += len(embeddings)
                 overall_bar.update(len(embeddings))
 
@@ -806,8 +767,8 @@ class _EmbeddingIndexer:
                     chunk_uploaded = 0
 
                     for i in range(0, len(embeddings), upload_batch_size):
-                        batch_ids = repo_ids[i:i + upload_batch_size]
-                        batch_vecs = embeddings[i:i + upload_batch_size]
+                        batch_ids = repo_ids[i : i + upload_batch_size]
+                        batch_vecs = embeddings[i : i + upload_batch_size]
                         points = [
                             {
                                 "id": rid,
@@ -828,9 +789,7 @@ class _EmbeddingIndexer:
 
                     upload_elapsed = time.time() - upload_start
                     upload_speed = chunk_uploaded / upload_elapsed if upload_elapsed > 0 else 0
-                    logger.info(
-                        f"✓ Uploaded {chunk_uploaded:,}/{len(embeddings):,} in {upload_elapsed:.1f}s"
-                    )
+                    logger.info(f"✓ Uploaded {chunk_uploaded:,}/{len(embeddings):,} in {upload_elapsed:.1f}s")
                     total_uploaded += chunk_uploaded
                     overall_bar.write(
                         f"  ✓ chunk {chunk_num}/{total_chunks}  "
@@ -844,21 +803,26 @@ class _EmbeddingIndexer:
                 # 6. Accumulate mapping (for cross-run dedup on next run)
                 global_base = len(mapping_accumulator)
                 for local_idx, rid in enumerate(repo_ids):
-                    mapping_accumulator.append({
-                        "repo_id": rid,
-                        "index": global_base + local_idx,
-                        "hash": "",
-                        "full_name": None,
-                    })
+                    mapping_accumulator.append(
+                        {
+                            "repo_id": rid,
+                            "index": global_base + local_idx,
+                            "hash": "",
+                            "full_name": None,
+                        }
+                    )
 
                 # Checkpoint after every chunk so a crash doesn't lose progress
                 self._save_mapping(mapping_accumulator, run_timestamp)
                 with open(checkpoint_path, "w") as f:
-                    json.dump({
-                        "offset": offset + fetch_limit,
-                        "run_timestamp": run_timestamp,
-                        "total_repos": total_repos,
-                    }, f)
+                    json.dump(
+                        {
+                            "offset": offset + fetch_limit,
+                            "run_timestamp": run_timestamp,
+                            "total_repos": total_repos,
+                        },
+                        f,
+                    )
 
                 # 7. Free chunk memory before next iteration
                 del embeddings, texts, chunk_repos
@@ -891,7 +855,9 @@ class _EmbeddingIndexer:
         print(f"  Embedded   {total_embedded:,}  ({avg_speed:.0f} repos/sec avg)", flush=True)
         print(f"  Uploaded   {total_uploaded:,}", flush=True)
         print(f"{'═' * 60}\n", flush=True)
-        logger.info(f"Chunked pipeline done — {total_embedded:,} embedded, {total_uploaded:,} uploaded in {elapsed_str}")
+        logger.info(
+            f"Chunked pipeline done — {total_embedded:,} embedded, {total_uploaded:,} uploaded in {elapsed_str}"
+        )
 
     def run(
         self,
@@ -899,7 +865,7 @@ class _EmbeddingIndexer:
         batch_size: int = 32,
         fetch_batch_size: int = 100,
         max_repos: Optional[int] = None,
-        skip_if_no_new_data: bool = True
+        skip_if_no_new_data: bool = True,
     ):
         """Run the full pipeline: fetch + train."""
         logger.info("")
@@ -916,10 +882,7 @@ class _EmbeddingIndexer:
 
         try:
             # Step 1: Fetch data
-            repositories = self.fetch_repositories(
-                batch_size=fetch_batch_size,
-                max_repos=max_repos
-            )
+            repositories = self.fetch_repositories(batch_size=fetch_batch_size, max_repos=max_repos)
 
             if not repositories:
                 logger.error("❌ No repositories fetched - cannot train!")
@@ -944,9 +907,7 @@ class _EmbeddingIndexer:
 
             # Step 4: Train embeddings
             embeddings, repo_ids, metadata = self.train_embeddings(
-                repositories=repositories,
-                model_name=model_name,
-                batch_size=batch_size
+                repositories=repositories, model_name=model_name, batch_size=batch_size
             )
 
             # Step 5: Save model
@@ -970,7 +931,7 @@ class _EmbeddingIndexer:
             logger.info("=" * 60)
             logger.info("✓ PIPELINE COMPLETED SUCCESSFULLY")
             logger.info("=" * 60)
-            logger.info(f"Total time: {total_time/60:.2f} minutes")
+            logger.info(f"Total time: {total_time / 60:.2f} minutes")
             logger.info(f"Repositories processed: {len(repositories)}")
             logger.info(f"Model saved to: {self.models_dir}")
             logger.info("=" * 60)
@@ -1022,6 +983,7 @@ class EmbeddingIndexingPipeline(BasePipeline):
     async def run(self):
         """Delegate to _EmbeddingIndexer in a thread-pool executor."""
         import asyncio
+
         indexer = _EmbeddingIndexer(
             api_base_url=self.api_base_url,
             api_key=self.api_key,

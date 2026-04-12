@@ -97,9 +97,7 @@ class RepoDataset:
             }
 
             try:
-                resp = requests.post(
-                    endpoint, headers=headers, json=payload, timeout=30
-                )
+                resp = requests.post(endpoint, headers=headers, json=payload, timeout=30)
                 resp.raise_for_status()
                 batch = resp.json().get("documents", [])
             except Exception as exc:
@@ -148,9 +146,7 @@ class RepoDataset:
             repos = df.to_dict(orient="records")
             return cls(repos)
 
-        raise ValueError(
-            f"Unsupported file extension '{ext}'. Use .json or .parquet."
-        )
+        raise ValueError(f"Unsupported file extension '{ext}'. Use .json or .parquet.")
 
     # ------------------------------------------------------------------
     # Conversions
@@ -177,12 +173,8 @@ class RepoDataset:
 
         # -- flatten topics --
         if "topics" in df.columns:
-            df["topics_list"] = df["topics"].apply(
-                lambda v: v if isinstance(v, list) else []
-            )
-            df["topics_str"] = df["topics_list"].apply(
-                lambda lst: ",".join(str(t) for t in lst)
-            )
+            df["topics_list"] = df["topics"].apply(lambda v: v if isinstance(v, list) else [])
+            df["topics_str"] = df["topics_list"].apply(lambda lst: ",".join(str(t) for t in lst))
 
         # -- convert date columns --
         date_cols = [c for c in df.columns if c.endswith("_at") or c == "created_at"]
@@ -248,8 +240,7 @@ class RepoDataset:
             import pyarrow.parquet as _pa_pq
 
             rows = [
-                {k: json.dumps(v, default=str) if isinstance(v, (list, dict)) else v
-                 for k, v in repo.items()}
+                {k: json.dumps(v, default=str) if isinstance(v, (list, dict)) else v for k, v in repo.items()}
                 for repo in self.repos
             ]
             jsonl = "\n".join(json.dumps(row, default=str) for row in rows)
@@ -259,9 +250,7 @@ class RepoDataset:
             print(f"[RepoDataset] Saved {len(self.repos)} repos to {p}")
             return
 
-        raise ValueError(
-            f"Unsupported file extension '{ext}'. Use .json or .parquet."
-        )
+        raise ValueError(f"Unsupported file extension '{ext}'. Use .json or .parquet.")
 
     # ------------------------------------------------------------------
     # Iteration / collection protocol
@@ -301,10 +290,7 @@ class RepoDataset:
             print(f"  {lang}: {count} ({pct:.1f}%)")
 
         # -- star stats --
-        stars = [
-            repo.get("stargazers_count", 0) or repo.get("stars", 0)
-            for repo in self.repos
-        ]
+        stars = [repo.get("stargazers_count", 0) or repo.get("stars", 0) for repo in self.repos]
         stars_clean = [s for s in stars if isinstance(s, (int, float))]
         if stars_clean:
             print(f"\nStars:")
@@ -374,10 +360,7 @@ class RepoDataset:
             count = resp.json().get("count", 0)
 
             if count <= 1:
-                print(
-                    f"[RepoDataset] Count API returned {count} -- "
-                    "using fallback (will stop on empty batch)."
-                )
+                print(f"[RepoDataset] Count API returned {count} -- using fallback (will stop on empty batch).")
                 return float("inf")
 
             return count

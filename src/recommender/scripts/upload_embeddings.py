@@ -9,29 +9,18 @@ from typing import List, Dict
 import time
 import logging
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
 class EmbeddingUploader:
     """Upload embeddings to Qdrant through the server API."""
 
-    def __init__(
-        self,
-        base_url: str,
-        qdrant_api_key: str,
-        models_dir: str = "./models"
-    ):
-        self.base_url = base_url.rstrip('/')
+    def __init__(self, base_url: str, qdrant_api_key: str, models_dir: str = "./models"):
+        self.base_url = base_url.rstrip("/")
         self.models_dir = Path(models_dir)
 
-        self.headers = {
-            "Authorization": f"Bearer {qdrant_api_key}",
-            "Content-Type": "application/json"
-        }
+        self.headers = {"Authorization": f"Bearer {qdrant_api_key}", "Content-Type": "application/json"}
 
     def load_embeddings(self) -> tuple:
         """Load latest embeddings and mapping."""
@@ -49,7 +38,7 @@ class EmbeddingUploader:
         if not mapping_path.exists():
             raise FileNotFoundError(f"Mapping not found: {mapping_path}")
 
-        with open(mapping_path, 'r') as f:
+        with open(mapping_path, "r") as f:
             mapping = json.load(f)
 
         # Support mapping as legacy dict {repo_id: index} or new list format
@@ -67,7 +56,7 @@ class EmbeddingUploader:
         metadata_path = self.models_dir / "metadata" / "training_metadata_latest.json"
         metadata = {}
         if metadata_path.exists():
-            with open(metadata_path, 'r') as f:
+            with open(metadata_path, "r") as f:
                 metadata = json.load(f)
             logger.info("Loaded metadata")
 
@@ -75,18 +64,11 @@ class EmbeddingUploader:
 
     def ensure_collection(self, collection: str, vector_size: int = 384):
         """Create the Qdrant collection if it does not already exist."""
-        payload = {
-            "vectors": {
-                "size": vector_size,
-                "distance": "Cosine"
-            }
-        }
+        payload = {"vectors": {"size": vector_size, "distance": "Cosine"}}
 
         try:
             response = requests.put(
-                f"{self.base_url}/api/qdrant/collections/{collection}",
-                headers=self.headers,
-                json=payload
+                f"{self.base_url}/api/qdrant/collections/{collection}", headers=self.headers, json=payload
             )
             response.raise_for_status()
             logger.info(f"Created Qdrant collection '{collection}' (size={vector_size})")
@@ -96,24 +78,14 @@ class EmbeddingUploader:
         except Exception as e:
             logger.warning(f"Could not ensure Qdrant collection exists: {e}")
 
-    def upload_batch(
-        self,
-        collection: str,
-        points: List[Dict],
-        wait: bool = True
-    ) -> Dict:
+    def upload_batch(self, collection: str, points: List[Dict], wait: bool = True) -> Dict:
         """Upload a batch of points to Qdrant."""
 
-        payload = {
-            "points": points,
-            "wait": wait
-        }
+        payload = {"points": points, "wait": wait}
 
         try:
             response = requests.post(
-                f"{self.base_url}/api/qdrant/collections/{collection}/points",
-                headers=self.headers,
-                json=payload
+                f"{self.base_url}/api/qdrant/collections/{collection}/points", headers=self.headers, json=payload
             )
             response.raise_for_status()
             return response.json()
@@ -121,11 +93,7 @@ class EmbeddingUploader:
             logger.error(f"Error uploading batch: {e}")
             return {"status": "error", "error": str(e)}
 
-    def upload_all(
-        self,
-        collection: str = "repositories_embeddings",
-        batch_size: int = 100
-    ):
+    def upload_all(self, collection: str = "repositories_embeddings", batch_size: int = 100):
         """Upload all embeddings to Qdrant."""
 
         logger.info("=" * 60)
@@ -161,7 +129,7 @@ class EmbeddingUploader:
 
         # Upload in batches
         for i in range(0, total_points, batch_size):
-            batch = deduped[i:i+batch_size]
+            batch = deduped[i : i + batch_size]
             batch_points = []
 
             for entry in batch:
@@ -191,14 +159,14 @@ class EmbeddingUploader:
                         "repo_id": repo_id,
                         "model": metadata.get("model_name", "unknown"),
                         "timestamp": metadata.get("timestamp", "unknown"),
-                        "hash": hsh
-                    }
+                        "hash": hsh,
+                    },
                 }
                 batch_points.append(point)
 
             logger.info(
-                f"Uploading batch {i//batch_size + 1}/"
-                f"{(total_points + batch_size - 1)//batch_size} "
+                f"Uploading batch {i // batch_size + 1}/"
+                f"{(total_points + batch_size - 1) // batch_size} "
                 f"({len(batch_points)} points)..."
             )
 
@@ -233,27 +201,17 @@ def main():
     qdrant_api_key = os.getenv("APIKEY_QDRANT")
 
     if not base_url or not qdrant_api_key:
-        raise ValueError(
-            "Missing required environment variables!\n"
-            "Please set API_BASE_URL and APIKEY_QDRANT."
-        )
+        raise ValueError("Missing required environment variables!\nPlease set API_BASE_URL and APIKEY_QDRANT.")
 
     collection = os.getenv("QDRANT_COLLECTION", "repositories_embeddings")
     batch_size = int(os.getenv("UPLOAD_BATCH_SIZE", "100"))
     models_dir = os.getenv("MODELS_DIR", "./models")
 
     # Initialize uploader
-    uploader = EmbeddingUploader(
-        base_url=base_url,
-        qdrant_api_key=qdrant_api_key,
-        models_dir=models_dir
-    )
+    uploader = EmbeddingUploader(base_url=base_url, qdrant_api_key=qdrant_api_key, models_dir=models_dir)
 
     # Upload
-    uploader.upload_all(
-        collection=collection,
-        batch_size=batch_size
-    )
+    uploader.upload_all(collection=collection, batch_size=batch_size)
 
 
 if __name__ == "__main__":
@@ -264,4 +222,5 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"\nUpload failed: {e}")
         import traceback
+
         traceback.print_exc()

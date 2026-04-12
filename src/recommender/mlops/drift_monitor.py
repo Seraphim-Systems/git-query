@@ -89,14 +89,106 @@ class DriftMonitor:
                 pass
 
             from evidently.ui.workspace import Workspace
+            from evidently.ui.dashboards import (
+                DashboardPanelCounter,
+                DashboardPanelPlot,
+                PanelValue,
+                PlotType,
+                ReportFilter,
+                CounterAgg,
+            )
 
             ws = Workspace.create(workspace_path)
             projects = ws.search_project(project_name)
-            project = projects[0] if projects else ws.create_project(project_name)
+            if projects:
+                project = projects[0]
+            else:
+                project = ws.create_project(project_name)
+                self._add_default_panels(project, project_name)
+                project.save()
+
             ws.add_report(project.id, report)
             logger.info("Drift report saved to Evidently workspace project: %s", project_name)
         except Exception as e:
             logger.warning("Failed to save to Evidently workspace: %s", e)
+
+    def _add_default_panels(self, project: Any, project_name: str) -> None:
+        """Add default dashboard panels to a newly created Evidently project."""
+        try:
+            from evidently.ui.dashboards import (
+                DashboardPanelCounter,
+                DashboardPanelPlot,
+                PanelValue,
+                PlotType,
+                ReportFilter,
+                CounterAgg,
+            )
+            from evidently.renderers.html_widgets import WidgetSize
+
+            is_prediction = "prediction" in project_name
+
+            if is_prediction:
+                # Prediction drift: ColumnDriftMetric on recommendation scores
+                project.dashboard.add_panel(
+                    DashboardPanelCounter(
+                        title="Prediction Drift Score (last run)",
+                        filter=ReportFilter(metadata_values={}, tag_values=[]),
+                        agg=CounterAgg.LAST,
+                        value=PanelValue(
+                            metric_id="ColumnDriftMetric",
+                            field_path="drift_score",
+                            legend="Drift score",
+                        ),
+                        size=WidgetSize.HALF,
+                    )
+                )
+                project.dashboard.add_panel(
+                    DashboardPanelPlot(
+                        title="Prediction Drift Score Over Time",
+                        filter=ReportFilter(metadata_values={}, tag_values=[]),
+                        values=[
+                            PanelValue(
+                                metric_id="ColumnDriftMetric",
+                                field_path="drift_score",
+                                legend="Drift score",
+                            )
+                        ],
+                        plot_type=PlotType.LINE,
+                        size=WidgetSize.FULL,
+                    )
+                )
+            else:
+                # Data drift: dataset-level drift flag + per-column drift share
+                project.dashboard.add_panel(
+                    DashboardPanelCounter(
+                        title="Dataset Drift Detected",
+                        filter=ReportFilter(metadata_values={}, tag_values=[]),
+                        agg=CounterAgg.LAST,
+                        value=PanelValue(
+                            metric_id="DatasetDriftMetric",
+                            field_path="share_of_drifted_columns",
+                            legend="Share of drifted columns",
+                        ),
+                        size=WidgetSize.HALF,
+                    )
+                )
+                project.dashboard.add_panel(
+                    DashboardPanelPlot(
+                        title="Share of Drifted Columns Over Time",
+                        filter=ReportFilter(metadata_values={}, tag_values=[]),
+                        values=[
+                            PanelValue(
+                                metric_id="DatasetDriftMetric",
+                                field_path="share_of_drifted_columns",
+                                legend="Share drifted",
+                            )
+                        ],
+                        plot_type=PlotType.LINE,
+                        size=WidgetSize.FULL,
+                    )
+                )
+        except Exception as e:
+            logger.warning("Could not add default dashboard panels: %s", e)
 
     def _extract_drift_status(self, result: dict[str, Any]) -> bool:
         """Extract drift status from Evidently report.as_dict() output."""
@@ -156,12 +248,23 @@ class DriftMonitor:
             scalar_cols = [
                 c
                 for c in shared_cols
-                if c not in TRAINING_ONLY_COLS and _is_scalar_col(reference_data[c]) and reference_data[c].notna().any()
+                if c not in TRAINING_ONLY_COLS
+                and _is_scalar_col(reference_data[c])
+                and reference_data[c].notna().any()
+                and pd.api.types.is_numeric_dtype(reference_data[c])
             ]
             reference_data = reference_data[scalar_cols]
             current_data = current_data[scalar_cols]
 
-            report = Report(metrics=[DataDriftPreset()])
+            # Cap sample size to keep statistical tests fast (KS/PSI on large
+            # datasets can take minutes; 2000 rows is more than sufficient for drift detection).
+            MAX_ROWS = 2000
+            if len(reference_data) > MAX_ROWS:
+                reference_data = reference_data.sample(MAX_ROWS, random_state=42)
+            if len(current_data) > MAX_ROWS:
+                current_data = current_data.sample(MAX_ROWS, random_state=42)
+
+            report = Report(metrics=[DataDriftPreset(stattest="psi", stattest_threshold=0.2)])
             report.run(reference_data=reference_data, current_data=current_data)
             self._save_to_workspace(report, "git-query-data-drift")
 
@@ -250,10 +353,13 @@ class DriftMonitor:
             return None
 
         try:
-            ref_df = pd.DataFrame({"score": reference_scores})
-            cur_df = pd.DataFrame({"score": current_scores})
+            MAX_ROWS = 2000
+            ref_scores = reference_scores[:MAX_ROWS] if len(reference_scores) > MAX_ROWS else reference_scores
+            cur_scores = current_scores[:MAX_ROWS] if len(current_scores) > MAX_ROWS else current_scores
+            ref_df = pd.DataFrame({"score": ref_scores})
+            cur_df = pd.DataFrame({"score": cur_scores})
 
-            report = Report(metrics=[ColumnDriftMetric(column_name="score")])
+            report = Report(metrics=[ColumnDriftMetric(column_name="score", stattest="psi", stattest_threshold=0.2)])
             report.run(reference_data=ref_df, current_data=cur_df)
             self._save_to_workspace(report, "git-query-prediction-drift")
 

@@ -64,6 +64,7 @@ class EmbeddingTrainer:
         # Dataset-level hash to detect unchanged training sets
         try:
             import hashlib as _hashlib
+
             dataset_hash = _hashlib.sha256("\n".join(sorted([h for h in repo_hashes if h])).encode()).hexdigest()
         except Exception:
             dataset_hash = ""
@@ -91,10 +92,10 @@ class EmbeddingTrainer:
 
         # Simple epoch loop to allow evaluation + early stopping
         for epoch in range(epochs):
-            epoch_dir = os.path.join(base_output_dir, f"epoch_{epoch+1}")
+            epoch_dir = os.path.join(base_output_dir, f"epoch_{epoch + 1}")
             os.makedirs(epoch_dir, exist_ok=True)
 
-            logger.info(f"Starting epoch {epoch+1}/{epochs}")
+            logger.info(f"Starting epoch {epoch + 1}/{epochs}")
             self.model.fit(
                 train_objectives=[(train_dataloader, train_loss)],
                 epochs=1,
@@ -107,7 +108,7 @@ class EmbeddingTrainer:
             metric_val = None
             if validation_data:
                 metric_val = self._evaluate_validation(validation_data)
-                logger.info(f"Validation metric after epoch {epoch+1}: {metric_val:.4f}")
+                logger.info(f"Validation metric after epoch {epoch + 1}: {metric_val:.4f}")
 
             # Use validation metric for early stopping, else use epoch number
             current_metric = metric_val if metric_val is not None else (epoch + 1)
@@ -139,16 +140,14 @@ class EmbeddingTrainer:
                 "epochs": epochs,
                 "batch_size": batch_size,
             },
-            metrics={
-                "num_examples": float(len(train_examples)),
-                "best_metric": float(best_metric)
-            },
+            metrics={"num_examples": float(len(train_examples)), "best_metric": float(best_metric)},
             trained_at=datetime.now(timezone.utc),
             is_active=False,
-            status="candidate"
+            status="candidate",
         )
 
         from ...services.registry_service import ModelRegistryService
+
         registry = ModelRegistryService()
         await registry.register_model(metadata)
 
@@ -164,13 +163,14 @@ class EmbeddingTrainer:
                 "variant": variant,
             }
             meta_path = os.path.join(meta_dir, f"training_metadata_{timestamp}.json")
-            with open(meta_path, 'w') as f:
+            with open(meta_path, "w") as f:
                 import json
+
                 json.dump(training_meta, f, indent=2, default=str)
 
             latest_meta = os.path.join(meta_dir, "training_metadata_latest.json")
             tmp = latest_meta + ".tmp"
-            with open(tmp, 'w') as f:
+            with open(tmp, "w") as f:
                 json.dump(training_meta, f, indent=2, default=str)
             os.replace(tmp, latest_meta)
         except Exception:
@@ -205,7 +205,8 @@ class EmbeddingTrainer:
             # Compute per-repo text hash for incremental checks
             try:
                 import hashlib as _hashlib
-                h = _hashlib.sha256(repo_text.encode('utf-8')).hexdigest()
+
+                h = _hashlib.sha256(repo_text.encode("utf-8")).hexdigest()
             except Exception:
                 h = ""
             hashes.append(h)
@@ -215,6 +216,7 @@ class EmbeddingTrainer:
     def _repo_to_text(self, repo: Dict[str, Any]) -> str:
         """Convert repository data to text for embedding."""
         from ..utils import prepare_repo_text
+
         return prepare_repo_text(repo)
 
     def _evaluate_validation(self, validation_data: Dict[str, List]) -> float:
@@ -228,6 +230,7 @@ class EmbeddingTrainer:
             # Embed candidates (unique)
             cand_texts = [self._repo_to_text(r) for r in positive_repos]
             import numpy as _np
+
             cand_emb = self.model.encode(cand_texts, convert_to_numpy=True, normalize_embeddings=True)
 
             # Embed queries

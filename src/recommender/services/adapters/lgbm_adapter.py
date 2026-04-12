@@ -33,18 +33,20 @@ class LGBMAdapter(BaseRerankerAdapter):
     def score(self, query: str, candidates: list) -> List[float]:
         rows = []
         for c in candidates:
-            rows.append({
-                "name": getattr(c, "name", None),
-                "description": getattr(c, "description", None),
-                "stars": getattr(c, "stars", None),
-                "forks": getattr(c, "forks", None),
-                "language": getattr(c, "language", None),
-                "license": getattr(c, "license", None),
-                "topics": getattr(c, "topics", None),
-                "readme": getattr(c, "readme", None),
-                "updated_at": getattr(c, "updated_at", None),
-                "pushed_at": getattr(c, "pushed_at", None),
-            })
+            rows.append(
+                {
+                    "name": getattr(c, "name", None),
+                    "description": getattr(c, "description", None),
+                    "stars": getattr(c, "stars", None),
+                    "forks": getattr(c, "forks", None),
+                    "language": getattr(c, "language", None),
+                    "license": getattr(c, "license", None),
+                    "topics": getattr(c, "topics", None),
+                    "readme": getattr(c, "readme", None),
+                    "updated_at": getattr(c, "updated_at", None),
+                    "pushed_at": getattr(c, "pushed_at", None),
+                }
+            )
         df = pd.DataFrame(rows)
         X = self._fe.extract_all(df, query=query)
         if self._feature_cols is not None:

@@ -69,7 +69,9 @@ async def test_get_interaction_history_prefers_canonical_collection():
 @pytest.mark.asyncio
 async def test_update_preferences_syncs_recommender_collection():
     users = SimpleNamespace(update_one=AsyncMock())
-    user_preferences = SimpleNamespace(find_one=AsyncMock(return_value={"total_interactions": 7}), update_one=AsyncMock())
+    user_preferences = SimpleNamespace(
+        find_one=AsyncMock(return_value={"total_interactions": 7}), update_one=AsyncMock()
+    )
     db = SimpleNamespace(users=users, user_preferences=user_preferences)
     redis = SimpleNamespace(delete=AsyncMock())
 

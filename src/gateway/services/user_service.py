@@ -29,9 +29,7 @@ class UserPreferences(BaseModel):
 class UserService:
     """Service for managing user data and preferences."""
 
-    def __init__(
-        self, mongodb: AsyncIOMotorDatabase, redis: Redis, cache_ttl: int = 3600
-    ):
+    def __init__(self, mongodb: AsyncIOMotorDatabase, redis: Redis, cache_ttl: int = 3600):
         """
         Initialize user service.
 
@@ -102,9 +100,7 @@ class UserService:
 
         return prefs
 
-    async def update_preferences(
-        self, user_id: str, preferences: Dict[str, Any]
-    ) -> UserPreferences:
+    async def update_preferences(self, user_id: str, preferences: Dict[str, Any]) -> UserPreferences:
         """
         Update user preferences.
 
@@ -124,12 +120,8 @@ class UserService:
 
         # Keep recommender's preference store in sync so personalization reads
         # a consistent profile source.
-        lang_scores = {
-            language: 1.0 for language in (preferences.get("languages") or [])
-        }
-        topic_scores = {
-            topic: 1.0 for topic in (preferences.get("topics") or [])
-        }
+        lang_scores = {language: 1.0 for language in (preferences.get("languages") or [])}
+        topic_scores = {topic: 1.0 for topic in (preferences.get("topics") or [])}
         existing = await self.db.user_preferences.find_one({"user_id": user_id})
         total_interactions = int((existing or {}).get("total_interactions", 0))
 
@@ -234,9 +226,7 @@ class UserService:
         )
         await self.redis.ltrim(f"user_interactions:{user_id}", 0, 99)
 
-    async def get_interaction_history(
-        self, user_id: str, limit: int = 100
-    ) -> list[Dict[str, Any]]:
+    async def get_interaction_history(self, user_id: str, limit: int = 100) -> list[Dict[str, Any]]:
         """
         Get user interaction history.
 
@@ -248,11 +238,7 @@ class UserService:
             List of interactions
         """
         # Primary source: canonical recommender interaction collection.
-        cursor = (
-            self.db.user_interactions.find({"user_id": user_id})
-            .sort("timestamp", -1)
-            .limit(limit)
-        )
+        cursor = self.db.user_interactions.find({"user_id": user_id}).sort("timestamp", -1).limit(limit)
         interactions = await cursor.to_list(length=limit)
         if interactions:
             for item in interactions:
@@ -260,9 +246,7 @@ class UserService:
             return interactions
 
         # Backward-compatible fallback.
-        user = await self.db.users.find_one(
-            {"user_id": user_id}, {"interaction_history": {"$slice": -limit}}
-        )
+        user = await self.db.users.find_one({"user_id": user_id}, {"interaction_history": {"$slice": -limit}})
 
         if not user or "interaction_history" not in user:
             return []

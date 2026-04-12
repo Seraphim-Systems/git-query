@@ -17,6 +17,7 @@ from src.recommender.database import db_manager
 # Shared patch helper
 # ---------------------------------------------------------------------------
 
+
 def _apply_lifespan_patches(mocker):
     """Patch all external I/O that the lifespan triggers.
 
@@ -51,6 +52,7 @@ def _apply_lifespan_patches(mocker):
 # ---------------------------------------------------------------------------
 # Startup tests
 # ---------------------------------------------------------------------------
+
 
 class TestStartup:
     async def test_startup_calls_db_connect(self, mocker):
@@ -106,6 +108,7 @@ class TestStartup:
 # ---------------------------------------------------------------------------
 # Shutdown tests
 # ---------------------------------------------------------------------------
+
 
 class TestShutdown:
     async def test_shutdown_calls_db_close(self, mocker):

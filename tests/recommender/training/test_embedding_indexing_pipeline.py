@@ -145,7 +145,10 @@ class TestEmbeddingIndexingPipelineParams:
 
         mock_indexer_cls.assert_called_once()
         call_args, call_kwargs = mock_indexer_cls.call_args
-        all_kwargs = {**dict(zip(["api_base_url", "api_key", "models_dir", "data_cache_dir"], call_args)), **call_kwargs}
+        all_kwargs = {
+            **dict(zip(["api_base_url", "api_key", "models_dir", "data_cache_dir"], call_args)),
+            **call_kwargs,
+        }
         assert all_kwargs.get("api_base_url") == "http://custom-api.example.com"
         assert all_kwargs.get("api_key") == "secret-key"
         assert all_kwargs.get("models_dir") == "/custom/models"

@@ -157,12 +157,8 @@ def _post_gateway_bulk_with_retry(
             }
 
         mid = len(documents) // 2
-        left = _post_gateway_bulk_with_retry(
-            client, bulk_url, headers, database_name, documents[:mid]
-        )
-        right = _post_gateway_bulk_with_retry(
-            client, bulk_url, headers, database_name, documents[mid:]
-        )
+        left = _post_gateway_bulk_with_retry(client, bulk_url, headers, database_name, documents[:mid])
+        right = _post_gateway_bulk_with_retry(client, bulk_url, headers, database_name, documents[mid:])
         return {
             "upserted": left["upserted"] + right["upserted"],
             "modified": left["modified"] + right["modified"],
@@ -187,12 +183,8 @@ def _post_gateway_bulk_with_retry(
             flush=True,
         )
         mid = len(documents) // 2
-        left = _post_gateway_bulk_with_retry(
-            client, bulk_url, headers, database_name, documents[:mid]
-        )
-        right = _post_gateway_bulk_with_retry(
-            client, bulk_url, headers, database_name, documents[mid:]
-        )
+        left = _post_gateway_bulk_with_retry(client, bulk_url, headers, database_name, documents[:mid])
+        right = _post_gateway_bulk_with_retry(client, bulk_url, headers, database_name, documents[mid:])
         return {
             "upserted": left["upserted"] + right["upserted"],
             "modified": left["modified"] + right["modified"],
@@ -329,9 +321,7 @@ def load_to_cosmos(
             raise FileNotFoundError("No .json files found in the Kaggle dataset.")
         if len(json_files) > 1:
             found = "\n".join(str(p.relative_to(dataset_dir)) for p in json_files)
-            raise ValueError(
-                "Multiple JSON files found. Use --file to choose one:\n" + found
-            )
+            raise ValueError("Multiple JSON files found. Use --file to choose one:\n" + found)
         json_file = json_files[0]
 
     iterator = _iter_json_array(json_file)
@@ -353,8 +343,7 @@ def load_to_cosmos(
                 print(f"Parsed {count} records...", flush=True)
 
         print(
-            f"Dry run: parsed {count} records from {json_file} "
-            f"for '{collection_name}'.",
+            f"Dry run: parsed {count} records from {json_file} for '{collection_name}'.",
             flush=True,
         )
         if sample:
@@ -415,9 +404,7 @@ def load_to_cosmos(
                         batch,
                     )
                 else:
-                    result = _post_gateway_bulk_with_retry(
-                        client, bulk_url, headers, database_name, batch
-                    )
+                    result = _post_gateway_bulk_with_retry(client, bulk_url, headers, database_name, batch)
                 total_upserted += result["upserted"]
                 total_modified += result["modified"]
                 total_failed_docs += result["failed_docs"]
@@ -449,9 +436,7 @@ def load_to_cosmos(
                     batch,
                 )
             else:
-                result = _post_gateway_bulk_with_retry(
-                    client, bulk_url, headers, database_name, batch
-                )
+                result = _post_gateway_bulk_with_retry(client, bulk_url, headers, database_name, batch)
             total_upserted += result["upserted"]
             total_modified += result["modified"]
             total_failed_docs += result["failed_docs"]
@@ -478,9 +463,7 @@ def load_to_cosmos(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Load Kaggle JSON array dataset into MongoDB/Cosmos DB."
-    )
+    parser = argparse.ArgumentParser(description="Load Kaggle JSON array dataset into MongoDB/Cosmos DB.")
     parser.add_argument("--dataset", required=True, help="Kaggle dataset slug")
     parser.add_argument("--file", help="JSON filename inside the dataset")
     parser.add_argument(
@@ -533,10 +516,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--gateway-bulk-path",
-        help=(
-            "Custom gateway bulk path template, e.g. "
-            "'/api/mongodb/collections/{collection}/bulk'"
-        ),
+        help=("Custom gateway bulk path template, e.g. '/api/mongodb/collections/{collection}/bulk'"),
     )
     parser.add_argument(
         "--gateway-mongo-mode",

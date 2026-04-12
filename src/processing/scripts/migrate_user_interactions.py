@@ -185,7 +185,9 @@ def migrate(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Backfill legacy users.interaction_history to canonical user_interactions.")
+    parser = argparse.ArgumentParser(
+        description="Backfill legacy users.interaction_history to canonical user_interactions."
+    )
     parser.add_argument("--users-collection", default="users")
     parser.add_argument("--interactions-collection", default="user_interactions")
     parser.add_argument("--prefs-collection", default="user_preferences")

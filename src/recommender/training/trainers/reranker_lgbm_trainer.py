@@ -112,7 +112,9 @@ class RerankerLGBMTrainer:
                 await loop.run_in_executor(None, lambda: np.save(scores_path_versioned, ref_scores))
                 logger.info(
                     "Reference scores saved to %s (%d rows, query=%r)",
-                    scores_path, len(ref_scores), rep_query,
+                    scores_path,
+                    len(ref_scores),
+                    rep_query,
                 )
             except Exception as e:
                 logger.warning("Could not save reference scores for drift monitoring: %s", e)

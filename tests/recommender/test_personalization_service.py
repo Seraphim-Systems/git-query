@@ -60,9 +60,7 @@ class TestGetSignalWeight:
         assert service._get_signal_weight(InteractionType.CLICK) > 0
 
     def test_save_weight_greater_than_click(self, service):
-        assert service._get_signal_weight(InteractionType.SAVE) > service._get_signal_weight(
-            InteractionType.CLICK
-        )
+        assert service._get_signal_weight(InteractionType.SAVE) > service._get_signal_weight(InteractionType.CLICK)
 
     def test_thumbs_up_weight_greatest_positive(self, service):
         thumbs_up = service._get_signal_weight(InteractionType.THUMBS_UP)
@@ -125,9 +123,7 @@ class TestUpdatePreferencesFromInteraction:
             new_callable=AsyncMock,
             return_value=None,
         )
-        mock_update = mocker.patch.object(
-            db_manager, "update_user_preferences", new_callable=AsyncMock
-        )
+        mock_update = mocker.patch.object(db_manager, "update_user_preferences", new_callable=AsyncMock)
 
         interaction = _make_interaction(InteractionType.CLICK)
         await service.update_preferences_from_interaction(interaction, {"language": "Python"})
@@ -145,9 +141,7 @@ class TestUpdatePreferencesFromInteraction:
             new_callable=AsyncMock,
             return_value=existing,
         )
-        mock_update = mocker.patch.object(
-            db_manager, "update_user_preferences", new_callable=AsyncMock
-        )
+        mock_update = mocker.patch.object(db_manager, "update_user_preferences", new_callable=AsyncMock)
 
         interaction = _make_interaction(InteractionType.CLICK)
         await service.update_preferences_from_interaction(interaction, {"language": "Python"})
@@ -165,9 +159,7 @@ class TestUpdatePreferencesFromInteraction:
             new_callable=AsyncMock,
             return_value=existing,
         )
-        mock_update = mocker.patch.object(
-            db_manager, "update_user_preferences", new_callable=AsyncMock
-        )
+        mock_update = mocker.patch.object(db_manager, "update_user_preferences", new_callable=AsyncMock)
 
         # Capture Python score before the thumbs-down
         python_before = existing.language_preferences["Python"]
@@ -190,9 +182,7 @@ class TestUpdatePreferencesFromInteraction:
             new_callable=AsyncMock,
             return_value=None,
         )
-        mock_update = mocker.patch.object(
-            db_manager, "update_user_preferences", new_callable=AsyncMock
-        )
+        mock_update = mocker.patch.object(db_manager, "update_user_preferences", new_callable=AsyncMock)
 
         interaction = _make_interaction(InteractionType.SAVE)
         repo_data = {"language": "Python", "topics": ["ml", "nlp"]}
@@ -210,9 +200,7 @@ class TestUpdatePreferencesFromInteraction:
             new_callable=AsyncMock,
             return_value=None,
         )
-        mock_update = mocker.patch.object(
-            db_manager, "update_user_preferences", new_callable=AsyncMock
-        )
+        mock_update = mocker.patch.object(db_manager, "update_user_preferences", new_callable=AsyncMock)
 
         interaction = _make_interaction(InteractionType.CLICK)
         await service.update_preferences_from_interaction(interaction, {})
@@ -229,9 +217,7 @@ class TestUpdatePreferencesFromInteraction:
             new_callable=AsyncMock,
             return_value=existing,
         )
-        mock_update = mocker.patch.object(
-            db_manager, "update_user_preferences", new_callable=AsyncMock
-        )
+        mock_update = mocker.patch.object(db_manager, "update_user_preferences", new_callable=AsyncMock)
 
         interaction = _make_interaction(InteractionType.VIEW)
         await service.update_preferences_from_interaction(interaction, {})
@@ -247,9 +233,7 @@ class TestUpdatePreferencesFromInteraction:
             new_callable=AsyncMock,
             return_value=None,
         )
-        mock_update = mocker.patch.object(
-            db_manager, "update_user_preferences", new_callable=AsyncMock
-        )
+        mock_update = mocker.patch.object(db_manager, "update_user_preferences", new_callable=AsyncMock)
 
         interaction = _make_interaction(InteractionType.CLICK)
         await service.update_preferences_from_interaction(interaction, {"language": "Go"})
@@ -265,9 +249,7 @@ class TestUpdatePreferencesFromInteraction:
             new_callable=AsyncMock,
             return_value=None,
         )
-        mock_update = mocker.patch.object(
-            db_manager, "update_user_preferences", new_callable=AsyncMock
-        )
+        mock_update = mocker.patch.object(db_manager, "update_user_preferences", new_callable=AsyncMock)
 
         interaction = _make_interaction(InteractionType.CLICK)
         await service.update_preferences_from_interaction(interaction, {"language": "TypeScript"})
@@ -303,9 +285,7 @@ class TestBatchUpdatePreferences:
             new_callable=AsyncMock,
             return_value=interactions,
         )
-        mock_update = mocker.patch.object(
-            db_manager, "update_user_preferences", new_callable=AsyncMock
-        )
+        mock_update = mocker.patch.object(db_manager, "update_user_preferences", new_callable=AsyncMock)
 
         await service.batch_update_preferences("user-1")
 
@@ -325,9 +305,7 @@ class TestBatchUpdatePreferences:
             new_callable=AsyncMock,
             return_value=interactions,
         )
-        mock_update = mocker.patch.object(
-            db_manager, "update_user_preferences", new_callable=AsyncMock
-        )
+        mock_update = mocker.patch.object(db_manager, "update_user_preferences", new_callable=AsyncMock)
 
         await service.batch_update_preferences("user-1")
 

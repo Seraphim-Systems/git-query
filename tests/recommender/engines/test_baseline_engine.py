@@ -14,6 +14,7 @@ from src.recommender.models import RecommendationRequest
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_request(
     query: str = "machine learning",
     top_k: int = 5,
@@ -83,7 +84,9 @@ class TestRecommend:
         await engine.recommend(_make_request(query="fast api"))
 
         call_kwargs = mock_search.call_args.kwargs
-        query_filter = call_kwargs.get("query_filter", mock_search.call_args.args[0] if mock_search.call_args.args else {})
+        query_filter = call_kwargs.get(
+            "query_filter", mock_search.call_args.args[0] if mock_search.call_args.args else {}
+        )
         assert "$text" in query_filter, "must use $text operator"
         assert query_filter["$text"] == {"$search": "fast api"}
         assert "$regex" not in str(query_filter), "must NOT use $regex"
@@ -100,10 +103,7 @@ class TestRecommend:
         await engine.recommend(_make_request(top_k=3))
 
         call_kwargs = mock_search.call_args
-        limit_passed = (
-            call_kwargs.kwargs.get("limit")
-            or (call_kwargs.args[1] if len(call_kwargs.args) > 1 else None)
-        )
+        limit_passed = call_kwargs.kwargs.get("limit") or (call_kwargs.args[1] if len(call_kwargs.args) > 1 else None)
         assert limit_passed == 3
 
     async def test_recommend_applies_language_filter(self, mocker):
@@ -117,7 +117,9 @@ class TestRecommend:
         await engine.recommend(_make_request(language="Rust"))
 
         call_kwargs = mock_search.call_args.kwargs
-        query_filter = call_kwargs.get("query_filter", mock_search.call_args.args[0] if mock_search.call_args.args else {})
+        query_filter = call_kwargs.get(
+            "query_filter", mock_search.call_args.args[0] if mock_search.call_args.args else {}
+        )
         assert query_filter.get("language") == "Rust"
 
     async def test_recommend_applies_min_stars_filter(self, mocker):
@@ -131,7 +133,9 @@ class TestRecommend:
         await engine.recommend(_make_request(min_stars=500))
 
         call_kwargs = mock_search.call_args.kwargs
-        query_filter = call_kwargs.get("query_filter", mock_search.call_args.args[0] if mock_search.call_args.args else {})
+        query_filter = call_kwargs.get(
+            "query_filter", mock_search.call_args.args[0] if mock_search.call_args.args else {}
+        )
         assert query_filter.get("stars") == {"$gte": 500}
 
     async def test_recommend_applies_license_filter(self, mocker):
@@ -145,7 +149,9 @@ class TestRecommend:
         await engine.recommend(_make_request(license="Apache-2.0"))
 
         call_kwargs = mock_search.call_args.kwargs
-        query_filter = call_kwargs.get("query_filter", mock_search.call_args.args[0] if mock_search.call_args.args else {})
+        query_filter = call_kwargs.get(
+            "query_filter", mock_search.call_args.args[0] if mock_search.call_args.args else {}
+        )
         assert query_filter.get("license") == "Apache-2.0"
 
     async def test_recommend_assigns_1_indexed_ranks(self, mocker):
@@ -201,7 +207,9 @@ class TestRecommend:
         await engine.recommend(_make_request(query=""))
 
         call_kwargs = mock_search.call_args.kwargs
-        query_filter = call_kwargs.get("query_filter", mock_search.call_args.args[0] if mock_search.call_args.args else {})
+        query_filter = call_kwargs.get(
+            "query_filter", mock_search.call_args.args[0] if mock_search.call_args.args else {}
+        )
         assert "$text" not in query_filter
 
 

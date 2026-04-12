@@ -10,10 +10,7 @@ import pytest
 
 # Import run_drift_check directly to avoid triggering src.recommender.__init__
 # (which pulls in torch via the engines package).
-_RDC_PATH = (
-    pathlib.Path(__file__).parents[2]
-    / "src" / "recommender" / "mlops" / "run_drift_check.py"
-)
+_RDC_PATH = pathlib.Path(__file__).parents[2] / "src" / "recommender" / "mlops" / "run_drift_check.py"
 _spec = importlib.util.spec_from_file_location("run_drift_check", _RDC_PATH)
 _rdc = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_rdc)
@@ -58,18 +55,14 @@ class TestSplitInteractionsForCtr:
 
     def test_positive_interactions_map_to_one(self):
         fn = self._import()
-        df = pd.DataFrame(
-            {"interaction_type": ["click", "save", "thumbs_up"] * 10}
-        )
+        df = pd.DataFrame({"interaction_type": ["click", "save", "thumbs_up"] * 10})
         ref, cur = fn(df)
         combined = pd.concat([ref, cur])
         assert combined["clicked"].sum() == 30
 
     def test_negative_interactions_map_to_zero(self):
         fn = self._import()
-        df = pd.DataFrame(
-            {"interaction_type": ["dismiss", "thumbs_down", "view"] * 10}
-        )
+        df = pd.DataFrame({"interaction_type": ["dismiss", "thumbs_down", "view"] * 10})
         ref, cur = fn(df)
         combined = pd.concat([ref, cur])
         assert combined["clicked"].sum() == 0
@@ -119,17 +112,13 @@ class TestDeriveInteractionQuery:
 
     def test_falls_back_to_most_common_language_when_no_interactions(self):
         fn = self._import()
-        current_df = pd.DataFrame(
-            {"language": ["Python", "Python", "Go", "JavaScript", "Python"]}
-        )
+        current_df = pd.DataFrame({"language": ["Python", "Python", "Go", "JavaScript", "Python"]})
         result = fn(pd.DataFrame(), current_df)
         assert result == "Python"
 
     def test_falls_back_to_most_common_language_when_no_positive_interactions(self):
         fn = self._import()
-        interactions = pd.DataFrame(
-            {"interaction_type": ["dismiss", "thumbs_down"], "repo_id": ["r1", "r2"]}
-        )
+        interactions = pd.DataFrame({"interaction_type": ["dismiss", "thumbs_down"], "repo_id": ["r1", "r2"]})
         current_df = pd.DataFrame({"language": ["Go", "Go", "Python"]})
         result = fn(interactions, current_df)
         assert result == "Go"
@@ -165,6 +154,7 @@ class TestDeriveInteractionQuery:
 # main() exit codes
 # ---------------------------------------------------------------------------
 
+
 def _make_drift_module_mock(overall_drift_detected=False, report_dir=None):
     """Build a fake 'drift_monitor' module with a stubbed DriftMonitor."""
     mock_module = MagicMock()
@@ -183,6 +173,7 @@ class TestMainExitCodes:
     def test_exits_2_when_reference_data_path_not_set(self):
         """REFERENCE_DATA_PATH missing → exit 2 (config error)."""
         import os
+
         env = {k: v for k, v in os.environ.items() if k != "REFERENCE_DATA_PATH"}
         with patch.dict("os.environ", env, clear=True):
             with pytest.raises(SystemExit) as exc:
@@ -201,6 +192,7 @@ class TestMainExitCodes:
     def test_exits_2_when_no_current_data_source(self, tmp_path):
         """No CURRENT_DATA_PATH and no API_BASE_URL → exit 2."""
         import os
+
         ref_path = tmp_path / "ref.parquet"
         pd.DataFrame({"stars": [100]}).to_parquet(ref_path)
 
@@ -221,13 +213,12 @@ class TestMainExitCodes:
         df.to_parquet(ref_path)
         df.to_parquet(cur_path)
 
-        fake_drift_module = _make_drift_module_mock(
-            overall_drift_detected=False, report_dir=tmp_path
-        )
+        fake_drift_module = _make_drift_module_mock(overall_drift_detected=False, report_dir=tmp_path)
 
         env = {
             "REFERENCE_DATA_PATH": str(ref_path),
             "CURRENT_DATA_PATH": str(cur_path),
+            "EVIDENTLY_REPORT_PATH": str(tmp_path),
         }
         with patch.dict("os.environ", env):
             with patch.dict("sys.modules", {"drift_monitor": fake_drift_module}):
@@ -243,13 +234,12 @@ class TestMainExitCodes:
         df.to_parquet(ref_path)
         df.to_parquet(cur_path)
 
-        fake_drift_module = _make_drift_module_mock(
-            overall_drift_detected=True, report_dir=tmp_path
-        )
+        fake_drift_module = _make_drift_module_mock(overall_drift_detected=True, report_dir=tmp_path)
 
         env = {
             "REFERENCE_DATA_PATH": str(ref_path),
             "CURRENT_DATA_PATH": str(cur_path),
+            "EVIDENTLY_REPORT_PATH": str(tmp_path),
         }
         with patch.dict("os.environ", env):
             with patch.dict("sys.modules", {"drift_monitor": fake_drift_module}):

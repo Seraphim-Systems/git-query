@@ -27,6 +27,7 @@ class EmbeddingService:
         """Load the currently active embedding model from the registry."""
         async with self._load_lock:
             from .registry_service import ModelRegistryService
+
             registry = ModelRegistryService()
 
             active_model = await registry.get_active_model("embedding", variant)
@@ -56,9 +57,7 @@ class EmbeddingService:
                 await loop.run_in_executor(None, self.load_model, full_path)
                 self.current_model_id = active_model.model_id
             else:
-                logger.error(
-                    "Active model path not found: %s. Falling back to default.", full_path
-                )
+                logger.error("Active model path not found: %s. Falling back to default.", full_path)
                 await loop.run_in_executor(None, self.load_model, self.model_name)
 
     def load_model(self, model_path: str = None):

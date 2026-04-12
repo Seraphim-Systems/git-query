@@ -333,9 +333,7 @@ class TestGetProductionMetrics:
         tracker = MLflowTracker(experiment_name="test")
         tracker._client = mock_client
 
-        result = tracker.get_production_metrics(
-            "git-query-lgbm-reranker", ["mean_ndcg_at_10"]
-        )
+        result = tracker.get_production_metrics("git-query-lgbm-reranker", ["mean_ndcg_at_10"])
 
         assert result == {}
 
@@ -361,9 +359,7 @@ class TestGetProductionMetrics:
         tracker = MLflowTracker(experiment_name="test")
         tracker._client = mock_client
 
-        result = tracker.get_production_metrics(
-            "git-query-lgbm-reranker", ["mean_ndcg_at_10", "std_ndcg_at_10"]
-        )
+        result = tracker.get_production_metrics("git-query-lgbm-reranker", ["mean_ndcg_at_10", "std_ndcg_at_10"])
 
         assert result == {"mean_ndcg_at_10": 0.82, "std_ndcg_at_10": 0.05}
         assert "unrelated_metric" not in result

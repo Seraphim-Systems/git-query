@@ -18,6 +18,7 @@ import pytest
 # Async cursor helper — simulates Motor's find() cursor
 # ---------------------------------------------------------------------------
 
+
 def async_cursor(docs):
     class _Cursor:
         def __init__(self, items):
@@ -48,6 +49,7 @@ def async_cursor(docs):
 # Shared fixture: patch the module-level db_manager's attributes
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def reset_db_manager():
     """Ensure each test starts with a clean db_manager state."""
@@ -70,15 +72,14 @@ def reset_db_manager():
 # Tests: connect / close
 # ---------------------------------------------------------------------------
 
+
 class TestConnect:
     async def test_connect_initialises_all_three_clients(self, mocker):
         from src.recommender.database import DatabaseManager
 
         mock_motor_cls = mocker.patch("src.recommender.database.AsyncIOMotorClient")
         mock_qdrant_cls = mocker.patch("src.recommender.database.QdrantClient")
-        mock_redis_from_url = mocker.patch(
-            "src.recommender.database.redis.from_url", new_callable=AsyncMock
-        )
+        mock_redis_from_url = mocker.patch("src.recommender.database.redis.from_url", new_callable=AsyncMock)
         mocker.patch.object(DatabaseManager, "_ensure_collections", new_callable=AsyncMock)
 
         mock_motor_instance = MagicMock()
@@ -131,6 +132,7 @@ class TestClose:
 # ---------------------------------------------------------------------------
 # Tests: log_interaction
 # ---------------------------------------------------------------------------
+
 
 class TestLogInteraction:
     async def test_log_interaction_inserts_and_returns_id(self):
@@ -188,6 +190,7 @@ class TestLogInteraction:
 # ---------------------------------------------------------------------------
 # Tests: get_user_interactions
 # ---------------------------------------------------------------------------
+
 
 class TestGetUserInteractions:
     async def test_get_user_interactions_returns_list(self):
@@ -275,6 +278,7 @@ class TestGetUserInteractions:
 # Tests: get_user_preferences
 # ---------------------------------------------------------------------------
 
+
 class TestGetUserPreferences:
     async def test_get_user_preferences_returns_preferences_when_found(self):
         from src.recommender.database import db_manager
@@ -319,6 +323,7 @@ class TestGetUserPreferences:
 # Tests: update_user_preferences
 # ---------------------------------------------------------------------------
 
+
 class TestUpdateUserPreferences:
     async def test_update_user_preferences_calls_update_one_with_upsert(self):
         from src.recommender.database import db_manager
@@ -351,6 +356,7 @@ class TestUpdateUserPreferences:
 # Tests: search_repositories
 # ---------------------------------------------------------------------------
 
+
 class TestSearchRepositories:
     async def test_search_repositories_returns_from_first_collection_when_populated(self):
         from src.recommender.database import db_manager
@@ -365,6 +371,7 @@ class TestSearchRepositories:
 
         def _getitem(name):
             from src.recommender.config import settings
+
             if name == settings.repos_collection:
                 return populated_collection
             return empty_collection
@@ -419,6 +426,7 @@ class TestSearchRepositories:
 
         def _getitem(name):
             from src.recommender.config import settings
+
             if name == settings.repos_collection:
                 return mock_collection
             empty = MagicMock()
@@ -437,6 +445,7 @@ class TestSearchRepositories:
 # ---------------------------------------------------------------------------
 # Tests: get_repositories_by_repo_ids
 # ---------------------------------------------------------------------------
+
 
 class TestGetRepositoriesByRepoIds:
     async def test_get_repositories_by_repo_ids_returns_empty_for_empty_input(self):
@@ -484,6 +493,7 @@ class TestGetRepositoriesByRepoIds:
 # Tests: vector_search
 # ---------------------------------------------------------------------------
 
+
 class TestVectorSearch:
     async def test_vector_search_awaits_qdrant_via_executor(self, mocker):
         from src.recommender.database import db_manager
@@ -528,9 +538,11 @@ class TestVectorSearch:
 # Tests: cache_get / cache_set
 # ---------------------------------------------------------------------------
 
+
 class TestCacheGet:
     async def test_cache_get_returns_none_when_cache_disabled(self, mocker):
         from src.recommender.database import db_manager
+
         mocker.patch("src.recommender.database.settings.enable_cache", False)
 
         db_manager.redis_client = AsyncMock()
@@ -542,6 +554,7 @@ class TestCacheGet:
 
     async def test_cache_get_returns_parsed_json(self, mocker):
         from src.recommender.database import db_manager
+
         mocker.patch("src.recommender.database.settings.enable_cache", True)
 
         payload = {"results": [1, 2, 3]}
@@ -556,6 +569,7 @@ class TestCacheGet:
 
     async def test_cache_get_returns_none_on_cache_miss(self, mocker):
         from src.recommender.database import db_manager
+
         mocker.patch("src.recommender.database.settings.enable_cache", True)
 
         mock_redis = AsyncMock()
@@ -570,6 +584,7 @@ class TestCacheGet:
 class TestCacheSet:
     async def test_cache_set_skips_when_cache_disabled(self, mocker):
         from src.recommender.database import db_manager
+
         mocker.patch("src.recommender.database.settings.enable_cache", False)
 
         mock_redis = AsyncMock()
@@ -581,6 +596,7 @@ class TestCacheSet:
 
     async def test_cache_set_stores_with_ttl(self, mocker):
         from src.recommender.database import db_manager
+
         mocker.patch("src.recommender.database.settings.enable_cache", True)
         mocker.patch("src.recommender.database.settings.cache_ttl_seconds", 3600)
 
@@ -600,6 +616,7 @@ class TestCacheSet:
 # ---------------------------------------------------------------------------
 # Tests: save_metrics / get_latest_metrics
 # ---------------------------------------------------------------------------
+
 
 class TestSaveMetrics:
     async def test_save_metrics_inserts_to_collection(self):
@@ -680,6 +697,7 @@ class TestGetLatestMetrics:
 # Tests: get_active_ab_test
 # ---------------------------------------------------------------------------
 
+
 class TestGetActiveAbTest:
     async def test_get_active_ab_test_uses_timezone_aware_now(self, mocker):
         from src.recommender.database import db_manager
@@ -748,6 +766,7 @@ class TestGetActiveAbTest:
 # Tests: get_model_by_id
 # ---------------------------------------------------------------------------
 
+
 class TestGetModelById:
     async def test_get_model_by_id_returns_model_when_found(self):
         from src.recommender.database import db_manager
@@ -794,6 +813,7 @@ class TestGetModelById:
 # Tests: deactivate_models
 # ---------------------------------------------------------------------------
 
+
 class TestDeactivateModels:
     async def test_deactivate_models_calls_update_many_with_correct_filter(self):
         from src.recommender.database import db_manager
@@ -815,6 +835,7 @@ class TestDeactivateModels:
 # Tests: activate_model
 # ---------------------------------------------------------------------------
 
+
 class TestActivateModel:
     async def test_activate_model_calls_update_one_with_correct_filter(self):
         from src.recommender.database import db_manager
@@ -835,6 +856,7 @@ class TestActivateModel:
 # ---------------------------------------------------------------------------
 # Tests: list_models_query
 # ---------------------------------------------------------------------------
+
 
 class TestListModelsQuery:
     def _make_model_doc(self, model_id: str, model_type: str, status: str) -> dict:
