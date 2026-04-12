@@ -226,3 +226,13 @@ async def test_close_calls_aclose(dummy_http_client):
     await client.close()
 
     assert dummy_http_client["client"].closed is True
+
+@pytest.mark.asyncio
+async def test_execute_tool_empty_parameters(dummy_http_client):
+    client = MCPClient(base_url="http://mcp")
+    dummy_http_client["client"].next_post_response = DummyResponse(json_data={"ok": True})
+
+    result = await client.execute_tool("tool", {})
+
+    assert result is not None
+    await client.close()
