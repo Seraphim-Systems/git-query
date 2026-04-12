@@ -470,3 +470,11 @@ def test_user_profile_endpoint_exists():
     response = client.get("/user/profile")
 
     assert response.status_code in (200, 422)
+
+def test_unknown_route_returns_404():
+    app = build_app()
+    client = TestClient(app)
+
+    response = client.get("/this-does-not-exist")
+
+    assert response.status_code == 404
