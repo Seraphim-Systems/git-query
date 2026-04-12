@@ -236,3 +236,8 @@ def test_chat_endpoint_accepts_optional_context_and_preferences_keys():
 
     assert response.status_code == 200
     assert response.json()["response"] == "ok"
+
+def test_tools_list_invalid_method():
+    with TestClient(mcp_server.app) as client:
+        response = client.get("/tools/list")
+    assert response.status_code in (405, 404)
