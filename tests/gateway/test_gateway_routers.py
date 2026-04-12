@@ -462,3 +462,11 @@ def test_recommendations_missing_query_returns_200_with_fallback_shape():
     assert "personalized" in body
     assert "user_id" in body
     assert isinstance(body["recommendations"], list)
+
+def test_user_profile_endpoint_exists():
+    app = build_app()
+    client = TestClient(app)
+
+    response = client.get("/user/profile")
+
+    assert response.status_code in (200, 422)
