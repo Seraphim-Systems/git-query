@@ -206,7 +206,10 @@ jobs:
                 - |
                   set -euo pipefail
                   /app/.venv/bin/python -c "import os, pathlib; print('Kaggle env present:', bool(os.getenv('KAGGLE_USERNAME')), bool(os.getenv('KAGGLE_KEY'))); print('kaggle.json exists:', pathlib.Path('/root/.kaggle/kaggle.json').exists())"
-                  TARGET_DATASET_DIR="$$(/app/.venv/bin/python -c "import kagglehub, os; print(kagglehub.dataset_download(os.environ['DATASET']))")"
+                    TARGET_DATASET_DIR="$$(/app/.venv/bin/python -c "import os, io, contextlib, kagglehub; _buf=io.StringIO();
+          with contextlib.redirect_stdout(_buf):
+            _path=kagglehub.dataset_download(os.environ['DATASET'])
+          print(_path)" | tail -n 1 | tr -d '\r')"
                   echo "Resolved dataset directory: $$TARGET_DATASET_DIR"
                   if [ -z "$$TARGET_DATASET_DIR" ] || [ ! -d "$$TARGET_DATASET_DIR" ]; then
                     echo "Resolved dataset directory is empty or missing: $$TARGET_DATASET_DIR"
