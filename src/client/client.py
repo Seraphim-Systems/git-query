@@ -8,7 +8,6 @@ from rich.markdown import Markdown
 from rich.prompt import Prompt
 
 from src.client.config import settings
-from src.client.bot import chat
 from src.client.mcp_client import mcp_client
 
 # Configure logging
@@ -19,6 +18,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 console = Console()
+
+
+async def chat(message: str):
+    """Import chatbot lazily to avoid module import side effects during test collection."""
+    from src.client.bot import chat as bot_chat
+
+    return await bot_chat(message)
 
 
 async def check_mcp_connection():

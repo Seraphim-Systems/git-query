@@ -113,7 +113,7 @@ def test_health_mongodb_returns_503_on_exception(client):
     assert response.status_code == 503
     body = response.json()
     assert body["result"]["status"] is False
-    assert "mongo down" in body["result"]["error"]
+    assert body["result"]["error"] == "mongodb health check failed"
 
 
 def test_health_redis_ok(client):
@@ -145,7 +145,7 @@ def test_health_redis_returns_503_on_exception(client):
     assert response.status_code == 503
     body = response.json()
     assert body["result"]["status"] is False
-    assert "redis down" in body["result"]["error"]
+    assert body["result"]["error"] == "redis health check failed"
 
 
 def test_health_qdrant_ok_via_shared_client(client, monkeypatch):
@@ -202,7 +202,7 @@ def test_health_qdrant_returns_503_when_http_fallback_fails(client, monkeypatch)
     assert response.status_code == 503
     body = response.json()
     assert body["result"]["status"] is False
-    assert "qdrant http down" in body["result"]["error"]
+    assert body["result"]["error"] == "qdrant health check failed"
 
 
 def test_health_mcp_ok(client, monkeypatch):
@@ -233,7 +233,7 @@ def test_health_mcp_returns_503_on_exception(client, monkeypatch):
     body = response.json()
     assert body["service"] == "mcp"
     assert body["result"]["status"] is False
-    assert "mcp offline" in body["result"]["error"]
+    assert body["result"]["error"] == "mcp server health check failed"
 
 
 def test_health_check_all_returns_healthy_when_any_service_is_up(client, monkeypatch):
