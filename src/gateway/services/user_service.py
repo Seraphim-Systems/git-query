@@ -173,6 +173,7 @@ class UserService:
 
         # Canonical event log for recommender training/personalization.
         recommender_event = {
+            "interaction_id": str(uuid4()),
             "user_id": user_id,
             "query": query,
             "repo_id": repo_id,

@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Literal
 from pydantic import BaseModel, Field
 from enum import Enum
+from uuid import uuid4
 
 
 class InteractionType(str, Enum):
@@ -70,6 +71,7 @@ class RecommendationResponse(BaseModel):
 class UserInteraction(BaseModel):
     """User interaction event."""
 
+    interaction_id: str = Field(default_factory=lambda: str(uuid4()))
     user_id: str
     query: str
     repo_id: str
