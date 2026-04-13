@@ -10,6 +10,14 @@ import os
 import pytest
 from datetime import datetime, timezone
 
+pytest.importorskip(
+    "torch", reason="Integration recommender tests require optional torch dependency"
+)
+pytest.importorskip(
+    "sentence_transformers",
+    reason="Integration recommender tests require optional sentence-transformers dependency",
+)
+
 # Load environment variables BEFORE any src.* imports so that database
 # connection settings, model paths, and service URLs are available at
 # import time (some modules read them at module level).
@@ -50,7 +58,9 @@ async def client():
     """
     transport = ASGITransport(app=app)
     try:
-        async with AsyncClient(transport=transport, base_url="http://test") as async_client:
+        async with AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as async_client:
             # ASGITransport can swallow lifespan errors.  If startup didn't
             # finish (databases unreachable), required state won't be set.
             if not hasattr(app.state, "ab_test_service"):
@@ -60,7 +70,9 @@ async def client():
                 )
             yield async_client
     except Exception as exc:
-        pytest.skip(f"Recommender service startup failed — live databases unavailable.\nDetails: {exc}")
+        pytest.skip(
+            f"Recommender service startup failed — live databases unavailable.\nDetails: {exc}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -72,7 +84,9 @@ def _print_top_results(query: str, results: list, n: int = 3) -> None:
     """Print top N results so a developer can eyeball recommendation quality."""
     print(f"\n[{query}] Top results:")
     for r in results[:n]:
-        print(f"  {r['rank']}. {r['name']} (score={r['score']:.3f}, stars={r.get('stars', '?')})")
+        print(
+            f"  {r['rank']}. {r['name']} (score={r['score']:.3f}, stars={r.get('stars', '?')})"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +132,9 @@ class TestRecommenderAPI:
     # ------------------------------------------------------------------
 
     @pytest.mark.asyncio
-    async def test_recommend_returns_200_for_valid_query(self, client: AsyncClient) -> None:
+    async def test_recommend_returns_200_for_valid_query(
+        self, client: AsyncClient
+    ) -> None:
         """POST /recommend with a minimal valid payload must return HTTP 200."""
         payload = {"query": "machine learning python", "top_k": 5}
         response = await client.post("/recommend", json=payload)
@@ -126,7 +142,9 @@ class TestRecommenderAPI:
         assert response.status_code == 200
 
     @pytest.mark.asyncio
-    async def test_recommend_response_has_correct_shape(self, client: AsyncClient) -> None:
+    async def test_recommend_response_has_correct_shape(
+        self, client: AsyncClient
+    ) -> None:
         """The response body must contain all required top-level fields with correct types."""
         payload = {"query": "machine learning python", "top_k": 5}
         response = await client.post("/recommend", json=payload)
@@ -136,14 +154,21 @@ class TestRecommenderAPI:
 
         assert "query" in data
         assert isinstance(data["results"], list)
-        assert isinstance(data["total_candidates"], int) and data["total_candidates"] >= 0
-        assert isinstance(data["processing_time_ms"], float) and data["processing_time_ms"] > 0
+        assert (
+            isinstance(data["total_candidates"], int) and data["total_candidates"] >= 0
+        )
+        assert (
+            isinstance(data["processing_time_ms"], float)
+            and data["processing_time_ms"] > 0
+        )
         assert isinstance(data["variant"], str)
         assert isinstance(data["personalized"], bool)
         assert isinstance(data["filters_applied"], dict)
 
     @pytest.mark.asyncio
-    async def test_recommend_results_have_correct_fields(self, client: AsyncClient) -> None:
+    async def test_recommend_results_have_correct_fields(
+        self, client: AsyncClient
+    ) -> None:
         """Every entry in `results` must expose repo_id, name, score, rank, and explanation."""
         payload = {"query": "machine learning python", "top_k": 5}
         response = await client.post("/recommend", json=payload)
@@ -155,11 +180,15 @@ class TestRecommenderAPI:
         for result in results:
             assert "repo_id" in result, f"Missing repo_id in {result}"
             assert "name" in result, f"Missing name in {result}"
-            assert "score" in result and result["score"] > 0, f"score must be > 0, got {result.get('score')}"
-            assert "rank" in result and result["rank"] > 0, f"rank must be > 0, got {result.get('rank')}"
-            assert "explanation" in result and isinstance(result["explanation"], dict), (
-                f"explanation must be a dict, got {result.get('explanation')}"
-            )
+            assert (
+                "score" in result and result["score"] > 0
+            ), f"score must be > 0, got {result.get('score')}"
+            assert (
+                "rank" in result and result["rank"] > 0
+            ), f"rank must be > 0, got {result.get('rank')}"
+            assert "explanation" in result and isinstance(
+                result["explanation"], dict
+            ), f"explanation must be a dict, got {result.get('explanation')}"
 
     # ------------------------------------------------------------------
     # /recommend — top_k, diversity, filters
@@ -173,10 +202,14 @@ class TestRecommenderAPI:
         assert response.status_code == 200
 
         results = response.json()["results"]
-        assert len(results) <= 3, f"Expected at most 3 results for top_k=3, got {len(results)}"
+        assert (
+            len(results) <= 3
+        ), f"Expected at most 3 results for top_k=3, got {len(results)}"
 
     @pytest.mark.asyncio
-    async def test_recommend_different_queries_give_different_results(self, client: AsyncClient) -> None:
+    async def test_recommend_different_queries_give_different_results(
+        self, client: AsyncClient
+    ) -> None:
         """Two semantically unrelated queries must not return the same top result."""
         payload_ml = {"query": "machine learning", "top_k": 5}
         payload_k8s = {"query": "kubernetes docker", "top_k": 5}
@@ -195,11 +228,15 @@ class TestRecommenderAPI:
 
         # If either query returns no results we cannot compare — skip gracefully.
         if not results_ml or not results_k8s:
-            pytest.skip("One or both queries returned no results; skipping diversity check.")
+            pytest.skip(
+                "One or both queries returned no results; skipping diversity check."
+            )
 
         top_ml = results_ml[0]["repo_id"]
         top_k8s = results_k8s[0]["repo_id"]
-        assert top_ml != top_k8s, f"Expected different top results for different queries but both returned '{top_ml}'"
+        assert (
+            top_ml != top_k8s
+        ), f"Expected different top results for different queries but both returned '{top_ml}'"
 
     @pytest.mark.asyncio
     async def test_recommend_with_language_filter(self, client: AsyncClient) -> None:
@@ -214,7 +251,9 @@ class TestRecommenderAPI:
         for result in results:
             lang = result.get("language")
             if lang is not None:
-                assert lang == "Python", f"Expected language 'Python' but got '{lang}' for repo {result['name']}"
+                assert (
+                    lang == "Python"
+                ), f"Expected language 'Python' but got '{lang}' for repo {result['name']}"
 
     @pytest.mark.asyncio
     async def test_recommend_with_min_stars_filter(self, client: AsyncClient) -> None:
@@ -228,9 +267,9 @@ class TestRecommenderAPI:
         _print_top_results(f"machine learning [min_stars={min_stars}]", results)
 
         for result in results:
-            assert result.get("stars", 0) >= min_stars, (
-                f"Repo '{result['name']}' has {result.get('stars')} stars, expected >= {min_stars}"
-            )
+            assert (
+                result.get("stars", 0) >= min_stars
+            ), f"Repo '{result['name']}' has {result.get('stars')} stars, expected >= {min_stars}"
 
     # ------------------------------------------------------------------
     # /recommend — variant
@@ -244,21 +283,27 @@ class TestRecommenderAPI:
         assert response.status_code == 200
 
         data = response.json()
-        assert data["variant"] == "baseline", f"Expected variant 'baseline', got '{data['variant']}'"
+        assert (
+            data["variant"] == "baseline"
+        ), f"Expected variant 'baseline', got '{data['variant']}'"
 
     # ------------------------------------------------------------------
     # /recommend — performance
     # ------------------------------------------------------------------
 
     @pytest.mark.asyncio
-    async def test_recommend_processing_time_is_reasonable(self, client: AsyncClient) -> None:
+    async def test_recommend_processing_time_is_reasonable(
+        self, client: AsyncClient
+    ) -> None:
         """The reported processing_time_ms must be under 30 000 ms (30 seconds)."""
         payload = {"query": "machine learning python", "top_k": 5}
         response = await client.post("/recommend", json=payload)
         assert response.status_code == 200
 
         processing_time_ms = response.json()["processing_time_ms"]
-        assert processing_time_ms < 30_000, f"Processing time {processing_time_ms:.1f} ms exceeded 30 000 ms threshold"
+        assert (
+            processing_time_ms < 30_000
+        ), f"Processing time {processing_time_ms:.1f} ms exceeded 30 000 ms threshold"
 
     # ------------------------------------------------------------------
     # /recommend/explain/{repo_id}
@@ -296,7 +341,9 @@ class TestRecommenderAPI:
         assert response.status_code == 200
 
         data = response.json()
-        assert data.get("status") == "success", f"Expected status='success', got: {data}"
+        assert (
+            data.get("status") == "success"
+        ), f"Expected status='success', got: {data}"
         assert "interaction_id" in data, f"Missing 'interaction_id' in response: {data}"
 
     # ------------------------------------------------------------------
@@ -304,7 +351,9 @@ class TestRecommenderAPI:
     # ------------------------------------------------------------------
 
     @pytest.mark.asyncio
-    async def test_preferences_returns_404_for_unknown_user(self, client: AsyncClient) -> None:
+    async def test_preferences_returns_404_for_unknown_user(
+        self, client: AsyncClient
+    ) -> None:
         """GET /preferences/{user_id} must return 404 when the user is not found."""
         response = await client.get("/preferences/nonexistent-user-xyz")
         assert response.status_code == 404
@@ -314,7 +363,9 @@ class TestRecommenderAPI:
     # ------------------------------------------------------------------
 
     @pytest.mark.asyncio
-    async def test_ab_test_endpoint_returns_valid_response(self, client: AsyncClient) -> None:
+    async def test_ab_test_endpoint_returns_valid_response(
+        self, client: AsyncClient
+    ) -> None:
         """GET /ab-test must return HTTP 200 and a non-empty dict."""
         response = await client.get("/ab-test")
         assert response.status_code == 200
@@ -338,11 +389,15 @@ class TestRecommenderAPI:
         assert "engines" in data, f"Missing 'engines' key in response: {data}"
 
         engines = data["engines"]
-        assert isinstance(engines, list), f"Expected list for 'engines', got {type(engines)}"
+        assert isinstance(
+            engines, list
+        ), f"Expected list for 'engines', got {type(engines)}"
 
         engine_names = {e.get("name") for e in engines}
         for expected in ("baseline", "hybrid", "personalized"):
-            assert expected in engine_names, f"Engine '{expected}' not found in engines list. Got: {engine_names}"
+            assert (
+                expected in engine_names
+            ), f"Engine '{expected}' not found in engines list. Got: {engine_names}"
 
     # ------------------------------------------------------------------
     # /admin/models
@@ -356,7 +411,9 @@ class TestRecommenderAPI:
 
         data = response.json()
         assert "models" in data, f"Missing 'models' key in response: {data}"
-        assert isinstance(data["models"], list), f"Expected list for 'models', got {type(data['models'])}"
+        assert isinstance(
+            data["models"], list
+        ), f"Expected list for 'models', got {type(data['models'])}"
 
     # ------------------------------------------------------------------
     # /admin/cache/clear
@@ -369,7 +426,9 @@ class TestRecommenderAPI:
         assert response.status_code == 200
 
         data = response.json()
-        assert data.get("status") == "success", f"Expected status='success', got: {data}"
+        assert (
+            data.get("status") == "success"
+        ), f"Expected status='success', got: {data}"
 
     # ------------------------------------------------------------------
     # Validation errors
@@ -386,7 +445,9 @@ class TestRecommenderAPI:
     # ------------------------------------------------------------------
 
     @pytest.mark.asyncio
-    async def test_metrics_returns_404_for_unknown_variant(self, client: AsyncClient) -> None:
+    async def test_metrics_returns_404_for_unknown_variant(
+        self, client: AsyncClient
+    ) -> None:
         """GET /metrics/{variant} must return 404 when no metrics exist for that variant."""
         response = await client.get("/metrics/nonexistent-variant")
         assert response.status_code == 404
