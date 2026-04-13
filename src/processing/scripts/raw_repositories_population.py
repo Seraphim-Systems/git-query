@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
@@ -30,6 +31,31 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 # Avoid importing Cosmos DB config unless direct mode is used.
+
+
+def _now_iso() -> str:
+    return datetime.utcnow().isoformat() + "Z"
+
+
+def _load_checkpoint(checkpoint_file: Path) -> Dict[str, Any] | None:
+    if not checkpoint_file.exists():
+        return None
+    with checkpoint_file.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+    return data if isinstance(data, dict) else None
+
+
+def _save_checkpoint(checkpoint_file: Path, data: Dict[str, Any]) -> None:
+    checkpoint_file.parent.mkdir(parents=True, exist_ok=True)
+    with checkpoint_file.open("w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, sort_keys=True)
+
+
+def _checkpoint_matches(checkpoint: Dict[str, Any], context: Dict[str, Any]) -> bool:
+    for key, value in context.items():
+        if checkpoint.get("context", {}).get(key) != value:
+            return False
+    return True
 
 
 def _find_json_files(root: Path) -> List[Path]:
@@ -293,6 +319,9 @@ def load_to_cosmos(
     target: str,
     gateway_bulk_path: str | None,
     gateway_mongo_mode: str,
+    checkpoint_file: str,
+    resume: bool,
+    reset_checkpoint: bool,
 ) -> None:
     print(f"Downloading dataset: {dataset}", flush=True)
     dataset_dir = Path(kagglehub.dataset_download(dataset))
@@ -325,6 +354,55 @@ def load_to_cosmos(
         json_file = json_files[0]
 
     iterator = _iter_json_array(json_file)
+
+    checkpoint_path = Path(checkpoint_file)
+    context = {
+        "dataset": dataset,
+        "file": str(json_file),
+        "collection": collection_name,
+        "database": database_name,
+        "target": target,
+        "id_field": id_field,
+        "derive_fields": derive_fields,
+        "batch_size": batch_size,
+    }
+
+    if reset_checkpoint and checkpoint_path.exists():
+        checkpoint_path.unlink()
+        print(f"Checkpoint reset: {checkpoint_path}", flush=True)
+
+    resume_from = 0
+    total_upserted = 0
+    total_modified = 0
+    total_failed_docs = 0
+    total_duplicate_docs = 0
+
+    if resume and not dry_run:
+        checkpoint = _load_checkpoint(checkpoint_path)
+        if checkpoint and _checkpoint_matches(checkpoint, context):
+            resume_from = int(checkpoint.get("processed", 0) or 0)
+            total_upserted = int(checkpoint.get("upserted", 0) or 0)
+            total_modified = int(checkpoint.get("modified", 0) or 0)
+            total_failed_docs = int(checkpoint.get("failed_docs", 0) or 0)
+            total_duplicate_docs = int(checkpoint.get("duplicate_docs", 0) or 0)
+            print(
+                f"Resuming from checkpoint: processed={resume_from}, upserted={total_upserted}, modified={total_modified}",
+                flush=True,
+            )
+        elif checkpoint:
+            print("Checkpoint found but context changed; starting from scratch.", flush=True)
+
+    if resume_from:
+        skipped = 0
+        while skipped < resume_from:
+            try:
+                next(iterator)
+                skipped += 1
+                if progress_every and skipped % progress_every == 0:
+                    print(f"Skipped {skipped} records to resume position...", flush=True)
+            except StopIteration:
+                print("Checkpoint offset is past EOF; nothing to process.", flush=True)
+                return
 
     if dry_run:
         count = 0
@@ -375,12 +453,23 @@ def load_to_cosmos(
             )
         collection = database[collection_name]
 
-    total_upserted = 0
-    total_modified = 0
-    total_failed_docs = 0
-    total_duplicate_docs = 0
     batch: List[Dict[str, Any]] = []
-    processed = 0
+    processed = resume_from
+
+    def persist_checkpoint() -> None:
+        if dry_run:
+            return
+        payload = {
+            "context": context,
+            "processed": processed,
+            "upserted": total_upserted,
+            "modified": total_modified,
+            "failed_docs": total_failed_docs,
+            "duplicate_docs": total_duplicate_docs,
+            "updated_at": _now_iso(),
+            "completed": False,
+        }
+        _save_checkpoint(checkpoint_path, payload)
 
     for record in iterator:
         if max_records and processed >= max_records:
@@ -420,6 +509,7 @@ def load_to_cosmos(
                     total_upserted += result.get("nUpserted", 0)
                     total_modified += result.get("nModified", 0)
             batch.clear()
+            persist_checkpoint()
 
         if progress_every and processed % progress_every == 0:
             print(f"Inserted {processed} records...", flush=True)
@@ -451,9 +541,25 @@ def load_to_cosmos(
                 result = exc.details
                 total_upserted += result.get("nUpserted", 0)
                 total_modified += result.get("nModified", 0)
+        persist_checkpoint()
 
     if use_gateway:
         client.close()
+
+    if not dry_run:
+        _save_checkpoint(
+            checkpoint_path,
+            {
+                "context": context,
+                "processed": processed,
+                "upserted": total_upserted,
+                "modified": total_modified,
+                "failed_docs": total_failed_docs,
+                "duplicate_docs": total_duplicate_docs,
+                "updated_at": _now_iso(),
+                "completed": True,
+            },
+        )
 
     print(
         f"Completed: upserted={total_upserted}, modified={total_modified}, duplicates={total_duplicate_docs}, failed_docs={total_failed_docs}, "
@@ -524,6 +630,21 @@ def main() -> None:
         default="insert",
         help="Gateway mode for MongoDB target",
     )
+    parser.add_argument(
+        "--checkpoint-file",
+        default=".checkpoints/raw_repositories_population.json",
+        help="Path to checkpoint JSON file",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume from checkpoint if present",
+    )
+    parser.add_argument(
+        "--reset-checkpoint",
+        action="store_true",
+        help="Delete existing checkpoint and start from scratch",
+    )
 
     args = parser.parse_args()
 
@@ -544,6 +665,9 @@ def main() -> None:
         target=args.target,
         gateway_bulk_path=args.gateway_bulk_path,
         gateway_mongo_mode=args.gateway_mongo_mode,
+        checkpoint_file=args.checkpoint_file,
+        resume=args.resume,
+        reset_checkpoint=args.reset_checkpoint,
     )
 
 
