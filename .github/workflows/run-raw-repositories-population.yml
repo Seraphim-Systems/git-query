@@ -15,7 +15,7 @@ on:
         description: "Kaggle dataset slug"
         required: false
         type: string
-        default: "jp797498e/github-repository-metadata-with-3-5-million-records"
+        default: "pelmers/github-repository-metadata-with-5-stars"
       dataset_file:
         description: "Dataset JSON filename"
         required: false
@@ -132,7 +132,21 @@ jobs:
             -e KAGGLE_CONFIG_DIR="/root/.kaggle" \
             -v "$REPO_PATH/.kaggle:/root/.kaggle:ro" \
             "$PROCESSING_IMAGE" \
-            python -c "import kagglehub; kagglehub.dataset_download('${{ github.event.inputs.dataset }}'); print('Kaggle access check: OK')"
+            python -c "import sys, kagglehub; public_ds='uciml/iris'; target_ds='${{ github.event.inputs.dataset }}';\
+      try:\
+        kagglehub.dataset_download(public_ds);\
+        print(f'Kaggle auth check OK on public dataset: {public_ds}');\
+      except Exception as e:\
+        print('Kaggle auth check FAILED on public dataset. Credentials are likely invalid/mismatched.');\
+        print(e);\
+        sys.exit(2);\
+      try:\
+        kagglehub.dataset_download(target_ds);\
+        print(f'Kaggle target dataset access OK: {target_ds}');\
+      except Exception as e:\
+        print('Kaggle target dataset access FAILED. Account likely lacks dataset permission/consent acceptance.');\
+        print(e);\
+        sys.exit(3)"
 
           echo "Running raw population job in container..."
           docker run --name "$POP_CONTAINER" --rm \
