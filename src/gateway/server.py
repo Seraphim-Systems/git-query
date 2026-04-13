@@ -302,6 +302,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
 # Include routers
 app.include_router(health.router)
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
+app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(chat.router, prefix="/chat", tags=["Chat"])
 app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
 app.include_router(recommendations.router, prefix="/recommend", tags=["Recommendations"])
