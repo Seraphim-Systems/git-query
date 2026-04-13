@@ -33,6 +33,7 @@ qdrant-client>=1.7.0
 
 # Authentication
 PyJWT>=2.8.0
+argon2-cffi==25.1.0
 
 # Configuration
 python-dotenv>=1.0.0

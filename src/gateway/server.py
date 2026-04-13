@@ -1,8 +1,8 @@
 """API Gateway server - main entry point."""
 
-import hashlib
 import logging
 from contextlib import asynccontextmanager
+from argon2 import PasswordHasher
 from fastapi import FastAPI, Request
 from pymongo.errors import DuplicateKeyError
 from fastapi.middleware.cors import CORSMiddleware
@@ -96,6 +96,7 @@ else:
 
 root_logger.setLevel(settings.log_level)
 logger = logging.getLogger(__name__)
+password_hasher = PasswordHasher()
 
 # Quiet overly-verbose third-party loggers that flood container output
 NOISY_LOGGERS = [
@@ -122,14 +123,39 @@ async def _seed_admin_user(user_service) -> None:
     if not email:
         return
 
+    password = settings.web_admin_password or ""
+    username = settings.web_admin_username
+    password_hash = password_hasher.hash(password)
+
+    # Keep exactly one seeded admin aligned with configured secrets.
+    removed = await user_service.db.users.delete_many(
+        {
+            "is_admin": True,
+            "email": {"$ne": email},
+        }
+    )
+    if removed.deleted_count:
+        logger.warning(
+            "Removed %s stale admin account(s) not matching WEB_ADMIN_EMAIL=%s",
+            removed.deleted_count,
+            email,
+        )
+
     existing = await user_service.get_user_by_email(email)
     if existing:
-        logger.info("Admin seed user already exists: %s", email)
+        await user_service.db.users.update_one(
+            {"_id": existing["_id"]},
+            {
+                "$set": {
+                    "username": username,
+                    "password_hash": password_hash,
+                    "is_admin": True,
+                    "updated_at": datetime.utcnow(),
+                }
+            },
+        )
+        logger.info("Admin seed user refreshed: %s", email)
         return
-
-    password = settings.web_admin_password or ""
-    password_hash = hashlib.sha256(password.encode()).hexdigest()
-    username = settings.web_admin_username
 
     try:
         await user_service.create_user(
@@ -141,7 +167,18 @@ async def _seed_admin_user(user_service) -> None:
         )
         logger.info("Admin seed user created: %s (%s)", email, username)
     except DuplicateKeyError:
-        logger.info("Admin seed user already exists (duplicate key): %s (%s)", email, username)
+        await user_service.db.users.update_one(
+            {"email": email},
+            {
+                "$set": {
+                    "username": username,
+                    "password_hash": password_hash,
+                    "is_admin": True,
+                    "updated_at": datetime.utcnow(),
+                }
+            },
+        )
+        logger.info("Admin seed user refreshed after duplicate key: %s (%s)", email, username)
 
 
 @asynccontextmanager

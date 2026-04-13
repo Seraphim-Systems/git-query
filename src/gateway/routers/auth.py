@@ -2,11 +2,13 @@
 
 from fastapi import APIRouter, HTTPException, status, Request, Response
 from pydantic import BaseModel, EmailStr
-import hashlib
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError, InvalidHashError
 
 from src.gateway.services.jwt_service import create_access_token
 
 router = APIRouter()
+password_hasher = PasswordHasher()
 
 
 class LoginRequest(BaseModel):
@@ -47,8 +49,10 @@ async def login(request: Request, response: Response, credentials: LoginRequest)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     # Verify password against stored hash
-    provided_hash = hashlib.sha256(credentials.password.encode()).hexdigest()
-    if user.get("password_hash") != provided_hash:
+    stored_hash = user.get("password_hash", "")
+    try:
+        password_hasher.verify(stored_hash, credentials.password)
+    except (VerifyMismatchError, InvalidHashError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     # Create session
@@ -66,7 +70,7 @@ async def login(request: Request, response: Response, credentials: LoginRequest)
         key="session_id",
         value=session_id,
         httponly=True,
-        secure=False,  # Set to True in production with HTTPS
+        secure=True,
         samesite="lax",
         max_age=86400,  # 24 hours
     )
@@ -96,9 +100,8 @@ async def register(request: Request, response: Response, data: RegisterRequest):
     if existing_user:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User already exists")
 
-    # Create user
-    # TODO: Hash password properly (bcrypt, argon2, etc.)
-    password_hash = hashlib.sha256(data.password.encode()).hexdigest()
+    # Create user with strong password hashing.
+    password_hash = password_hasher.hash(data.password)
 
     user = await user_service.create_user(
         email=data.email,
@@ -120,7 +123,7 @@ async def register(request: Request, response: Response, data: RegisterRequest):
         key="session_id",
         value=session_id,
         httponly=True,
-        secure=False,  # Set to True in production with HTTPS
+        secure=True,
         samesite="lax",
         max_age=86400,
     )
