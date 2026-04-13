@@ -153,7 +153,7 @@ jobs:
                 - python
                 - -c
                 - |
-                  import pathlib, sys, kagglehub
+                  import sys, kagglehub
                   public_ds = "uciml/iris"
                   target_ds = "${DATASET}"
                   try:
@@ -164,10 +164,8 @@ jobs:
                       print(e)
                       sys.exit(2)
                   try:
-                    target_path = kagglehub.dataset_download(target_ds)
+                      kagglehub.dataset_download(target_ds)
                     print(f"Kaggle target dataset access OK: {target_ds}")
-                    print(f"Target dataset path: {target_path}")
-                    pathlib.Path("/repo/.runtime/target-dataset-path.txt").write_text(target_path, encoding="utf-8")
                   except Exception as e:
                     print("Kaggle target dataset access FAILED.")
                     print(e)
@@ -189,8 +187,10 @@ jobs:
                 - |
                   set -euo pipefail
                   python -c "import os, pathlib; print('Kaggle env present:', bool(os.getenv('KAGGLE_USERNAME')), bool(os.getenv('KAGGLE_KEY'))); print('kaggle.json exists:', pathlib.Path('/root/.kaggle/kaggle.json').exists())"
+                  TARGET_DATASET_DIR="$(python -c "import kagglehub; print(kagglehub.dataset_download('${DATASET}'))")"
+                  echo "Resolved dataset directory: $TARGET_DATASET_DIR"
                   python /repo/src/processing/scripts/raw_repositories_population.py \
-                    --dataset-dir "${DATASET_DIR}" \
+                    --dataset-dir "$TARGET_DATASET_DIR" \
                     --dataset "${DATASET}" \
                     --file "${DATASET_FILE}" \
                     --collection raw_repositories \
@@ -217,13 +217,6 @@ jobs:
 
           echo "Kaggle preflight check..."
           docker compose -f "$POP_COMPOSE_FILE" run --rm raw-kaggle-precheck
-
-          if [ ! -f "$REPO_PATH/.runtime/target-dataset-path.txt" ]; then
-            echo "Expected dataset path file missing after precheck."
-            exit 1
-          fi
-          export DATASET_DIR="$(cat "$REPO_PATH/.runtime/target-dataset-path.txt")"
-          echo "Using pre-downloaded dataset path: $DATASET_DIR"
 
           echo "Running raw population job in container..."
           docker compose -f "$POP_COMPOSE_FILE" run --rm raw-population-job 2>&1 | tee "$REPO_PATH/$LOG_FILE"
