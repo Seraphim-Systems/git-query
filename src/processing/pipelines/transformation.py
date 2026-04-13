@@ -1,9 +1,10 @@
 """Data transformation pipeline - normalizes raw repository documents."""
 
 import logging
+import math
 import re
 from typing import Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from processing.config import settings
 
@@ -27,8 +28,8 @@ class DataTransformer:
             Cleaned record or None if invalid
         """
         try:
-            # Keep all raw fields by default, then normalize required ones.
-            cleaned = dict(raw_record)
+            # Build a curated cleaned schema rather than copying all raw fields.
+            cleaned: Dict[str, Any] = {}
 
             full_name = self._first_non_empty(
                 raw_record.get("full_name"),
@@ -43,7 +44,7 @@ class DataTransformer:
             name = self._clean_string(name)
 
             owner = self._first_non_empty(
-                raw_record.get("owner"),
+                self._extract_owner_login(raw_record.get("owner")),
                 raw_record.get("owner_login"),
                 self._extract_owner(full_name),
             )
@@ -74,6 +75,24 @@ class DataTransformer:
             topics = self._clean_topics(raw_record.get("topics"))
             license_value = self._normalize_license(raw_record.get("license"))
 
+            watchers = self._clean_integer(
+                self._first_non_empty(raw_record.get("watchers"), raw_record.get("watcherCount"), 0)
+            )
+            issues = self._clean_integer(
+                self._first_non_empty(raw_record.get("issues"), raw_record.get("openIssues"), 0)
+            )
+            pull_requests = self._clean_integer(
+                self._first_non_empty(raw_record.get("pullRequests"), raw_record.get("pull_requests"), 0)
+            )
+
+            is_fork = bool(
+                self._first_non_empty(raw_record.get("is_fork"), raw_record.get("isFork"), False)
+            )
+            is_archived = bool(
+                self._first_non_empty(raw_record.get("is_archived"), raw_record.get("isArchived"), False)
+            )
+            forking_allowed = bool(self._first_non_empty(raw_record.get("forkingAllowed"), True))
+
             updated_at = self._to_iso_timestamp(
                 self._first_non_empty(raw_record.get("updated_at"), raw_record.get("updatedAt"))
             )
@@ -91,11 +110,20 @@ class DataTransformer:
                     "language": language,
                     "stars": stars,
                     "forks": forks,
+                    "watchers": watchers,
+                    "issues": issues,
+                    "pull_requests": pull_requests,
                     "topics": topics,
                     "license": license_value,
                     "readme": raw_record.get("readme"),
+                    "is_fork": is_fork,
+                    "is_archived": is_archived,
+                    "forking_allowed": forking_allowed,
                     "updated_at": updated_at,
                     "pushed_at": pushed_at,
+                    "created_at": self._to_iso_timestamp(
+                        self._first_non_empty(raw_record.get("created_at"), raw_record.get("createdAt"))
+                    ),
                     "search_text": self._create_search_text(
                         full_name=full_name,
                         description=description,
@@ -104,6 +132,9 @@ class DataTransformer:
                     ),
                 }
             )
+
+            # Model/EDA-ready engineered features stored per cleaned repository.
+            cleaned.update(self._engineered_features(cleaned))
 
             # Validate cleaned record
             if not self._validate_cleaned_record(cleaned):
@@ -188,6 +219,68 @@ class DataTransformer:
         except ValueError:
             return None
 
+    def _parse_iso_datetime(self, value: Any) -> Optional[datetime]:
+        """Best-effort parser for ISO timestamps used by recency features."""
+        if not value:
+            return None
+        if isinstance(value, datetime):
+            if value.tzinfo is None:
+                return value.replace(tzinfo=timezone.utc)
+            return value
+        try:
+            parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                return parsed.replace(tzinfo=timezone.utc)
+            return parsed
+        except ValueError:
+            return None
+
+    def _days_since(self, iso_value: Any) -> Optional[int]:
+        parsed = self._parse_iso_datetime(iso_value)
+        if parsed is None:
+            return None
+        return max(0, int((datetime.now(timezone.utc) - parsed).days))
+
+    def _is_permissive_license(self, license_value: Optional[str]) -> int:
+        if not license_value:
+            return 0
+        permissive = {
+            "mit",
+            "apache-2.0",
+            "bsd-2-clause",
+            "bsd-3-clause",
+            "isc",
+            "unlicense",
+        }
+        normalized = self._clean_string(license_value).lower()
+        return int(normalized in permissive)
+
+    def _engineered_features(self, cleaned: Dict[str, Any]) -> Dict[str, Any]:
+        stars = self._clean_integer(cleaned.get("stars"))
+        forks = self._clean_integer(cleaned.get("forks"))
+
+        topics = cleaned.get("topics") if isinstance(cleaned.get("topics"), list) else []
+        description = cleaned.get("description") or ""
+        readme = cleaned.get("readme") or ""
+
+        pushed_days = self._days_since(cleaned.get("pushed_at"))
+        updated_days = self._days_since(cleaned.get("updated_at"))
+        days_since_update = pushed_days if pushed_days is not None else updated_days
+
+        return {
+            "stars_log": round(math.log1p(stars), 6),
+            "forks_log": round(math.log1p(forks), 6),
+            "fork_star_ratio": round(float(forks) / float(stars + 1), 6),
+            "has_readme": int(bool(str(readme).strip())),
+            "readme_length": len(str(readme)),
+            "description_length": len(str(description)),
+            "num_topics": len(topics),
+            "has_license": int(bool(cleaned.get("license"))),
+            "is_permissive": self._is_permissive_license(cleaned.get("license")),
+            "days_since_update": days_since_update,
+            "is_stale": int(days_since_update is not None and days_since_update > 730),
+        }
+
     def _clean_topics(self, topics: Any) -> list[str]:
         """Clean and normalize topics"""
         if topics is None:
@@ -206,6 +299,19 @@ class DataTransformer:
                 cleaned.append(topic)
 
         return list(set(cleaned))[:20]  # Max 20 unique topics
+
+    def _extract_owner_login(self, owner_value: Any) -> Optional[str]:
+        """Extract owner login when owner is a nested object."""
+        if isinstance(owner_value, dict):
+            candidate = self._first_non_empty(
+                owner_value.get("login"),
+                owner_value.get("name"),
+                owner_value.get("id"),
+            )
+            return self._clean_string(candidate)
+        if owner_value is None:
+            return None
+        return self._clean_string(owner_value)
 
     def _normalize_license(self, license_value: Any) -> Optional[str]:
         """Normalize license into string or null."""
