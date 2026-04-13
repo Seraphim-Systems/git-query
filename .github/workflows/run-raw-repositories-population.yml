@@ -85,14 +85,19 @@ jobs:
 
           mkdir -p "$REPO_PATH/logs" "$REPO_PATH/.checkpoints"
 
-          mkdir -p ~/.kaggle
-          cat > ~/.kaggle/kaggle.json << EOF
+          if [ -z "${{ secrets.KAGGLE_USERNAME }}" ] || [ -z "${{ secrets.KAGGLE_KEY }}" ]; then
+            echo "Missing Kaggle secrets. Set KAGGLE_USERNAME and KAGGLE_KEY in repository secrets."
+            exit 1
+          fi
+
+          mkdir -p "$REPO_PATH/.kaggle"
+          cat > "$REPO_PATH/.kaggle/kaggle.json" << EOF
           {
             "username": "${{ secrets.KAGGLE_USERNAME }}",
             "key": "${{ secrets.KAGGLE_KEY }}"
           }
           EOF
-          chmod 600 ~/.kaggle/kaggle.json
+          chmod 600 "$REPO_PATH/.kaggle/kaggle.json"
 
           RESUME_FLAG=""
           if [ "${{ github.event.inputs.resume }}" = "true" ]; then
@@ -120,14 +125,26 @@ jobs:
 
           docker rm -f "$POP_CONTAINER" >/dev/null 2>&1 || true
 
+          echo "Kaggle preflight check..."
+          docker run --rm \
+            -e KAGGLE_USERNAME="${{ secrets.KAGGLE_USERNAME }}" \
+            -e KAGGLE_KEY="${{ secrets.KAGGLE_KEY }}" \
+            -e KAGGLE_CONFIG_DIR="/root/.kaggle" \
+            -v "$REPO_PATH/.kaggle:/root/.kaggle:ro" \
+            "$PROCESSING_IMAGE" \
+            python -c "import kagglehub; kagglehub.dataset_download('${{ github.event.inputs.dataset }}'); print('Kaggle access check: OK')"
+
           echo "Running raw population job in container..."
           docker run --name "$POP_CONTAINER" --rm \
             --network git-query-internal-network \
             -e MONGODB_URL="mongodb://${{ secrets.DB_MONGODB_USER || 'admin' }}:${{ secrets.DB_MONGODB_PASSWORD || 'mongopass' }}@git-query-mongodb:27017/gitquery?authSource=admin" \
             -e MONGODB_DB="gitquery" \
+            -e KAGGLE_USERNAME="${{ secrets.KAGGLE_USERNAME }}" \
+            -e KAGGLE_KEY="${{ secrets.KAGGLE_KEY }}" \
+            -e KAGGLE_CONFIG_DIR="/root/.kaggle" \
             -e PYTHONPATH="/repo" \
             -v "$REPO_PATH:/repo" \
-            -v "$HOME/.kaggle:/root/.kaggle:ro" \
+            -v "$REPO_PATH/.kaggle:/root/.kaggle:ro" \
             "$PROCESSING_IMAGE" \
             python /repo/src/processing/scripts/raw_repositories_population.py \
             --dataset "${{ github.event.inputs.dataset }}" \
