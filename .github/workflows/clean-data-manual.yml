@@ -1,0 +1,260 @@
+name: Run Clean Repositories Population
+
+# Single Responsibility: run clean repositories population script on server
+# Triggered: Manual workflow dispatch
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to run from on server"
+        required: false
+        type: string
+        default: ""
+      batch_size:
+        description: "Batch size"
+        required: false
+        type: string
+        default: "500"
+      max_batches:
+        description: "Max batches (0 = run until done)"
+        required: false
+        type: string
+        default: "0"
+      source_collection:
+        description: "Source collection"
+        required: false
+        type: string
+        default: "raw_repositories"
+      dest_collection:
+        description: "Destination collection"
+        required: false
+        type: string
+        default: "repositories"
+      resume:
+        description: "Resume from checkpoint"
+        required: false
+        type: boolean
+        default: true
+      reset_checkpoint:
+        description: "Reset checkpoint before run"
+        required: false
+        type: boolean
+        default: false
+      mark_processed:
+        description: "Mark source records as completed"
+        required: false
+        type: boolean
+        default: true
+      run_eda:
+        description: "Generate and persist EDA report"
+        required: false
+        type: boolean
+        default: true
+      eda_collection:
+        description: "Mongo collection for EDA reports"
+        required: false
+        type: string
+        default: "repositories_eda_reports"
+      eda_output_file:
+        description: "Path (inside repo) for EDA JSON report"
+        required: false
+        type: string
+        default: ".reports/clean_repositories_eda.server.json"
+
+jobs:
+  run-clean-population:
+    name: Run clean population on server
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Run clean population in Docker on server
+        run: |
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
+          set -euo pipefail
+          REPO_PATH="/home/${{ secrets.INFRA_HETZNER_USER }}/git-query"
+          TARGET_BRANCH="${{ github.event.inputs.branch }}"
+          if [ -z "$TARGET_BRANCH" ]; then
+            TARGET_BRANCH="${{ github.ref_name }}"
+          fi
+          PROCESSING_IMAGE="git-query-processing:clean-population"
+          POP_CONTAINER="git-query-clean-population-job"
+          CHECKPOINT_FILE=".checkpoints/clean_repositories_population.server.json"
+          LOG_FILE="logs/clean_repositories_population.log"
+          POP_ENV_FILE=".runtime/clean-population.env"
+          POP_COMPOSE_FILE=".runtime/docker-compose.clean-population.yml"
+          MONGO_WAS_RUNNING=0
+
+          cleanup() {
+            if [ "$MONGO_WAS_RUNNING" -eq 0 ]; then
+              echo "Stopping Mongo container started by this workflow (data remains on named volume)."
+              docker compose \
+                -f infrastructure/docker/docker-compose.base.yml \
+                -f infrastructure/docker/docker-compose.databases.yml \
+                stop mongodb || true
+            fi
+          }
+          trap cleanup EXIT
+
+          if [ -d "$REPO_PATH/.git" ]; then
+            cd "$REPO_PATH"
+            git fetch origin
+            echo "Using target branch: $TARGET_BRANCH"
+            git reset --hard origin/$TARGET_BRANCH
+          else
+            git clone https://github.com/Seraphim-Systems/git-query.git "$REPO_PATH"
+            cd "$REPO_PATH"
+            git checkout "$TARGET_BRANCH"
+          fi
+
+          echo "Server repo commit: $(git rev-parse --short HEAD)"
+          echo "Workflow file commit context check:"
+          git log --oneline -n 1 -- .github/workflows/clean-data-manual.yml || true
+          echo "Clean script capability check..."
+          if ! grep -q -- "--eda-collection" src/processing/scripts/clean_repositories_population.py; then
+            echo "Stale server code detected: clean_repositories_population.py missing EDA CLI support."
+            echo "Dispatch this workflow from the branch containing the latest script changes."
+            exit 1
+          fi
+
+          mkdir -p "$REPO_PATH/logs" "$REPO_PATH/.checkpoints" "$REPO_PATH/.runtime" "$REPO_PATH/.reports"
+
+          if docker ps --format '{{.Names}}' | grep -Fxq git-query-mongodb; then
+            MONGO_WAS_RUNNING=1
+            echo "Mongo container already running; reusing existing volume-backed DB."
+          else
+            echo "Starting Mongo container for this run..."
+            docker compose \
+              -f infrastructure/docker/docker-compose.base.yml \
+              -f infrastructure/docker/docker-compose.databases.yml \
+              up -d mongodb
+          fi
+
+          RESUME_FLAG=""
+          if [ "${{ github.event.inputs.resume }}" = "true" ]; then
+            RESUME_FLAG="--resume"
+          fi
+
+          RESET_FLAG=""
+          if [ "${{ github.event.inputs.reset_checkpoint }}" = "true" ]; then
+            RESET_FLAG="--reset-checkpoint"
+          fi
+
+          MARK_PROCESSED_FLAG=""
+          if [ "${{ github.event.inputs.mark_processed }}" != "true" ]; then
+            MARK_PROCESSED_FLAG="--no-mark-processed"
+          fi
+
+          EDA_FLAG=""
+          if [ "${{ github.event.inputs.run_eda }}" != "true" ]; then
+            EDA_FLAG="--no-eda"
+          fi
+
+          echo "Building processing image..."
+          docker build -f infrastructure/docker/Dockerfile.processing -t "$PROCESSING_IMAGE" .
+
+          cat > "$REPO_PATH/$POP_ENV_FILE" << EOF
+          MONGODB_URL=mongodb://${{ secrets.DB_MONGODB_USER || 'admin' }}:${{ secrets.DB_MONGODB_PASSWORD || 'mongopass' }}@git-query-mongodb:27017/gitquery?authSource=admin
+          MONGODB_DB=gitquery
+          PYTHONPATH=/repo
+          BATCH_SIZE=${{ github.event.inputs.batch_size }}
+          MAX_BATCHES=${{ github.event.inputs.max_batches }}
+          SOURCE_COLLECTION=${{ github.event.inputs.source_collection }}
+          DEST_COLLECTION=${{ github.event.inputs.dest_collection }}
+          CHECKPOINT_FILE=$CHECKPOINT_FILE
+          EDA_COLLECTION=${{ github.event.inputs.eda_collection }}
+          EDA_OUTPUT_FILE=${{ github.event.inputs.eda_output_file }}
+          MARK_PROCESSED_FLAG=$MARK_PROCESSED_FLAG
+          EDA_FLAG=$EDA_FLAG
+          RESUME_FLAG=$RESUME_FLAG
+          RESET_FLAG=$RESET_FLAG
+          EOF
+          chmod 600 "$REPO_PATH/$POP_ENV_FILE"
+
+          cat > "$REPO_PATH/$POP_COMPOSE_FILE" << 'EOF'
+          services:
+            clean-population-job:
+              image: git-query-processing:clean-population
+              container_name: git-query-clean-population-job
+              env_file:
+                - clean-population.env
+              networks:
+                - internal-network
+              volumes:
+                - ../:/repo
+              command:
+                - bash
+                - -lc
+                - |
+                  set -euo pipefail
+                  /app/.venv/bin/python -c "import os; print('MONGODB env present:', bool(os.getenv('MONGODB_URL')), bool(os.getenv('MONGODB_DB')))"
+                  /app/.venv/bin/python /repo/src/processing/scripts/clean_repositories_population.py \
+                    --batch-size "$$BATCH_SIZE" \
+                    --max-batches "$$MAX_BATCHES" \
+                    --source-collection "$$SOURCE_COLLECTION" \
+                    --dest-collection "$$DEST_COLLECTION" \
+                    --checkpoint-file "$$CHECKPOINT_FILE" \
+                    --eda-collection "$$EDA_COLLECTION" \
+                    --eda-output-file "$$EDA_OUTPUT_FILE" \
+                    $$MARK_PROCESSED_FLAG \
+                    $$EDA_FLAG \
+                    $$RESUME_FLAG \
+                    $$RESET_FLAG
+
+          networks:
+            internal-network:
+              external: true
+              name: git-query-internal-network
+          EOF
+
+          docker rm -f "$POP_CONTAINER" >/dev/null 2>&1 || true
+
+          echo "Running clean population job in container..."
+          : > "$REPO_PATH/$LOG_FILE"
+          docker compose -f "$POP_COMPOSE_FILE" run --rm -T clean-population-job < /dev/null 2>&1 | tee "$REPO_PATH/$LOG_FILE"
+
+          echo "Clean population job finished."
+
+          echo "Checkpoint summary:"
+          cat "$REPO_PATH/$CHECKPOINT_FILE" || true
+
+          echo "Current destination collection count:"
+          docker exec git-query-mongodb mongosh \
+            "mongodb://${{ secrets.DB_MONGODB_USER || 'admin' }}:${{ secrets.DB_MONGODB_PASSWORD || 'mongopass' }}@localhost:27017/gitquery?authSource=admin" \
+            --quiet --eval 'db.repositories.countDocuments({})' || true
+
+          echo "Latest EDA report document count:"
+          docker exec git-query-mongodb mongosh \
+            "mongodb://${{ secrets.DB_MONGODB_USER || 'admin' }}:${{ secrets.DB_MONGODB_PASSWORD || 'mongopass' }}@localhost:27017/gitquery?authSource=admin" \
+            --quiet --eval "db.getCollection('${{ github.event.inputs.eda_collection }}').countDocuments({})" || true
+          ENDSSH
+
+      - name: Show checkpoint state
+        run: |
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
+          REPO_PATH="/home/${{ secrets.INFRA_HETZNER_USER }}/git-query"
+          if [ -f "$REPO_PATH/.checkpoints/clean_repositories_population.server.json" ]; then
+            cat "$REPO_PATH/.checkpoints/clean_repositories_population.server.json"
+          else
+            echo "No checkpoint file yet"
+          fi
+          if [ -f "$REPO_PATH/logs/clean_repositories_population.log" ]; then
+            tail -n 30 "$REPO_PATH/logs/clean_repositories_population.log"
+          else
+            echo "No log file yet"
+          fi
+          if [ -f "$REPO_PATH/${{ github.event.inputs.eda_output_file }}" ]; then
+            echo "EDA report preview:"
+            tail -n 50 "$REPO_PATH/${{ github.event.inputs.eda_output_file }}"
+          else
+            echo "No EDA report file yet"
+          fi
+          ENDSSH
