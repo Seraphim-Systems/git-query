@@ -91,6 +91,16 @@ jobs:
             git checkout "$TARGET_BRANCH"
           fi
 
+          echo "Server repo commit: $(git rev-parse --short HEAD)"
+          echo "Workflow file commit context check:" 
+          git log --oneline -n 1 -- .github/workflows/run-raw-repositories-population.yml || true
+          echo "Raw script capability check..."
+          if ! grep -q -- "--dataset-dir" src/processing/scripts/raw_repositories_population.py; then
+            echo "Stale server code detected: raw_repositories_population.py missing --dataset-dir support."
+            echo "Make sure you dispatch this workflow from the branch containing the latest script changes."
+            exit 1
+          fi
+
           mkdir -p "$REPO_PATH/logs" "$REPO_PATH/.checkpoints"
           mkdir -p "$REPO_PATH/.runtime"
 
