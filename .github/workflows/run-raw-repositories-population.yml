@@ -134,6 +134,10 @@ jobs:
           KAGGLE_KEY=${{ secrets.KAGGLE_KEY }}
           KAGGLE_CONFIG_DIR=/root/.kaggle
           PYTHONPATH=/repo
+          DATASET=${{ github.event.inputs.dataset }}
+          DATASET_FILE=${{ github.event.inputs.dataset_file }}
+          BATCH_SIZE=${{ github.event.inputs.batch_size }}
+          CHECKPOINT_FILE=$CHECKPOINT_FILE
           RESUME_FLAG=$RESUME_FLAG
           RESET_FLAG=$RESET_FLAG
           EOF
