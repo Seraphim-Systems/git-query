@@ -294,10 +294,16 @@ def proxy_health(service=None):
             503,
         )
 
-    except Exception as e:
-        logger.error(f"Health check proxy error: {e}")
+    except Exception:
+        logger.exception("Health check proxy error")
         return (
-            jsonify({"status": "error", "service": service or "all", "error": str(e)}),
+            jsonify(
+                {
+                    "status": "error",
+                    "service": service or "all",
+                    "error": "Internal server error",
+                }
+            ),
             500,
         )
 

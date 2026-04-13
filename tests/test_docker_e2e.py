@@ -33,17 +33,39 @@ CONTAINER_PORT = 8095
 BASE_URL = f"http://localhost:{HOST_PORT}"
 HEALTH_TIMEOUT_S = 120  # Model download + startup
 HEALTH_POLL_INTERVAL_S = 3
+_ENV_LOAD_ERROR = ""
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
 def _load_env_for_container() -> list[str]:
-    """Load .env and return as list of -e KEY=VALUE strings for docker run."""
-    env_path = os.path.join(PROJECT_ROOT, ".env")
-    if not os.path.exists(env_path):
+    """Load env file and return as list of -e KEY=VALUE strings for docker run."""
+    global _ENV_LOAD_ERROR
+    _ENV_LOAD_ERROR = ""
+
+    env_candidates = [
+        os.path.join(PROJECT_ROOT, ".env"),
+        os.path.join(PROJECT_ROOT, "infrastructure", "docker", ".env"),
+    ]
+    env_path = next((path for path in env_candidates if os.path.exists(path)), None)
+    if not env_path:
+        _ENV_LOAD_ERROR = "No env file found at .env or infrastructure/docker/.env"
         return []
 
     values = dotenv_values(env_path)
+
+    has_qdrant_endpoint = bool(values.get("QDRANT_URL")) or bool(values.get("QDRANT_HOST"))
+    required = ["MONGODB_URL", "REDIS_URL"]
+    missing_required = [key for key in required if not values.get(key)]
+    if not has_qdrant_endpoint:
+        missing_required.append("QDRANT_URL or QDRANT_HOST")
+    if missing_required:
+        _ENV_LOAD_ERROR = (
+            f"Env file found at {env_path} but missing required keys: "
+            + ", ".join(missing_required)
+        )
+        return []
+
     # Pass only the vars the recommender needs
     relevant_keys = {
         "QDRANT_URL",
@@ -141,7 +163,7 @@ def running_container(built_image):
 
     env_args = _load_env_for_container()
     if not env_args:
-        pytest.skip("No .env found — cannot pass credentials to container")
+        pytest.skip(_ENV_LOAD_ERROR or "No usable env configuration for Docker E2E")
 
     cmd = [
         "docker",

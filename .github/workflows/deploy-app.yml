@@ -6,6 +6,8 @@ name: Deploy Application Stack
 
 on:
   workflow_dispatch:
+  push:
+    branches: [prod]
 
 jobs:
   deploy:
