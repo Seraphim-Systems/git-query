@@ -1,4 +1,4 @@
-name: Deploy to Production
+name: Workflow for Production Deployment
 
 # Single Responsibility: Deploy full stack to production
 # Triggered: Push to 'prod' branch
