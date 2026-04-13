@@ -164,6 +164,7 @@ jobs:
           cat > "$REPO_PATH/$POP_ENV_FILE" << EOF
           MONGODB_URL=mongodb://${{ secrets.DB_MONGODB_USER || 'admin' }}:${{ secrets.DB_MONGODB_PASSWORD || 'mongopass' }}@git-query-mongodb:27017/gitquery?authSource=admin
           MONGODB_DB=gitquery
+          REDIS_URL=redis://:${{ secrets.DB_REDIS_PASSWORD || 'redispass' }}@redis:6379
           PYTHONPATH=/repo
           BATCH_SIZE=${{ github.event.inputs.batch_size }}
           MAX_BATCHES=${{ github.event.inputs.max_batches }}
