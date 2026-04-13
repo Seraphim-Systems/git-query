@@ -58,8 +58,11 @@ jobs:
           REPO_PATH="/home/${{ secrets.INFRA_HETZNER_USER }}/git-query"
           PROCESSING_IMAGE="git-query-processing:raw-population"
           POP_CONTAINER="git-query-raw-population-job"
+          PRECHECK_CONTAINER="git-query-raw-kaggle-precheck"
           CHECKPOINT_FILE=".checkpoints/raw_repositories_population.server.json"
           LOG_FILE="logs/raw_repositories_population.log"
+          POP_ENV_FILE=".runtime/raw-population.env"
+          POP_COMPOSE_FILE=".runtime/docker-compose.raw-population.yml"
           MONGO_WAS_RUNNING=0
 
           cleanup() {
@@ -84,6 +87,7 @@ jobs:
           fi
 
           mkdir -p "$REPO_PATH/logs" "$REPO_PATH/.checkpoints"
+          mkdir -p "$REPO_PATH/.runtime"
 
           if [ -z "${{ secrets.KAGGLE_USERNAME }}" ] || [ -z "${{ secrets.KAGGLE_KEY }}" ]; then
             echo "Missing Kaggle secrets. Set KAGGLE_USERNAME and KAGGLE_KEY in repository secrets."
@@ -123,53 +127,95 @@ jobs:
           echo "Building processing image..."
           docker build -f infrastructure/docker/Dockerfile.processing -t "$PROCESSING_IMAGE" .
 
-          docker rm -f "$POP_CONTAINER" >/dev/null 2>&1 || true
+          cat > "$REPO_PATH/$POP_ENV_FILE" << EOF
+          MONGODB_URL=mongodb://${{ secrets.DB_MONGODB_USER || 'admin' }}:${{ secrets.DB_MONGODB_PASSWORD || 'mongopass' }}@git-query-mongodb:27017/gitquery?authSource=admin
+          MONGODB_DB=gitquery
+          KAGGLE_USERNAME=${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY=${{ secrets.KAGGLE_KEY }}
+          KAGGLE_CONFIG_DIR=/root/.kaggle
+          PYTHONPATH=/repo
+          RESUME_FLAG=$RESUME_FLAG
+          RESET_FLAG=$RESET_FLAG
+          EOF
+          chmod 600 "$REPO_PATH/$POP_ENV_FILE"
+
+          cat > "$REPO_PATH/$POP_COMPOSE_FILE" << 'EOF'
+          services:
+            raw-kaggle-precheck:
+              image: git-query-processing:raw-population
+              container_name: git-query-raw-kaggle-precheck
+              env_file:
+                - .runtime/raw-population.env
+              volumes:
+                - ./:/repo
+                - ./.kaggle:/root/.kaggle:ro
+              command:
+                - python
+                - -c
+                - |
+                  import sys, kagglehub
+                  public_ds = "uciml/iris"
+                  target_ds = "${DATASET}"
+                  try:
+                      kagglehub.dataset_download(public_ds)
+                      print(f"Kaggle auth check OK on public dataset: {public_ds}")
+                  except Exception as e:
+                      print("Kaggle auth check FAILED on public dataset. Credentials are likely invalid/mismatched.")
+                      print(e)
+                      sys.exit(2)
+                  try:
+                      kagglehub.dataset_download(target_ds)
+                      print(f"Kaggle target dataset access OK: {target_ds}")
+                  except Exception as e:
+                      print("Kaggle target dataset access FAILED. Account likely lacks dataset permission/consent acceptance.")
+                      print(e)
+                      sys.exit(3)
+
+            raw-population-job:
+              image: git-query-processing:raw-population
+              container_name: git-query-raw-population-job
+              env_file:
+                - .runtime/raw-population.env
+              networks:
+                - internal-network
+              volumes:
+                - ./:/repo
+                - ./.kaggle:/root/.kaggle:ro
+              command:
+                - bash
+                - -lc
+                - |
+                  set -euo pipefail
+                  python /repo/src/processing/scripts/raw_repositories_population.py \
+                    --dataset "${DATASET}" \
+                    --file "${DATASET_FILE}" \
+                    --collection raw_repositories \
+                    --target mongodb \
+                    --batch-size "${BATCH_SIZE}" \
+                    --checkpoint-file "${CHECKPOINT_FILE}" \
+                    ${RESUME_FLAG} \
+                    ${RESET_FLAG}
+
+          networks:
+            internal-network:
+              external: true
+              name: git-query-internal-network
+          EOF
+
+          export DATASET="${{ github.event.inputs.dataset }}"
+          export DATASET_FILE="${{ github.event.inputs.dataset_file }}"
+          export BATCH_SIZE="${{ github.event.inputs.batch_size }}"
+          export CHECKPOINT_FILE="$CHECKPOINT_FILE"
+          export RESUME_FLAG="$RESUME_FLAG"
+          export RESET_FLAG="$RESET_FLAG"
+
+          docker rm -f "$POP_CONTAINER" "$PRECHECK_CONTAINER" >/dev/null 2>&1 || true
 
           echo "Kaggle preflight check..."
-          docker run --rm \
-            -e KAGGLE_USERNAME="${{ secrets.KAGGLE_USERNAME }}" \
-            -e KAGGLE_KEY="${{ secrets.KAGGLE_KEY }}" \
-            -e KAGGLE_CONFIG_DIR="/root/.kaggle" \
-            -v "$REPO_PATH/.kaggle:/root/.kaggle:ro" \
-            "$PROCESSING_IMAGE" \
-            python -c "import sys, kagglehub; public_ds='uciml/iris'; target_ds='${{ github.event.inputs.dataset }}';\
-      try:\
-        kagglehub.dataset_download(public_ds);\
-        print(f'Kaggle auth check OK on public dataset: {public_ds}');\
-      except Exception as e:\
-        print('Kaggle auth check FAILED on public dataset. Credentials are likely invalid/mismatched.');\
-        print(e);\
-        sys.exit(2);\
-      try:\
-        kagglehub.dataset_download(target_ds);\
-        print(f'Kaggle target dataset access OK: {target_ds}');\
-      except Exception as e:\
-        print('Kaggle target dataset access FAILED. Account likely lacks dataset permission/consent acceptance.');\
-        print(e);\
-        sys.exit(3)"
+          docker compose -f "$POP_COMPOSE_FILE" run --rm raw-kaggle-precheck
 
           echo "Running raw population job in container..."
-          docker run --name "$POP_CONTAINER" --rm \
-            --network git-query-internal-network \
-            -e MONGODB_URL="mongodb://${{ secrets.DB_MONGODB_USER || 'admin' }}:${{ secrets.DB_MONGODB_PASSWORD || 'mongopass' }}@git-query-mongodb:27017/gitquery?authSource=admin" \
-            -e MONGODB_DB="gitquery" \
-            -e KAGGLE_USERNAME="${{ secrets.KAGGLE_USERNAME }}" \
-            -e KAGGLE_KEY="${{ secrets.KAGGLE_KEY }}" \
-            -e KAGGLE_CONFIG_DIR="/root/.kaggle" \
-            -e PYTHONPATH="/repo" \
-            -v "$REPO_PATH:/repo" \
-            -v "$REPO_PATH/.kaggle:/root/.kaggle:ro" \
-            "$PROCESSING_IMAGE" \
-            python /repo/src/processing/scripts/raw_repositories_population.py \
-            --dataset "${{ github.event.inputs.dataset }}" \
-            --file "${{ github.event.inputs.dataset_file }}" \
-            --collection raw_repositories \
-            --target mongodb \
-            --batch-size "${{ github.event.inputs.batch_size }}" \
-            --checkpoint-file "$CHECKPOINT_FILE" \
-            $RESUME_FLAG \
-            $RESET_FLAG \
-            2>&1 | tee "$REPO_PATH/$LOG_FILE"
+          docker compose -f "$POP_COMPOSE_FILE" run --rm raw-population-job 2>&1 | tee "$REPO_PATH/$LOG_FILE"
 
           echo "Population job finished."
 
