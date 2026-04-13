@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     jwt_secret: str = "change-me-in-production"
     jwt_algorithm: str = "HS256"
     jwt_expiration: int = 86400
+    # Set to False in local HTTP dev (the Secure cookie flag requires HTTPS)
+    secure_cookies: bool = Field(True, validation_alias="SECURE_COOKIES")
 
     # API Keys
     # API keys - read from new environment variable names (preferred)
