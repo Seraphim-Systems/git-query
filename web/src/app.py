@@ -51,7 +51,9 @@ def _inject_asset_version(html: str) -> str:
         sep = "&" if "?" in path else "?"
         return f"{prefix}{path}{sep}v={ASSET_VERSION}{suffix}"
 
-    return re.sub(r'((?:href|src)=["\'])(/(?:styles|src)/[^"\']+)(["\'])', _replace, html)
+    return re.sub(
+        r'((?:href|src)=["\'])(/(?:styles|src)/[^"\']+)(["\'])', _replace, html
+    )
 
 
 def _render_page(filename: str):
