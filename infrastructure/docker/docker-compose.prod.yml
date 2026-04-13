@@ -51,14 +51,14 @@ services:
     environment:
       LOG_LEVEL: INFO
     expose:
-      - "8090"
+      - "8095"
 
-  api-server:
+  mcp-server:
     ports: []
     environment:
       LOG_LEVEL: INFO
     expose:
-      - "8080"
+      - "8090"
 
   web:
     ports: []

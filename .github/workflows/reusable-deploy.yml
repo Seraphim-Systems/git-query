@@ -105,10 +105,7 @@ jobs:
             docker network rm git-query-internal-network || true
           fi
           # Ensure the external proxy network exists (used by the gateway service).
-          docker network create proxy || true
-          # Ensure the external proxy network exists (required by the gateway service).
-          # This is a no-op if it already exists.
-          docker network create proxy || true
+          docker network inspect proxy >/dev/null 2>&1 || docker network create proxy >/dev/null
           docker compose ${{ inputs.compose_files }} up -d --build ${{ inputs.services }}
           # Explicitly connect gateway to proxy in case the container was not recreated
           # (compose skips recreation when the image is cached and config hash matches
