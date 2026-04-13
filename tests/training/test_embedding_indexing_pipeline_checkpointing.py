@@ -253,3 +253,40 @@ def test_cross_run_deduplication(indexer, mocks):
     assert mock_model_instance.encode.call_count == 1
     encoded_texts = mock_model_instance.encode.call_args[0][0]
     assert len(encoded_texts) == 2
+
+
+def test_stable_id_uses_mongo_id(indexer):
+    assert indexer._stable_id({"_id": "mongo123"}) == "mongo123"
+    # Should shadow other keys
+    assert indexer._stable_id({"_id": "mongo", "id": "123"}) == "mongo"
+
+
+def test_stable_id_uses_direct_keys(indexer):
+    assert indexer._stable_id({"nameWithOwner": "user/repo"}) == "user/repo"
+    assert indexer._stable_id({"full_name": "user/repo"}) == "user/repo"
+    assert indexer._stable_id({"repo_id": 42}) == "42"
+    assert indexer._stable_id({"id": 100}) == "100"
+
+
+def test_stable_id_uses_owner_and_name(indexer):
+    assert indexer._stable_id({"owner": "alpha", "name": "beta"}) == "alpha/beta"
+    assert indexer._stable_id({"owner_login": "gamma", "name": "delta"}) == "gamma/delta"
+
+
+def test_stable_id_fallback_hash(indexer):
+    import re
+    doc = {"some_random_key": "data", "stars": 50}
+    hash_id = indexer._stable_id(doc)
+    
+    assert len(hash_id) == 32
+    assert re.match(r'^[a-f0-9]{32}$', hash_id)
+    
+    # Must be perfectly deterministic
+    doc2 = {"stars": 50, "some_random_key": "data"} # keys out of order
+    assert indexer._stable_id(doc2) == hash_id
+
+
+def test_stable_id_empty_doc(indexer):
+    assert indexer._stable_id(None) == ""
+    assert indexer._stable_id({}) == ""
+
