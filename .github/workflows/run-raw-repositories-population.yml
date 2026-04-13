@@ -153,9 +153,9 @@ jobs:
                 - python
                 - -c
                 - |
-                  import sys, kagglehub
+                  import os, sys, kagglehub
                   public_ds = "uciml/iris"
-                  target_ds = "${DATASET}"
+                  target_ds = os.environ.get("DATASET", "")
                   try:
                       kagglehub.dataset_download(public_ds)
                       print(f"Kaggle auth check OK on public dataset: {public_ds}")
@@ -165,11 +165,11 @@ jobs:
                       sys.exit(2)
                   try:
                       kagglehub.dataset_download(target_ds)
-                    print(f"Kaggle target dataset access OK: {target_ds}")
+                      print(f"Kaggle target dataset access OK: {target_ds}")
                   except Exception as e:
-                    print("Kaggle target dataset access FAILED.")
-                    print(e)
-                    sys.exit(3)
+                      print("Kaggle target dataset access FAILED.")
+                      print(e)
+                      sys.exit(3)
 
             raw-population-job:
               image: git-query-processing:raw-population
@@ -187,18 +187,18 @@ jobs:
                 - |
                   set -euo pipefail
                   python -c "import os, pathlib; print('Kaggle env present:', bool(os.getenv('KAGGLE_USERNAME')), bool(os.getenv('KAGGLE_KEY'))); print('kaggle.json exists:', pathlib.Path('/root/.kaggle/kaggle.json').exists())"
-                  TARGET_DATASET_DIR="$(python -c "import kagglehub; print(kagglehub.dataset_download('${DATASET}'))")"
-                  echo "Resolved dataset directory: $TARGET_DATASET_DIR"
+                  TARGET_DATASET_DIR="$$(python -c "import kagglehub, os; print(kagglehub.dataset_download(os.environ['DATASET']))")"
+                  echo "Resolved dataset directory: $$TARGET_DATASET_DIR"
                   python /repo/src/processing/scripts/raw_repositories_population.py \
-                    --dataset-dir "$TARGET_DATASET_DIR" \
-                    --dataset "${DATASET}" \
-                    --file "${DATASET_FILE}" \
+                    --dataset-dir "$$TARGET_DATASET_DIR" \
+                    --dataset "$$DATASET" \
+                    --file "$$DATASET_FILE" \
                     --collection raw_repositories \
                     --target mongodb \
-                    --batch-size "${BATCH_SIZE}" \
-                    --checkpoint-file "${CHECKPOINT_FILE}" \
-                    ${RESUME_FLAG} \
-                    ${RESET_FLAG}
+                    --batch-size "$$BATCH_SIZE" \
+                    --checkpoint-file "$$CHECKPOINT_FILE" \
+                    $$RESUME_FLAG \
+                    $$RESET_FLAG
 
           networks:
             internal-network:
