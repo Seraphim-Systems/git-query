@@ -45,6 +45,7 @@ logger = logging.getLogger(__name__)
 
 try:
     from mlflow_tracker import MLflowTracker
+
     MLFLOW_AVAILABLE = True
 except ImportError:
     MLFLOW_AVAILABLE = False
