@@ -43,6 +43,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+try:
+    from mlflow_tracker import MLflowTracker
+    MLFLOW_AVAILABLE = True
+except ImportError:
+    MLFLOW_AVAILABLE = False
+    logger.warning("mlflow_tracker not available — drift results will not be logged to MLflow")
+
 
 # ---------------------------------------------------------------------------
 # Data loaders
@@ -317,6 +324,75 @@ def _score_current_repos(
 
 
 # ---------------------------------------------------------------------------
+# MLflow logging
+# ---------------------------------------------------------------------------
+
+
+def _log_drift_to_mlflow(report: dict) -> None:
+    """Log drift check results to MLflow so they appear alongside model metrics.
+
+    Creates a run in the ``git-query-drift-checks`` experiment (overridable via
+    MLFLOW_EXPERIMENT_NAME).  Each call produces one run tagged ``run_type=drift_check``
+    so it can be filtered separately from training runs in the MLflow UI.
+
+    Metrics logged:
+      - drift_detected          — 1 if any check detected drift, else 0
+      - <check>_drift_detected  — per-check flag (data, embedding, prediction, ctr)
+      - prediction_score_mean_reference / _current — score distribution means
+      - ctr_reference / ctr_current / ctr_change   — engagement rate values
+    """
+    if not MLFLOW_AVAILABLE:
+        logger.warning("MLflow not available — skipping drift logging to MLflow")
+        return
+
+    try:
+        experiment_name = os.getenv("MLFLOW_EXPERIMENT_NAME", "git-query-drift-checks")
+        tracker = MLflowTracker(experiment_name=experiment_name)
+
+        checks: dict = report.get("checks", {})
+        overall_drift: bool = report.get("overall_drift_detected", False)
+
+        metrics: dict[str, float] = {
+            "drift_detected": float(overall_drift),
+        }
+
+        for check_name in ("data_drift", "embedding_drift", "prediction_drift", "ctr_drift"):
+            check = checks.get(check_name, {})
+            metrics[f"{check_name}_detected"] = float(check.get("drift_detected", False))
+
+        # Prediction score distribution
+        pred = checks.get("prediction_drift", {})
+        if "reference_mean" in pred:
+            metrics["prediction_score_mean_reference"] = float(pred["reference_mean"])
+        if "current_mean" in pred:
+            metrics["prediction_score_mean_current"] = float(pred["current_mean"])
+
+        # CTR values
+        ctr = checks.get("ctr_drift", {})
+        if "reference_ctr" in ctr:
+            metrics["ctr_reference"] = float(ctr["reference_ctr"])
+        if "current_ctr" in ctr:
+            metrics["ctr_current"] = float(ctr["current_ctr"])
+        if "ctr_change" in ctr:
+            metrics["ctr_change"] = float(ctr["ctr_change"])
+
+        checks_run = list(checks.keys())
+        tags = {
+            "run_type": "drift_check",
+            "checks_run": ",".join(checks_run) if checks_run else "none",
+            "drift_detected": str(overall_drift),
+        }
+
+        run_name = f"drift-check-{'drift' if overall_drift else 'clean'}"
+        with tracker.start_run(run_name=run_name, tags=tags):
+            tracker.log_metrics(metrics)
+
+        logger.info("Drift results logged to MLflow experiment '%s'", experiment_name)
+    except Exception as e:
+        logger.warning("Could not log drift results to MLflow (non-fatal): %s", e)
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -432,6 +508,9 @@ def main() -> None:
     drift_detected = report.get("overall_drift_detected", False)
     logger.info("Checks run: %s", checks_run)
     logger.info("Overall drift detected: %s", drift_detected)
+
+    # --- Log to MLflow ---
+    _log_drift_to_mlflow(report)
 
     # --- Write summary ---
     summary_path = Path(report_dir) / "drift_summary.json"
