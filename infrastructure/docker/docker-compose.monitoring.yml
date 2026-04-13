@@ -54,6 +54,8 @@ services:
       - "8000:8000"
     volumes:
       - evidently-workspace:/app/workspace
+    networks:
+      - internal-network
     restart: unless-stopped
 
   mlflow:
@@ -90,9 +92,9 @@ services:
 
 volumes:
   drift-reports:
-    driver: local
+    name: git-query-drift-reports
   evidently-workspace:
-    driver: local
+    name: git-query-evidently-workspace
   model-artifacts:
     external: true
     name: git-query-model-artifacts
