@@ -42,5 +42,5 @@ volumes:
 
 networks:
   internal-network:
-    external: false
+    external: true
     name: git-query-internal-network
