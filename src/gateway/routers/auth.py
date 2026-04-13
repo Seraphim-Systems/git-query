@@ -1,14 +1,18 @@
 """Authentication router."""
 
+import hashlib
+import logging
 from fastapi import APIRouter, HTTPException, status, Request, Response
 from pydantic import BaseModel, EmailStr
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError, InvalidHashError
 
 from src.gateway.services.jwt_service import create_access_token
+from src.shared.config import settings
 
 router = APIRouter()
 password_hasher = PasswordHasher()
+logger = logging.getLogger(__name__)
 
 
 class LoginRequest(BaseModel):
@@ -52,7 +56,20 @@ async def login(request: Request, response: Response, credentials: LoginRequest)
     stored_hash = user.get("password_hash", "")
     try:
         password_hasher.verify(stored_hash, credentials.password)
-    except (VerifyMismatchError, InvalidHashError):
+    except InvalidHashError:
+        # Legacy SHA-256 migration: old accounts stored an unsalted hex digest.
+        # If verification succeeds, re-hash with argon2 and update the record.
+        sha256_digest = hashlib.sha256(credentials.password.encode()).hexdigest()
+        if stored_hash != sha256_digest:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+        # Password matched — upgrade to argon2 in-place
+        new_hash = password_hasher.hash(credentials.password)
+        await user_service.db.users.update_one(
+            {"_id": user["_id"]},
+            {"$set": {"password_hash": new_hash}},
+        )
+        logger.info("Migrated legacy SHA-256 hash to argon2 for user %s", user["user_id"])
+    except VerifyMismatchError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     # Create session
@@ -70,7 +87,7 @@ async def login(request: Request, response: Response, credentials: LoginRequest)
         key="session_id",
         value=session_id,
         httponly=True,
-        secure=True,
+        secure=settings.secure_cookies,
         samesite="lax",
         max_age=86400,  # 24 hours
     )
@@ -123,7 +140,7 @@ async def register(request: Request, response: Response, data: RegisterRequest):
         key="session_id",
         value=session_id,
         httponly=True,
-        secure=True,
+        secure=settings.secure_cookies,
         samesite="lax",
         max_age=86400,
     )
