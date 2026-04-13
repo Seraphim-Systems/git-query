@@ -1,7 +1,7 @@
 // Register functionality
 document.addEventListener('DOMContentLoaded', () => {
     // Use empty string for same-origin (webserver proxies API calls to gateway)
-    const API_BASE = '';
+    const API_BASE = '/api';
     const registerForm = document.getElementById('registerForm');
     const nameInput = document.getElementById('name');
     const emailInput = document.getElementById('email');

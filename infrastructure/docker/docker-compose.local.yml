@@ -1,0 +1,20 @@
+# Local dev override — minimal stack for login/search testing (no recommender/MCP).
+# Overrides the gateway's external proxy network so Docker creates it automatically.
+# Usage: docker-compose.base + docker-compose.databases + docker-compose.gateway + docker-compose.web + this file
+
+networks:
+  proxy:
+    external: false
+    name: git-query-proxy-local
+
+services:
+  gateway:
+    ports:
+      - "8081:80"
+    environment:
+      LOG_LEVEL: DEBUG
+
+  web:
+    environment:
+      LOG_LEVEL: DEBUG
+      GATEWAY_URL: http://gateway:80
