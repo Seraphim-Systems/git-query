@@ -232,6 +232,7 @@ docs/test-spec-*.md
 models/
 *.parquet
 *.csv
+volumes/
 package.json
 package-lock.json
 

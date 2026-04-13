@@ -79,7 +79,8 @@ jobs:
             cd "$REPO_PATH"
             git fetch origin
             git reset --hard origin/${{ inputs.branch }}
-            git clean -fd
+            # Do not run git clean here: persistent bind-mount data under
+            # volumes/ must survive deployments and may be container-owned.
           else
             git clone https://github.com/Seraphim-Systems/git-query.git "$REPO_PATH"
             cd "$REPO_PATH"
