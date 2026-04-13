@@ -169,7 +169,7 @@ jobs:
                 - ../:/repo
                 - ../.kaggle:/root/.kaggle:ro
               command:
-                - python
+                - /app/.venv/bin/python
                 - -c
                 - |
                   import os, sys, kagglehub
@@ -205,12 +205,15 @@ jobs:
                 - -lc
                 - |
                   set -euo pipefail
-                  python -c "import os, pathlib; print('Kaggle env present:', bool(os.getenv('KAGGLE_USERNAME')), bool(os.getenv('KAGGLE_KEY'))); print('kaggle.json exists:', pathlib.Path('/root/.kaggle/kaggle.json').exists())"
-                  TARGET_DATASET_DIR="$$(python -c "import kagglehub, os; print(kagglehub.dataset_download(os.environ['DATASET']))")"
+                  /app/.venv/bin/python -c "import os, pathlib; print('Kaggle env present:', bool(os.getenv('KAGGLE_USERNAME')), bool(os.getenv('KAGGLE_KEY'))); print('kaggle.json exists:', pathlib.Path('/root/.kaggle/kaggle.json').exists())"
+                  TARGET_DATASET_DIR="$$(/app/.venv/bin/python -c "import os, kagglehub; print(kagglehub.dataset_download(os.environ['DATASET']))" | tail -n 1 | tr -d '\r')"
                   echo "Resolved dataset directory: $$TARGET_DATASET_DIR"
-                  python /repo/src/processing/scripts/raw_repositories_population.py \
+                  if [ -z "$$TARGET_DATASET_DIR" ] || [ ! -d "$$TARGET_DATASET_DIR" ]; then
+                    echo "Resolved dataset directory is empty or missing: $$TARGET_DATASET_DIR"
+                    exit 10
+                  fi
+                  /app/.venv/bin/python /repo/src/processing/scripts/raw_repositories_population.py \
                     --dataset-dir "$$TARGET_DATASET_DIR" \
-                    --dataset "$$DATASET" \
                     --file "$$DATASET_FILE" \
                     --collection raw_repositories \
                     --target mongodb \
@@ -235,10 +238,11 @@ jobs:
           docker rm -f "$POP_CONTAINER" "$PRECHECK_CONTAINER" >/dev/null 2>&1 || true
 
           echo "Kaggle preflight check..."
-          docker compose -f "$POP_COMPOSE_FILE" run --rm raw-kaggle-precheck
+          docker compose -f "$POP_COMPOSE_FILE" run --rm -T raw-kaggle-precheck < /dev/null
 
           echo "Running raw population job in container..."
-          docker compose -f "$POP_COMPOSE_FILE" run --rm raw-population-job 2>&1 | tee "$REPO_PATH/$LOG_FILE"
+          : > "$REPO_PATH/$LOG_FILE"
+          docker compose -f "$POP_COMPOSE_FILE" run --rm -T raw-population-job < /dev/null 2>&1 | tee "$REPO_PATH/$LOG_FILE"
 
           echo "Population job finished."
 
