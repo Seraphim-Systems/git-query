@@ -2,7 +2,7 @@ name: Deploy Full Stack (Manual)
 
 # Single Responsibility: Deploy full stack manually from selected branch
 # Triggered: Manual workflow dispatch
-# Services: All services defined in compose files
+# Services: Runtime stack only (databases, gateway, recommender, MCP, web)
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ jobs:
   deploy:
     uses: ./.github/workflows/reusable-deploy.yml
     with:
-      compose_files: "-f docker-compose.base.yml -f docker-compose.databases.yml -f docker-compose.gateway.yml -f docker-compose.app.yml -f docker-compose.web.yml -f docker-compose.training.yml -f docker-compose.prod.yml"
+      compose_files: "-f docker-compose.base.yml -f docker-compose.databases.yml -f docker-compose.gateway.yml -f docker-compose.app.yml -f docker-compose.web.yml -f docker-compose.prod.yml"
       services: ""
       branch: ${{ github.ref_name }}
       health_check_url: "http://localhost/health"

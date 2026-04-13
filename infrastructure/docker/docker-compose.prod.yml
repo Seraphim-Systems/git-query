@@ -62,9 +62,3 @@ services:
 
   web:
     ports: []
-
-  training:
-    volumes:
-      - ../../volumes/training/models:/app/models
-      - ../../volumes/training/data:/app/training_data
-      - ../../volumes/training/logs:/app/logs
