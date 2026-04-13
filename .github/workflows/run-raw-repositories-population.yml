@@ -10,7 +10,7 @@ on:
         description: "Branch to run from on server"
         required: false
         type: string
-        default: "dev"
+        default: ""
       dataset:
         description: "Kaggle dataset slug"
         required: false
@@ -56,6 +56,10 @@ jobs:
           ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
           set -euo pipefail
           REPO_PATH="/home/${{ secrets.INFRA_HETZNER_USER }}/git-query"
+          TARGET_BRANCH="${{ github.event.inputs.branch }}"
+          if [ -z "$TARGET_BRANCH" ]; then
+            TARGET_BRANCH="${{ github.ref_name }}"
+          fi
           PROCESSING_IMAGE="git-query-processing:raw-population"
           POP_CONTAINER="git-query-raw-population-job"
           PRECHECK_CONTAINER="git-query-raw-kaggle-precheck"
@@ -79,11 +83,12 @@ jobs:
           if [ -d "$REPO_PATH/.git" ]; then
             cd "$REPO_PATH"
             git fetch origin
-            git reset --hard origin/${{ github.event.inputs.branch }}
+            echo "Using target branch: $TARGET_BRANCH"
+            git reset --hard origin/$TARGET_BRANCH
           else
             git clone https://github.com/Seraphim-Systems/git-query.git "$REPO_PATH"
             cd "$REPO_PATH"
-            git checkout ${{ github.event.inputs.branch }}
+            git checkout "$TARGET_BRANCH"
           fi
 
           mkdir -p "$REPO_PATH/logs" "$REPO_PATH/.checkpoints"
