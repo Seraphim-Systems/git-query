@@ -208,9 +208,12 @@ jobs:
                   python -c "import os, pathlib; print('Kaggle env present:', bool(os.getenv('KAGGLE_USERNAME')), bool(os.getenv('KAGGLE_KEY'))); print('kaggle.json exists:', pathlib.Path('/root/.kaggle/kaggle.json').exists())"
                   TARGET_DATASET_DIR="$$(python -c "import kagglehub, os; print(kagglehub.dataset_download(os.environ['DATASET']))")"
                   echo "Resolved dataset directory: $$TARGET_DATASET_DIR"
+                  if [ -z "$$TARGET_DATASET_DIR" ] || [ ! -d "$$TARGET_DATASET_DIR" ]; then
+                    echo "Resolved dataset directory is empty or missing: $$TARGET_DATASET_DIR"
+                    exit 10
+                  fi
                   python /repo/src/processing/scripts/raw_repositories_population.py \
                     --dataset-dir "$$TARGET_DATASET_DIR" \
-                    --dataset "$$DATASET" \
                     --file "$$DATASET_FILE" \
                     --collection raw_repositories \
                     --target mongodb \
