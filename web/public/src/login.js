@@ -1,7 +1,7 @@
 // Login functionality
 document.addEventListener('DOMContentLoaded', () => {
-    // Use empty string for same-origin (webserver proxies API calls to gateway)
-    const API_BASE = '';
+    // /api prefix — webserver proxies these routes to the gateway
+    const API_BASE = '/api';
     const loginForm = document.getElementById('loginForm');
     const emailInput = document.getElementById('email');
     const passwordInput = document.getElementById('password');

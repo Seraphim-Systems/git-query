@@ -30,8 +30,9 @@ async def _check_mongodb(request: Request) -> Dict[str, Any]:
                 "url": getattr(settings, "mongodb_url", "mongodb://mongodb:27017"),
             }
         return {"status": False, "error": "mongodb client not available"}
-    except Exception as e:
-        return {"status": False, "error": str(e)}
+    except Exception:
+        logger.exception("MongoDB health check failed")
+        return {"status": False, "error": "mongodb health check failed"}
 
 
 async def _check_redis(request: Request) -> Dict[str, Any]:
@@ -43,8 +44,9 @@ async def _check_redis(request: Request) -> Dict[str, Any]:
                 "url": getattr(settings, "redis_url", "redis://redis:6379"),
             }
         return {"status": False, "error": "redis client not available"}
-    except Exception as e:
-        return {"status": False, "error": str(e)}
+    except Exception:
+        logger.exception("Redis health check failed")
+        return {"status": False, "error": "redis health check failed"}
 
 
 async def _check_qdrant(request: Request) -> Dict[str, Any]:
@@ -76,8 +78,9 @@ async def _check_qdrant(request: Request) -> Dict[str, Any]:
                 "url": collections_url,
                 "http_status": resp.status_code,
             }
-    except Exception as e:
-        return {"status": False, "error": str(e), "url": collections_url}
+    except Exception:
+        logger.exception("Qdrant HTTP health probe failed for url=%s", collections_url)
+        return {"status": False, "error": "qdrant health check failed", "url": collections_url}
 
 
 async def _check_mcp_server(request: Request) -> Dict[str, Any]:
@@ -90,8 +93,9 @@ async def _check_mcp_server(request: Request) -> Dict[str, Any]:
                 "url": url,
                 "http_status": resp.status_code,
             }
-    except Exception as e:
-        return {"status": False, "error": str(e), "url": url}
+    except Exception:
+        logger.exception("MCP server health check failed for url=%s", url)
+        return {"status": False, "error": "mcp server health check failed", "url": url}
 
 
 # --- Per-service endpoints ---------------------------------------------
@@ -175,13 +179,13 @@ async def health_check_all(request: Request):
             },
         )
 
-    except Exception as e:
-        logger.error(f"Health check error: {e}")
+    except Exception:
+        logger.exception("Health check error")
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             content={
                 "status": "error",
-                "error": str(e),
+                "error": "health check failed",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             },
         )

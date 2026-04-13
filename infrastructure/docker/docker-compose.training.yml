@@ -40,16 +40,9 @@ services:
       - LGBM_CANDIDATES_PER_QUERY=${LGBM_CANDIDATES_PER_QUERY:-100}
       - LGBM_NUM_BOOST_ROUNDS=${LGBM_NUM_BOOST_ROUNDS:-300}
 
-    # No network needed - training only connects to external API via internet
+    # Training can run on CPU-only hosts used by CI/deploy runners.
     restart: "no"  # Run once, don't restart
     shm_size: '2gb'
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]  # PyTorch multiprocessing needs shared memory for model weights
     volumes:
       # Persist trained models
       - model-artifacts:/app/models

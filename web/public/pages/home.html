@@ -8,13 +8,18 @@
     <link rel="stylesheet" href="/styles/health.css">
 </head>
 <body>
+    <div class="bg-orb bg-orb-1"></div>
+    <div class="bg-orb bg-orb-2"></div>
     <div class="container">
         <!-- Sidebar -->
         <aside class="sidebar">
             <!-- Chats Section -->
             <div class="sidebar-section">
                 <div class="section-header">Chats</div>
-                <button id="newChatBtn" class="section-add-btn">+ New chat</button>
+                <button id="newChatBtn" class="section-add-btn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    New session
+                </button>
                 <div id="chatHistory" class="section-list">
                     <!-- Chat history items will be populated by JavaScript -->
                 </div>
@@ -22,8 +27,11 @@
             
             <!-- Favorite Repos Section -->
             <div class="sidebar-section">
-                <div class="section-header">Favorite Repos</div>
-                <button id="placeRepoBtn" class="section-add-btn">Place Repo</button>
+                <div class="section-header">Saved Repos</div>
+                <button id="placeRepoBtn" class="section-add-btn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    Add repo
+                </button>
                 <div id="favoriteRepos" class="section-list">
                     <!-- Favorite repos will be populated by JavaScript -->
                 </div>
@@ -31,8 +39,11 @@
             
             <!-- Folders Section -->
             <div class="sidebar-section">
-                <div class="section-header">Folders</div>
-                <button id="newFolderBtn" class="section-add-btn">+ New Folder</button>
+                <div class="section-header">Collections</div>
+                <button id="newFolderBtn" class="section-add-btn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+                    New collection
+                </button>
                 <div id="foldersList" class="section-list">
                     <!-- Folders will be populated by JavaScript -->
                 </div>
@@ -44,7 +55,11 @@
                     <div id="userName" class="user-name">User</div>
                 </div>
                 <button id="themeToggle" class="theme-toggle" aria-label="Toggle theme">
-                    <span class="theme-icon">🌙</span>
+                    <span class="theme-icon">
+                        <svg id="themeIconSvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+                        </svg>
+                    </span>
                 </button>
             </div>
             
@@ -57,7 +72,9 @@
             <!-- Search Bar at Top -->
             <div class="top-search-bar">
                 <input type="text" id="repoSearchInput" class="top-search-input" placeholder="Search for repositories...">
-                <span class="search-icon">🔍</span>
+                <span class="search-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                </span>
                 <button id="closeRepoView" class="close-repo-btn" style="display: none;" title="Back to chat">&times;</button>
             </div>
             
@@ -65,25 +82,44 @@
                 <!-- Welcome Screen -->
                 <div id="welcomeScreen" class="welcome-screen">
                     <h1 class="welcome-title">Find the perfect Git repository</h1>
+                    <p class="welcome-subtitle">Ask in natural language or search across thousands of open source projects</p>
                     
                     <div class="suggestions">
                         <div class="suggestion-card">
-                            <div class="suggestion-title">🔍 Discover</div>
+                            <div class="suggestion-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                            </div>
+                            <div class="suggestion-title">Discover</div>
                             <div class="suggestion-text">Find repositories matching your interests</div>
                         </div>
                         <div class="suggestion-card">
-                            <div class="suggestion-title">📚 Learn</div>
+                            <div class="suggestion-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+                            </div>
+                            <div class="suggestion-title">Learn</div>
                             <div class="suggestion-text">Explore trending projects in your favorite language</div>
                         </div>
                         <div class="suggestion-card">
-                            <div class="suggestion-title">🛠️ Build</div>
+                            <div class="suggestion-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+                            </div>
+                            <div class="suggestion-title">Build</div>
                             <div class="suggestion-text">Find libraries and tools for your next project</div>
                         </div>
                         <div class="suggestion-card">
-                            <div class="suggestion-title">⭐ Trending</div>
+                            <div class="suggestion-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+                            </div>
+                            <div class="suggestion-title">Trending</div>
                             <div class="suggestion-text">Check out what's popular in open source</div>
                         </div>
                     </div>
+
+                    <!-- DEV ONLY: Load example repos to preview the UI -->
+                    <button id="loadExamplesBtn" class="dev-examples-btn" title="Dev preview — remove before production">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        Load example repos (dev preview)
+                    </button>
                 </div>
                 
                 <!-- Repository Recommendations View -->

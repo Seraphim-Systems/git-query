@@ -26,6 +26,9 @@ PUBLIC_PATHS = [
     "/openapi.json",
     "/auth/login",
     "/auth/register",
+    # Browser JS calls /api/auth/* directly against the gateway in production.
+    "/api/auth/login",
+    "/api/auth/register",
     # Repo lookup reads only public data; no key needed from browser clients.
     "/api/repos/lookup",
 ]
@@ -40,6 +43,7 @@ SESSION_PATHS = [
     "/chat",  # AI chat - requires session
     "/recommend",  # Repository search - requires session
     "/user",  # User profile/preferences - requires session
+    "/api/auth",  # Alias used by the browser frontend (e.g. /api/auth/logout)
     "/api/recommend",  # Alias used by the browser frontend
     "/api/chat",  # Alias used by the browser frontend
 ]

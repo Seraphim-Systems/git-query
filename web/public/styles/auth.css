@@ -1,13 +1,18 @@
 :root {
-    --bg-primary: #343541;
-    --bg-secondary: #202123;
-    --text-primary: #ececf1;
-    --text-secondary: #c5c5d2;
-    --accent-color: #10a37f;
-    --accent-hover: #1a7f64;
-    --input-bg: #40414f;
-    --border-color: #565869;
-    --error-color: #ef4444;
+    --text-primary:    #e8eaf0;
+    --text-secondary:  rgba(232, 234, 240, 0.55);
+    --accent-color:    #00d4aa;
+    --accent-hover:    #00b8c8;
+    --accent-glow:     rgba(0, 212, 170, 0.28);
+    --error-color:     #ff6b6b;
+    --border-color:    rgba(255, 255, 255, 0.10);
+    --border-focus:    rgba(0, 212, 170, 0.55);
+    --glass-card:      rgba(255, 255, 255, 0.055);
+    --glass-input:     rgba(255, 255, 255, 0.07);
+    --blur-card:       blur(24px) saturate(140%);
+    --radius-lg:       14px;
+    --radius-md:       10px;
+    --ease:            cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 * {
@@ -18,22 +23,95 @@
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
-    background-color: var(--bg-primary);
     color: var(--text-primary);
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     min-height: 100vh;
     padding: 20px;
+    background:
+        linear-gradient(160deg, #05050f 0%, #080818 40%, #060612 100%);
+    background-attachment: fixed;
 }
 
+/* Animated background orbs */
+.bg-orb {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(90px);
+    pointer-events: none;
+    z-index: 0;
+    will-change: transform;
+}
+
+.bg-orb-1 {
+    width: 65vw;
+    height: 65vw;
+    max-width: 900px;
+    max-height: 900px;
+    background: radial-gradient(circle, rgba(0, 100, 200, 0.28) 0%, transparent 70%);
+    top: -20vw;
+    left: -15vw;
+    animation: orbFloat1 22s ease-in-out infinite;
+}
+
+.bg-orb-2 {
+    width: 55vw;
+    height: 55vw;
+    max-width: 780px;
+    max-height: 780px;
+    background: radial-gradient(circle, rgba(0, 190, 140, 0.22) 0%, transparent 70%);
+    bottom: -15vw;
+    right: -10vw;
+    animation: orbFloat2 26s ease-in-out infinite;
+}
+
+@keyframes orbFloat1 {
+    0%   { transform: translate(0,    0)    scale(1); }
+    25%  { transform: translate(8vw,  6vw)  scale(1.08); }
+    50%  { transform: translate(14vw, -4vw) scale(0.95); }
+    75%  { transform: translate(4vw,  10vw) scale(1.05); }
+    100% { transform: translate(0,    0)    scale(1); }
+}
+
+@keyframes orbFloat2 {
+    0%   { transform: translate(0,     0)    scale(1); }
+    20%  { transform: translate(-6vw,  -8vw) scale(1.06); }
+    50%  { transform: translate(-12vw, 5vw)  scale(0.92); }
+    75%  { transform: translate(-4vw,  -6vw) scale(1.10); }
+    100% { transform: translate(0,     0)    scale(1); }
+}
+
+.auth-logo {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    text-decoration: none;
+    color: var(--text-primary);
+    font-size: 17px;
+    font-weight: 650;
+    letter-spacing: -0.2px;
+    margin-bottom: 24px;
+    transition: color 0.2s var(--ease);
+}
+.auth-logo svg { color: var(--accent-color); }
+.auth-logo:hover { color: var(--accent-color); }
+
 .auth-container {
+    position: relative;
+    z-index: 1;
     width: 100%;
-    max-width: 400px;
-    background-color: var(--bg-secondary);
-    border-radius: 12px;
-    padding: 40px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    max-width: 420px;
+    background: var(--glass-card);
+    backdrop-filter: var(--blur-card);
+    -webkit-backdrop-filter: var(--blur-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 44px 40px;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.45), 0 0 0 0.5px rgba(255,255,255,0.04) inset;
 }
 
 .auth-header {
@@ -42,9 +120,14 @@ body {
 }
 
 .auth-title {
-    font-size: 28px;
-    font-weight: 600;
+    font-size: 26px;
+    font-weight: 700;
     margin-bottom: 8px;
+    background: linear-gradient(135deg, #e8eaf0 30%, var(--accent-color) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -0.3px;
 }
 
 .auth-subtitle {
@@ -61,39 +144,42 @@ body {
 .form-group {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 7px;
 }
 
 .form-label {
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 500;
     color: var(--text-secondary);
+    letter-spacing: 0.2px;
 }
 
 .form-input {
-    background-color: var(--input-bg);
+    background: var(--glass-input);
     border: 1px solid var(--border-color);
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     padding: 12px 16px;
-    font-size: 16px;
+    font-size: 15px;
     color: var(--text-primary);
     font-family: inherit;
     outline: none;
-    transition: border-color 0.2s;
+    transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease), background 0.2s var(--ease);
 }
 
 .form-input:focus {
-    border-color: var(--accent-color);
+    border-color: var(--border-focus);
+    background: rgba(255, 255, 255, 0.10);
+    box-shadow: 0 0 0 3px var(--accent-glow);
 }
 
 .form-input::placeholder {
     color: var(--text-secondary);
-    opacity: 0.6;
+    opacity: 0.7;
 }
 
 .form-error {
     color: var(--error-color);
-    font-size: 13px;
+    font-size: 12px;
     display: none;
 }
 
@@ -102,32 +188,40 @@ body {
 }
 
 .submit-btn {
-    background-color: var(--accent-color);
+    background: linear-gradient(135deg, var(--accent-color) 0%, var(--accent-hover) 100%);
     border: none;
-    border-radius: 8px;
-    padding: 14px;
-    font-size: 16px;
+    border-radius: var(--radius-md);
+    padding: 13px;
+    font-size: 15px;
     font-weight: 600;
-    color: white;
+    color: #05050f;
     cursor: pointer;
-    transition: background-color 0.2s;
-    margin-top: 8px;
+    transition: opacity 0.2s var(--ease), box-shadow 0.2s var(--ease), transform 0.15s var(--ease);
+    margin-top: 6px;
+    letter-spacing: 0.2px;
+    box-shadow: 0 4px 16px var(--accent-glow);
 }
 
 .submit-btn:hover:not(:disabled) {
-    background-color: var(--accent-hover);
+    opacity: 0.9;
+    box-shadow: 0 6px 24px var(--accent-glow);
+    transform: translateY(-1px);
+}
+
+.submit-btn:active:not(:disabled) {
+    transform: translateY(0);
 }
 
 .submit-btn:disabled {
-    opacity: 0.5;
+    opacity: 0.45;
     cursor: not-allowed;
 }
 
 .auth-divider {
     text-align: center;
-    margin: 24px 0;
+    margin: 20px 0;
     color: var(--text-secondary);
-    font-size: 14px;
+    font-size: 13px;
     position: relative;
 }
 
@@ -136,18 +230,13 @@ body {
     content: '';
     position: absolute;
     top: 50%;
-    width: 45%;
+    width: 44%;
     height: 1px;
-    background-color: var(--border-color);
+    background: var(--border-color);
 }
 
-.auth-divider::before {
-    left: 0;
-}
-
-.auth-divider::after {
-    right: 0;
-}
+.auth-divider::before { left: 0; }
+.auth-divider::after  { right: 0; }
 
 .auth-link {
     text-align: center;
@@ -159,7 +248,7 @@ body {
     color: var(--accent-color);
     text-decoration: none;
     font-weight: 500;
-    transition: color 0.2s;
+    transition: color 0.2s var(--ease);
 }
 
 .auth-link a:hover {
@@ -180,7 +269,9 @@ body {
     color: var(--text-secondary);
     cursor: pointer;
     padding: 4px;
-    font-size: 14px;
+    display: flex;
+    align-items: center;
+    transition: color 0.2s var(--ease);
 }
 
 .password-toggle-btn:hover {
@@ -188,10 +279,10 @@ body {
 }
 
 .message {
-    padding: 12px;
-    border-radius: 8px;
-    font-size: 14px;
-    margin-bottom: 20px;
+    padding: 11px 14px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    margin-bottom: 18px;
     display: none;
 }
 
@@ -200,13 +291,13 @@ body {
 }
 
 .message.success {
-    background-color: rgba(16, 163, 127, 0.2);
+    background: rgba(0, 212, 170, 0.12);
     color: var(--accent-color);
-    border: 1px solid var(--accent-color);
+    border: 1px solid rgba(0, 212, 170, 0.35);
 }
 
 .message.error {
-    background-color: rgba(239, 68, 68, 0.2);
+    background: rgba(255, 107, 107, 0.12);
     color: var(--error-color);
-    border: 1px solid var(--error-color);
+    border: 1px solid rgba(255, 107, 107, 0.35);
 }

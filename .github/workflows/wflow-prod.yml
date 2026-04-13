@@ -1,11 +1,12 @@
-name: Deploy Full Stack (Manual)
+name: Workflow for Production Deployment
 
-# Single Responsibility: Deploy full stack manually from selected branch
-# Triggered: Manual workflow dispatch
+# Single Responsibility: Deploy full stack to production
+# Triggered: Push to 'prod' branch
 # Services: Runtime stack only (databases, gateway, recommender, MCP, web)
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [prod]
 
 jobs:
   deploy:

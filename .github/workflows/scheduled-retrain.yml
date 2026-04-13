@@ -1,5 +1,9 @@
 name: Scheduled Model Retraining
 
+permissions:
+  contents: read
+  issues: write
+
 on:
   # Run every 2 weeks on Monday at 2 AM UTC
   schedule:
@@ -11,7 +15,7 @@ on:
       force_retrain:
         description: 'Force retraining even if no new data'
         required: false
-        default: 'false'
+        default: false
         type: boolean
       epochs:
         description: 'Number of training epochs'
@@ -24,7 +28,7 @@ on:
       skip_evaluation:
         description: 'Skip shadow evaluation'
         required: false
-        default: 'false'
+        default: false
         type: boolean
       max_repos:
         description: 'Max repos to fetch (leave empty for all)'
