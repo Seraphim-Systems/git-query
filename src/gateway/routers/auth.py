@@ -44,16 +44,12 @@ async def login(request: Request, response: Response, credentials: LoginRequest)
     user = await user_service.get_user_by_email(credentials.email)
 
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     # Verify password against stored hash
     provided_hash = hashlib.sha256(credentials.password.encode()).hexdigest()
     if user.get("password_hash") != provided_hash:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     # Create session
     session_id = await session_manager.create_session(
@@ -98,9 +94,7 @@ async def register(request: Request, response: Response, data: RegisterRequest):
     # Check if user exists
     existing_user = await user_service.get_user_by_email(data.email)
     if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="User already exists"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User already exists")
 
     # Create user
     # TODO: Hash password properly (bcrypt, argon2, etc.)

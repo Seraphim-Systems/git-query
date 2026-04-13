@@ -23,26 +23,18 @@ async def query_collection_modern(collection: str, query: Dict[str, Any] = Body(
 
 
 @router.post("/collections/{collection}/bulk", dependencies=[Depends(get_api_key)])
-async def bulk_upsert_collection_modern(
-    collection: str, payload: Dict[str, Any] = Body(...)
-):
+async def bulk_upsert_collection_modern(collection: str, payload: Dict[str, Any] = Body(...)):
     """Modern alias for bulk upsert into a collection."""
     return await bulk_upsert_collection_impl(collection, payload)
 
 
-@router.delete(
-    "/collections/{collection}/documents", dependencies=[Depends(get_api_key)]
-)
-async def delete_from_collection_modern(
-    collection: str, payload: Dict[str, Any] = Body(...)
-):
+@router.delete("/collections/{collection}/documents", dependencies=[Depends(get_api_key)])
+async def delete_from_collection_modern(collection: str, payload: Dict[str, Any] = Body(...)):
     """Modern alias for deleting documents from a collection."""
     return await _delete_from_collection_impl(collection, payload)
 
 
-@router.get(
-    "/collections/{collection}/documents/{doc_id}", dependencies=[Depends(get_api_key)]
-)
+@router.get("/collections/{collection}/documents/{doc_id}", dependencies=[Depends(get_api_key)])
 async def get_document_by_id(collection: str, doc_id: str):
     """Fetch a single document by its _id (string)."""
     mongo_client = get_mongo_client()
@@ -67,9 +59,7 @@ async def get_document_by_id(collection: str, doc_id: str):
         raise HTTPException(status_code=500, detail=f"Get failed: {str(e)}")
 
 
-@router.delete(
-    "/collections/{collection}/documents/{doc_id}", dependencies=[Depends(get_api_key)]
-)
+@router.delete("/collections/{collection}/documents/{doc_id}", dependencies=[Depends(get_api_key)])
 async def delete_document_by_id(collection: str, doc_id: str):
     """Delete a single document by its _id."""
     mongo_client = get_mongo_client()
@@ -114,11 +104,7 @@ async def query_mongodb(query: MongoQuery):
         db = mongo_client.get_database(query.database)
         collection = db.get_collection(query.collection)
 
-        cursor = (
-            collection.find(query.filter, query.projection)
-            .limit(query.limit)
-            .skip(query.skip)
-        )
+        cursor = collection.find(query.filter, query.projection).limit(query.limit).skip(query.skip)
 
         if query.sort:
             cursor = cursor.sort(list(query.sort.items()))
@@ -168,9 +154,7 @@ async def list_mongodb_collections(database: str = "gitquery"):
         collections = db.list_collection_names()
         return {"database": database, "collections": collections}
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to list collections: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to list collections: {str(e)}")
 
 
 @router.delete("/collections/{collection}", dependencies=[Depends(get_api_key)])
@@ -306,9 +290,7 @@ async def bulk_upsert_collection_impl(
                         )
                     )
                 else:
-                    operations.append(
-                        UpdateOne({"_id": doc["_id"]}, {"$set": doc}, upsert=True)
-                    )
+                    operations.append(UpdateOne({"_id": doc["_id"]}, {"$set": doc}, upsert=True))
 
             result = coll.bulk_write(operations, ordered=ordered)
             inserted_count = result.upserted_count

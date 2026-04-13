@@ -57,9 +57,7 @@ async def set_redis_key(
             value = payload
 
         # If value is a complex object, serialize as JSON string
-        if value is not None and not isinstance(
-            value, (str, bytes, bytearray, int, float, bool)
-        ):
+        if value is not None and not isinstance(value, (str, bytes, bytearray, int, float, bool)):
             value = json.dumps(value)
 
         if ttl:
@@ -95,7 +93,7 @@ async def redis_batch_operations(
                 {"action": "delete", "key": "k3"},
             ]
         },
-    )
+    ),
 ):
     """
     Execute batch Redis operations.
@@ -137,9 +135,7 @@ async def redis_batch_operations(
             elif action == "set":
                 value = op.get("value")
                 ttl = op.get("ttl")
-                if value is not None and not isinstance(
-                    value, (str, bytes, bytearray, int, float, bool)
-                ):
+                if value is not None and not isinstance(value, (str, bytes, bytearray, int, float, bool)):
                     value = json.dumps(value)
                 if ttl:
                     redis_client.setex(key, int(ttl), value)

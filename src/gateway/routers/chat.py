@@ -46,9 +46,7 @@ async def chat(
     # Call internal MCP server
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.post(
-                f"{settings.mcp_server_url}/chat", json=payload, timeout=60.0
-            )
+            response = await client.post(f"{settings.mcp_server_url}/chat", json=payload, timeout=60.0)
             response.raise_for_status()
             result = response.json()
         except httpx.HTTPError as e:

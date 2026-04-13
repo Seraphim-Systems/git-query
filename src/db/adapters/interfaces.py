@@ -19,9 +19,7 @@ class CollectionRepository(Protocol):
     ) -> Dict[str, Any]:
         raise NotImplementedError()
 
-    def insert(
-        self, database: str, collection: str, documents: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+    def insert(self, database: str, collection: str, documents: List[Dict[str, Any]]) -> Dict[str, Any]:
         raise NotImplementedError()
 
     def bulk_upsert(
@@ -60,9 +58,7 @@ class VectorRepository(Protocol):
     def list_collections(self) -> List[str]:
         raise NotImplementedError()
 
-    def upsert_points(
-        self, collection: str, points: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+    def upsert_points(self, collection: str, points: List[Dict[str, Any]]) -> Dict[str, Any]:
         raise NotImplementedError()
 
     def search(

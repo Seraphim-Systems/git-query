@@ -97,12 +97,9 @@ async def get_collection_stats():
         mongo_client.close()
 
         return {
-            "raw_repositories": raw_count,
+            "repositories": raw_count,
             "cleaned_repositories": cleaned_count,
-            "status_breakdown": {
-                item["_id"] or "pending": item["count"]
-                for item in status_breakdown
-            },
+            "status_breakdown": {item["_id"] or "pending": item["count"] for item in status_breakdown},
         }
     except Exception as exc:
         logger.warning("Collection stats fetch failed: %s", exc)

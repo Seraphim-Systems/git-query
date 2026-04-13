@@ -51,18 +51,18 @@ app.add_middleware(
 @app.get("/")
 async def root():
     """Redirect to frontend nginx server.
-    
+
     In production: Uses SVC_NGINX_SERVER_NAME from GitHub secrets
     In development: Defaults to localhost:8080
     """
     from fastapi.responses import RedirectResponse
-    
+
     nginx_server = os.getenv("SVC_NGINX_SERVER_NAME", "")
     if nginx_server:
         frontend_url = f"https://{nginx_server}"
     else:
         frontend_url = "http://localhost:8080"
-    
+
     return RedirectResponse(url=frontend_url)
 
 
@@ -82,16 +82,12 @@ async def list_available_tools():
 @app.post("/tools/execute", response_model=ToolExecuteResponse)
 async def execute_tool(request: ToolExecuteRequest):
     """Execute a specific tool."""
-    logger.info(
-        f"Executing tool: {request.tool_name} with params: {request.parameters}"
-    )
+    logger.info(f"Executing tool: {request.tool_name} with params: {request.parameters}")
 
     # Get the tool
     tool = get_tool(request.tool_name)
     if not tool:
-        raise HTTPException(
-            status_code=404, detail=f"Tool '{request.tool_name}' not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Tool '{request.tool_name}' not found")
 
     try:
         # Execute the tool
@@ -107,8 +103,10 @@ async def execute_tool(request: ToolExecuteRequest):
 
 # ── Chat endpoint ─────────────────────────────────────────────────────────────
 
+
 class ChatRequest(BaseModel):
     """Chat request from gateway."""
+
     message: str
     user_id: Optional[str] = None
     preferences: dict = {}
@@ -117,6 +115,7 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     """Chat response to gateway."""
+
     response: str
 
 
@@ -124,41 +123,30 @@ class ChatResponse(BaseModel):
 async def chat_endpoint(request: ChatRequest):
     """
     Chat endpoint using the deployed AI agent (bot.py).
-    
+
     Connects frontend user input to the Pydantic AI agent with OpenAI,
     which uses MCP tools to call the recommender service.
     """
     try:
         # Import the agent's chat function
         from src.client.bot import chat as bot_chat
-        
+
         # Call the agent with user message and ID
-        response_text, tool_calls = await bot_chat(
-            message=request.message,
-            user_id=request.user_id
-        )
-        
-        logger.info(
-            f"Chat processed for user {request.user_id}: {len(tool_calls)} tool calls made"
-        )
-        
+        response_text, tool_calls = await bot_chat(message=request.message, user_id=request.user_id)
+
+        logger.info(f"Chat processed for user {request.user_id}: {len(tool_calls)} tool calls made")
+
         return ChatResponse(response=response_text)
-        
+
     except ImportError as e:
         logger.error(f"Failed to import bot agent: {e}")
-        return ChatResponse(
-            response="The AI agent is not available. Please check the deployment configuration."
-        )
+        return ChatResponse(response="The AI agent is not available. Please check the deployment configuration.")
     except Exception as e:
         logger.error(f"Chat error: {e}", exc_info=True)
-        return ChatResponse(
-            response="I encountered an error processing your request. Please try again."
-        )
+        return ChatResponse(response="I encountered an error processing your request. Please try again.")
 
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(
-        "server:app", host=settings.mcp_host, port=settings.mcp_port, reload=True
-    )
+    uvicorn.run("server:app", host=settings.mcp_host, port=settings.mcp_port, reload=True)

@@ -252,6 +252,88 @@ class MLflowTracker:
         except Exception as e:
             logger.warning(f"Failed to set tag: {e}")
 
+    def register_model_version(
+        self,
+        run_id: str,
+        model_name: str,
+        artifact_path: str,
+    ) -> int | None:
+        """Register a model artifact in the MLflow Model Registry and transition to Staging.
+
+        Uses the MlflowClient low-level API so that plain artifacts logged via
+        log_artifact() can be registered without requiring an MLmodel manifest
+        (which mlflow.register_model() requires from MLflow 2.9+).
+
+        Returns the registered version number, or None if unavailable.
+        """
+        if not MLFLOW_AVAILABLE or not self._client:
+            return None
+        try:
+            # Ensure the registered model exists
+            try:
+                self._client.create_registered_model(model_name)
+                logger.info("Created registered model '%s'", model_name)
+            except Exception:
+                pass  # Already exists — that's fine
+
+            # Build the source URI from the run's artifact root
+            run_info = self._client.get_run(run_id)
+            artifact_uri = run_info.info.artifact_uri.rstrip("/")
+            source = f"{artifact_uri}/{artifact_path}"
+
+            mv = self._client.create_model_version(
+                name=model_name,
+                source=source,
+                run_id=run_id,
+            )
+            version = int(mv.version)
+            self._client.transition_model_version_stage(name=model_name, version=str(version), stage="Staging")
+            logger.info("Registered model '%s' version %d → Staging", model_name, version)
+            return version
+        except Exception as e:
+            logger.warning("Failed to register model version: %s", e)
+            return None
+
+    def transition_model_stage(self, model_name: str, version: int, stage: str) -> None:
+        """Transition a model version to a new stage (Staging / Production / Archived)."""
+        if not MLFLOW_AVAILABLE or not self._client:
+            return
+        try:
+            self._client.transition_model_version_stage(name=model_name, version=str(version), stage=stage)
+            logger.info("Model '%s' version %d → %s", model_name, version, stage)
+        except Exception as e:
+            logger.warning("Failed to transition model stage: %s", e)
+
+    def archive_production_versions(self, model_name: str, keep_version: int) -> None:
+        """Move all current Production versions (except keep_version) to Archived."""
+        if not MLFLOW_AVAILABLE or not self._client:
+            return
+        try:
+            versions = self._client.get_latest_versions(model_name, stages=["Production"])
+            for v in versions:
+                if int(v.version) != keep_version:
+                    self._client.transition_model_version_stage(name=model_name, version=v.version, stage="Archived")
+                    logger.info("Archived model '%s' version %s", model_name, v.version)
+        except Exception as e:
+            logger.warning("Failed to archive previous production versions: %s", e)
+
+    def get_production_metrics(self, model_name: str, metric_keys: list[str]) -> dict[str, float]:
+        """Return metrics from the current Production version of a registered model.
+
+        Returns an empty dict when no Production version exists yet (first run).
+        """
+        if not MLFLOW_AVAILABLE or not self._client:
+            return {}
+        try:
+            versions = self._client.get_latest_versions(model_name, stages=["Production"])
+            if not versions:
+                return {}
+            run_data = self._client.get_run(versions[0].run_id).data
+            return {k: run_data.metrics[k] for k in metric_keys if k in run_data.metrics}
+        except Exception as e:
+            logger.warning("Failed to fetch production metrics for '%s': %s", model_name, e)
+            return {}
+
     def get_run_id(self) -> str | None:
         """Get the current run ID."""
         if self._run:

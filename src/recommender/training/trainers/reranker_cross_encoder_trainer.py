@@ -78,7 +78,7 @@ class RerankerCrossEncoderTrainer:
             warmup_steps=100,
             output_path=output_path,
             show_progress_bar=True,
-            callback=train_callback
+            callback=train_callback,
         )
 
         logger.info(f"Model saved to: {output_path}")
@@ -98,10 +98,11 @@ class RerankerCrossEncoderTrainer:
             metrics={"num_examples": float(len(train_examples))},
             trained_at=datetime.now(timezone.utc),
             is_active=False,
-            status="candidate"
+            status="candidate",
         )
 
         from ...services.registry_service import ModelRegistryService
+
         registry = ModelRegistryService()
         await registry.register_model(metadata)
 
@@ -151,7 +152,7 @@ class RerankerCrossEncoderTrainer:
         checkpoints.sort(key=get_epoch_num)
 
         if len(checkpoints) > self.checkpoint_save_total_limit:
-            to_delete = checkpoints[:-self.checkpoint_save_total_limit]
+            to_delete = checkpoints[: -self.checkpoint_save_total_limit]
             for path in to_delete:
                 logger.info(f"Pruning old checkpoint: {path}")
                 if os.path.isdir(path):
@@ -190,9 +191,11 @@ class RerankerCrossEncoderTrainer:
     def _repo_to_text(self, repo: Dict[str, Any]) -> str:
         """Convert repository data to text."""
         from ..utils import prepare_repo_text
+
         return prepare_repo_text(repo)
 
     def _create_dataloader(self, examples: List[InputExample], batch_size: int):
         """Create DataLoader for training."""
         from torch.utils.data import DataLoader
+
         return DataLoader(examples, shuffle=True, batch_size=batch_size)

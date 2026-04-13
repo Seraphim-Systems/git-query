@@ -142,10 +142,13 @@ class TestLoadActiveModel:
         mock_registry = AsyncMock()
         mock_registry.get_active_model.return_value = None
 
-        with patch(
-            "src.recommender.services.registry_service.ModelRegistryService",
-            return_value=mock_registry,
-        ), patch.object(svc, "load_model") as mock_load:
+        with (
+            patch(
+                "src.recommender.services.registry_service.ModelRegistryService",
+                return_value=mock_registry,
+            ),
+            patch.object(svc, "load_model") as mock_load,
+        ):
             await svc.load_active_model()
 
         mock_load.assert_called_once_with("default-cross-encoder")
@@ -162,10 +165,13 @@ class TestLoadActiveModel:
         mock_registry = AsyncMock()
         mock_registry.get_active_model.return_value = active
 
-        with patch(
-            "src.recommender.services.registry_service.ModelRegistryService",
-            return_value=mock_registry,
-        ), patch.object(svc, "load_model") as mock_load:
+        with (
+            patch(
+                "src.recommender.services.registry_service.ModelRegistryService",
+                return_value=mock_registry,
+            ),
+            patch.object(svc, "load_model") as mock_load,
+        ):
             await svc.load_active_model()
 
         mock_load.assert_not_called()
@@ -188,15 +194,17 @@ class TestLoadActiveModel:
 
         full_path = os.path.join(settings.model_path, active.path)
 
-        with patch(
-            "src.recommender.services.registry_service.ModelRegistryService",
-            return_value=mock_registry,
-        ), patch(
-            "src.recommender.services.reranker_service.os.path.exists",
-            return_value=True,
-        ), patch.object(
-            svc, "load_model"
-        ) as mock_load:
+        with (
+            patch(
+                "src.recommender.services.registry_service.ModelRegistryService",
+                return_value=mock_registry,
+            ),
+            patch(
+                "src.recommender.services.reranker_service.os.path.exists",
+                return_value=True,
+            ),
+            patch.object(svc, "load_model") as mock_load,
+        ):
             await svc.load_active_model()
 
         mock_load.assert_called_once_with(full_path)
@@ -217,15 +225,17 @@ class TestLoadActiveModel:
         mock_registry = AsyncMock()
         mock_registry.get_active_model.return_value = active
 
-        with patch(
-            "src.recommender.services.registry_service.ModelRegistryService",
-            return_value=mock_registry,
-        ), patch(
-            "src.recommender.services.reranker_service.os.path.exists",
-            return_value=False,
-        ), patch.object(
-            svc, "load_model"
-        ) as mock_load:
+        with (
+            patch(
+                "src.recommender.services.registry_service.ModelRegistryService",
+                return_value=mock_registry,
+            ),
+            patch(
+                "src.recommender.services.reranker_service.os.path.exists",
+                return_value=False,
+            ),
+            patch.object(svc, "load_model") as mock_load,
+        ):
             await svc.load_active_model()
 
         mock_load.assert_called_once_with("default-cross-encoder")

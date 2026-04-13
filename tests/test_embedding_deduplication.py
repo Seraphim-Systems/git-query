@@ -20,13 +20,14 @@ from unittest.mock import MagicMock, patch
 # Fixtures
 # ============================================================
 
+
 @pytest.fixture
 def sample_repos():
     """A canonical list of unique repository dicts."""
     return [
         {"_id": "repo-1", "name": "alpha", "description": "Alpha project", "language": "Python", "stars": 100},
-        {"_id": "repo-2", "name": "beta",  "description": "Beta project",  "language": "Go",     "stars": 200},
-        {"_id": "repo-3", "name": "gamma", "description": "Gamma project", "language": "Rust",   "stars": 300},
+        {"_id": "repo-2", "name": "beta", "description": "Beta project", "language": "Go", "stars": 200},
+        {"_id": "repo-3", "name": "gamma", "description": "Gamma project", "language": "Rust", "stars": 300},
     ]
 
 
@@ -34,6 +35,7 @@ def sample_repos():
 def pipeline(tmp_path):
     """_EmbeddingIndexer with temp dirs — no real API or DB connections."""
     from src.recommender.training.pipelines.embedding_indexing_pipeline import _EmbeddingIndexer
+
     return _EmbeddingIndexer(
         api_base_url="http://fake-api",
         api_key="fake-key",
@@ -44,6 +46,7 @@ def pipeline(tmp_path):
 
 def _make_uploader():
     from src.recommender.scripts.upload_embeddings import EmbeddingUploader
+
     return EmbeddingUploader(base_url="http://fake", qdrant_api_key="fake-key")
 
 
@@ -53,9 +56,15 @@ def _fake_pipeline_result():
         np.zeros((3, 4)),
         ["r1", "r2", "r3"],
         {
-            "model_name": "m", "timestamp": "t", "embedding_dim": 4,
-            "num_repos": 3, "device": "cpu", "batch_size": 32,
-            "training_time_seconds": 0.1, "normalized": True, "repo_hashes": [],
+            "model_name": "m",
+            "timestamp": "t",
+            "embedding_dim": 4,
+            "num_repos": 3,
+            "device": "cpu",
+            "batch_size": 32,
+            "training_time_seconds": 0.1,
+            "normalized": True,
+            "repo_hashes": [],
         },
     )
 
@@ -64,11 +73,12 @@ def _fake_pipeline_result():
 # 1. Unit: _dedupe_repositories
 # ============================================================
 
+
 class TestDedupeRepositories:
     """_dedupe_repositories removes duplicates by stable ID, first-occurrence wins."""
 
     def test_removes_exact_duplicates(self, pipeline, sample_repos):
-        duped = sample_repos + sample_repos        # 6 items, 3 unique
+        duped = sample_repos + sample_repos  # 6 items, 3 unique
         assert len(pipeline._dedupe_repositories(duped)) == 3
 
     def test_preserves_first_occurrence_order(self, pipeline, sample_repos):
@@ -86,7 +96,7 @@ class TestDedupeRepositories:
     def test_stable_id_via_full_name(self, pipeline):
         repos = [
             {"full_name": "org/repo-a"},
-            {"full_name": "org/repo-a"},   # duplicate
+            {"full_name": "org/repo-a"},  # duplicate
             {"full_name": "org/repo-b"},
         ]
         assert len(pipeline._dedupe_repositories(repos)) == 2
@@ -102,7 +112,7 @@ class TestDedupeRepositories:
             {"_id": "mongo-123"},
             {"full_name": "org/repo"},
             {"repo_id": "ext-999"},
-            {"_id": "mongo-123"},   # duplicate of first
+            {"_id": "mongo-123"},  # duplicate of first
         ]
         assert len(pipeline._dedupe_repositories(repos)) == 3
 
@@ -116,16 +126,14 @@ class TestDedupeRepositories:
 # 2. Unit: check_for_new_data
 # ============================================================
 
+
 class TestCheckForNewData:
     """check_for_new_data detects added/removed repos against the local mapping file."""
 
     def _write_mapping(self, pipeline, repos):
         meta_dir = Path(pipeline.models_dir) / "metadata"
         meta_dir.mkdir(parents=True, exist_ok=True)
-        mapping = [
-            {"repo_id": pipeline._stable_id(r), "index": i, "hash": ""}
-            for i, r in enumerate(repos)
-        ]
+        mapping = [{"repo_id": pipeline._stable_id(r), "index": i, "hash": ""} for i, r in enumerate(repos)]
         (meta_dir / "repo_mapping_latest.json").write_text(json.dumps(mapping))
 
     def test_first_run_no_mapping_returns_true(self, pipeline, sample_repos):
@@ -138,12 +146,12 @@ class TestCheckForNewData:
         assert has_new is False
 
     def test_added_repo_detected(self, pipeline, sample_repos):
-        self._write_mapping(pipeline, sample_repos[:2])   # previous: 2 repos
+        self._write_mapping(pipeline, sample_repos[:2])  # previous: 2 repos
         has_new, _ = pipeline.check_for_new_data(sample_repos)  # current: 3
         assert has_new is True
 
     def test_removed_repo_detected(self, pipeline, sample_repos):
-        self._write_mapping(pipeline, sample_repos)        # previous: 3 repos
+        self._write_mapping(pipeline, sample_repos)  # previous: 3 repos
         has_new, _ = pipeline.check_for_new_data(sample_repos[:2])  # current: 2
         assert has_new is True
 
@@ -159,6 +167,7 @@ class TestCheckForNewData:
 # 3. Unit: upload_all mapping deduplication
 # ============================================================
 
+
 class TestUploadAllMappingDeduplication:
     """EmbeddingUploader.upload_all must skip duplicate repo_ids in the local mapping."""
 
@@ -171,14 +180,16 @@ class TestUploadAllMappingDeduplication:
         embeddings = np.random.rand(3, 4).astype(np.float32)
         mapping = [
             {"repo_id": "repo-1", "index": 0, "hash": "aaa", "full_name": None},
-            {"repo_id": "repo-1", "index": 0, "hash": "aaa", "full_name": None},   # dup
+            {"repo_id": "repo-1", "index": 0, "hash": "aaa", "full_name": None},  # dup
             {"repo_id": "repo-2", "index": 1, "hash": "bbb", "full_name": None},
         ]
         metadata = {"model_name": "test", "timestamp": "20260101"}
 
-        with patch.object(uploader, "load_embeddings", return_value=(embeddings, mapping, metadata)), \
-             patch.object(uploader, "ensure_collection"), \
-             patch.object(uploader, "upload_batch", return_value={"status": "ok"}) as mock_upload:
+        with (
+            patch.object(uploader, "load_embeddings", return_value=(embeddings, mapping, metadata)),
+            patch.object(uploader, "ensure_collection"),
+            patch.object(uploader, "upload_batch", return_value={"status": "ok"}) as mock_upload,
+        ):
             uploader.upload_all(collection="col", batch_size=100)
 
         uploaded_ids = [p["id"] for p in self._collected_points(mock_upload)]
@@ -190,14 +201,16 @@ class TestUploadAllMappingDeduplication:
         uploader = _make_uploader()
         embeddings = np.random.rand(2, 4).astype(np.float32)
         mapping = [
-            {"repo_id": "",       "index": 0, "hash": "", "full_name": None},   # empty → skip
+            {"repo_id": "", "index": 0, "hash": "", "full_name": None},  # empty → skip
             {"repo_id": "repo-1", "index": 1, "hash": "", "full_name": None},
         ]
         metadata = {"model_name": "test", "timestamp": "20260101"}
 
-        with patch.object(uploader, "load_embeddings", return_value=(embeddings, mapping, metadata)), \
-             patch.object(uploader, "ensure_collection"), \
-             patch.object(uploader, "upload_batch", return_value={"status": "ok"}) as mock_upload:
+        with (
+            patch.object(uploader, "load_embeddings", return_value=(embeddings, mapping, metadata)),
+            patch.object(uploader, "ensure_collection"),
+            patch.object(uploader, "upload_batch", return_value={"status": "ok"}) as mock_upload,
+        ):
             uploader.upload_all(collection="col", batch_size=100)
 
         pts = self._collected_points(mock_upload)
@@ -208,14 +221,16 @@ class TestUploadAllMappingDeduplication:
         uploader = _make_uploader()
         embeddings = np.random.rand(1, 4).astype(np.float32)
         mapping = [
-            {"repo_id": "repo-1", "index": 0,  "hash": "", "full_name": None},
-            {"repo_id": "repo-2", "index": 99, "hash": "", "full_name": None},   # OOB
+            {"repo_id": "repo-1", "index": 0, "hash": "", "full_name": None},
+            {"repo_id": "repo-2", "index": 99, "hash": "", "full_name": None},  # OOB
         ]
         metadata = {"model_name": "test", "timestamp": "20260101"}
 
-        with patch.object(uploader, "load_embeddings", return_value=(embeddings, mapping, metadata)), \
-             patch.object(uploader, "ensure_collection"), \
-             patch.object(uploader, "upload_batch", return_value={"status": "ok"}) as mock_upload:
+        with (
+            patch.object(uploader, "load_embeddings", return_value=(embeddings, mapping, metadata)),
+            patch.object(uploader, "ensure_collection"),
+            patch.object(uploader, "upload_batch", return_value={"status": "ok"}) as mock_upload,
+        ):
             uploader.upload_all(collection="col", batch_size=100)
 
         pts = self._collected_points(mock_upload)
@@ -230,13 +245,15 @@ class TestUploadAllMappingDeduplication:
         mapping = [{"repo_id": f"r{i}", "index": i, "hash": "", "full_name": None} for i in range(n)]
         metadata = {"model_name": "test", "timestamp": "20260101"}
 
-        with patch.object(uploader, "load_embeddings", return_value=(embeddings, mapping, metadata)), \
-             patch.object(uploader, "ensure_collection"), \
-             patch.object(uploader, "upload_batch", return_value={"status": "ok"}) as mock_upload, \
-             patch("time.sleep"):
+        with (
+            patch.object(uploader, "load_embeddings", return_value=(embeddings, mapping, metadata)),
+            patch.object(uploader, "ensure_collection"),
+            patch.object(uploader, "upload_batch", return_value={"status": "ok"}) as mock_upload,
+            patch("time.sleep"),
+        ):
             uploader.upload_all(collection="col", batch_size=2)
 
-        assert mock_upload.call_count == 3   # ceil(5/2)
+        assert mock_upload.call_count == 3  # ceil(5/2)
 
 
 # ============================================================
@@ -251,12 +268,13 @@ class TestUploadAllMappingDeduplication:
 #   upload_all():       scroll Qdrant for existing IDs, filter points before upload
 # ============================================================
 
+
 class TestQdrantPreCheckBeforeEmbedding:
     """Documents the gap: embed is called for repos already in Qdrant."""
 
     @pytest.mark.xfail(
         reason="Gap: train_embeddings encodes ALL repos without pre-checking Qdrant. "
-               "Fix: filter already-indexed repo_ids before calling model.encode().",
+        "Fix: filter already-indexed repo_ids before calling model.encode().",
         strict=True,
     )
     def test_already_indexed_repos_not_re_embedded(self, pipeline, sample_repos):
@@ -265,9 +283,12 @@ class TestQdrantPreCheckBeforeEmbedding:
         should only encode repo-3 (1 text). Currently encodes all 3.
         """
         mock_model = MagicMock()
-        mock_model.encode.return_value = np.random.rand(1, 384)   # only 1 expected
+        mock_model.encode.return_value = np.random.rand(1, 384)  # only 1 expected
 
-        with patch("src.recommender.training.pipelines.embedding_indexing_pipeline.SentenceTransformer", return_value=mock_model):
+        with patch(
+            "src.recommender.training.pipelines.embedding_indexing_pipeline.SentenceTransformer",
+            return_value=mock_model,
+        ):
             pipeline.train_embeddings(repositories=sample_repos, model_name="m", batch_size=32)
 
         encoded_texts = mock_model.encode.call_args[0][0]
@@ -278,7 +299,7 @@ class TestQdrantPreCheckBeforeEmbedding:
 
     @pytest.mark.xfail(
         reason="Gap: upload_all upserts all points without pre-checking Qdrant IDs. "
-               "Fix: scroll Qdrant for existing IDs and filter before upload.",
+        "Fix: scroll Qdrant for existing IDs and filter before upload.",
         strict=True,
     )
     def test_upload_skips_already_indexed_ids(self):
@@ -289,14 +310,16 @@ class TestQdrantPreCheckBeforeEmbedding:
         uploader = _make_uploader()
         embeddings = np.random.rand(2, 4).astype(np.float32)
         mapping = [
-            {"repo_id": "repo-1", "index": 0, "hash": "aaa", "full_name": None},   # exists in Qdrant
-            {"repo_id": "repo-2", "index": 1, "hash": "bbb", "full_name": None},   # new
+            {"repo_id": "repo-1", "index": 0, "hash": "aaa", "full_name": None},  # exists in Qdrant
+            {"repo_id": "repo-2", "index": 1, "hash": "bbb", "full_name": None},  # new
         ]
         metadata = {"model_name": "test", "timestamp": "20260101"}
 
-        with patch.object(uploader, "load_embeddings", return_value=(embeddings, mapping, metadata)), \
-             patch.object(uploader, "ensure_collection"), \
-             patch.object(uploader, "upload_batch", return_value={"status": "ok"}) as mock_upload:
+        with (
+            patch.object(uploader, "load_embeddings", return_value=(embeddings, mapping, metadata)),
+            patch.object(uploader, "ensure_collection"),
+            patch.object(uploader, "upload_batch", return_value={"status": "ok"}) as mock_upload,
+        ):
             uploader.upload_all(collection="col", batch_size=100)
 
         uploaded_ids = [p["id"] for c in mock_upload.call_args_list for p in c[0][1]]
@@ -308,40 +331,42 @@ class TestQdrantPreCheckBeforeEmbedding:
 # 5. E2E: Second pipeline run with identical data is skipped
 # ============================================================
 
+
 class TestSkipRunOnIdenticalData:
     """Second run with the same repo set must not invoke train_embeddings."""
 
     def _write_mapping(self, pipeline, repos):
         meta_dir = Path(pipeline.models_dir) / "metadata"
         meta_dir.mkdir(parents=True, exist_ok=True)
-        mapping = [
-            {"repo_id": pipeline._stable_id(r), "index": i, "hash": ""}
-            for i, r in enumerate(repos)
-        ]
+        mapping = [{"repo_id": pipeline._stable_id(r), "index": i, "hash": ""} for i, r in enumerate(repos)]
         (meta_dir / "repo_mapping_latest.json").write_text(json.dumps(mapping))
 
     def test_second_run_skips_embedding(self, pipeline, sample_repos):
         self._write_mapping(pipeline, sample_repos)
 
-        with patch.object(pipeline, "fetch_repositories", return_value=sample_repos), \
-             patch.object(pipeline, "train_embeddings") as mock_train, \
-             patch.object(pipeline, "save_data_cache"), \
-             patch.object(pipeline, "save_model"), \
-             patch.object(pipeline, "register_model"), \
-             patch.object(pipeline, "upload_to_qdrant"):
+        with (
+            patch.object(pipeline, "fetch_repositories", return_value=sample_repos),
+            patch.object(pipeline, "train_embeddings") as mock_train,
+            patch.object(pipeline, "save_data_cache"),
+            patch.object(pipeline, "save_model"),
+            patch.object(pipeline, "register_model"),
+            patch.object(pipeline, "upload_to_qdrant"),
+        ):
             pipeline.run(skip_if_no_new_data=True)
 
         mock_train.assert_not_called()
 
     def test_new_repo_triggers_full_retrain(self, pipeline, sample_repos):
-        self._write_mapping(pipeline, sample_repos[:2])   # only 2 previously
+        self._write_mapping(pipeline, sample_repos[:2])  # only 2 previously
 
-        with patch.object(pipeline, "fetch_repositories", return_value=sample_repos), \
-             patch.object(pipeline, "train_embeddings", return_value=_fake_pipeline_result()) as mock_train, \
-             patch.object(pipeline, "save_data_cache"), \
-             patch.object(pipeline, "save_model"), \
-             patch.object(pipeline, "register_model"), \
-             patch.object(pipeline, "upload_to_qdrant"):
+        with (
+            patch.object(pipeline, "fetch_repositories", return_value=sample_repos),
+            patch.object(pipeline, "train_embeddings", return_value=_fake_pipeline_result()) as mock_train,
+            patch.object(pipeline, "save_data_cache"),
+            patch.object(pipeline, "save_model"),
+            patch.object(pipeline, "register_model"),
+            patch.object(pipeline, "upload_to_qdrant"),
+        ):
             pipeline.run(skip_if_no_new_data=True)
 
         mock_train.assert_called_once()
@@ -350,12 +375,14 @@ class TestSkipRunOnIdenticalData:
         """With skip_if_no_new_data=False, train even when nothing changed."""
         self._write_mapping(pipeline, sample_repos)
 
-        with patch.object(pipeline, "fetch_repositories", return_value=sample_repos), \
-             patch.object(pipeline, "train_embeddings", return_value=_fake_pipeline_result()) as mock_train, \
-             patch.object(pipeline, "save_data_cache"), \
-             patch.object(pipeline, "save_model"), \
-             patch.object(pipeline, "register_model"), \
-             patch.object(pipeline, "upload_to_qdrant"):
+        with (
+            patch.object(pipeline, "fetch_repositories", return_value=sample_repos),
+            patch.object(pipeline, "train_embeddings", return_value=_fake_pipeline_result()) as mock_train,
+            patch.object(pipeline, "save_data_cache"),
+            patch.object(pipeline, "save_model"),
+            patch.object(pipeline, "register_model"),
+            patch.object(pipeline, "upload_to_qdrant"),
+        ):
             pipeline.run(skip_if_no_new_data=False)
 
         mock_train.assert_called_once()
@@ -364,6 +391,7 @@ class TestSkipRunOnIdenticalData:
 # ============================================================
 # 6. Integration: embed_batch / embed_text pass texts unchanged
 # ============================================================
+
 
 class TestEmbedServiceNoDuplication:
     """EmbeddingService must pass texts to model.encode exactly as received."""
@@ -428,6 +456,7 @@ class TestEmbedServiceNoDuplication:
 #   3. Cross-run:  prev_ids from repo_mapping_latest.json skips already-indexed repos
 # ============================================================
 
+
 class TestChunkedPipelineDeduplication:
     """Deduplication behaviour for the streaming chunked pipeline."""
 
@@ -440,7 +469,7 @@ class TestChunkedPipelineDeduplication:
         for r in chunk1:
             seen_ids.add(pipeline._stable_id(r))
 
-        chunk2 = [{"_id": "repo-1"}, {"_id": "repo-3"}]    # repo-1 reappears
+        chunk2 = [{"_id": "repo-1"}, {"_id": "repo-3"}]  # repo-1 reappears
         chunk2_filtered = [r for r in chunk2 if pipeline._stable_id(r) not in seen_ids]
 
         assert len(chunk2_filtered) == 1
@@ -463,7 +492,7 @@ class TestChunkedPipelineDeduplication:
         for chunk in [
             [{"_id": "a"}, {"_id": "b"}],
             [{"_id": "c"}],
-            [{"_id": "a"}],    # a already seen
+            [{"_id": "a"}],  # a already seen
         ]:
             new = [r for r in chunk if pipeline._stable_id(r) not in seen_ids]
             for r in new:
@@ -496,8 +525,10 @@ class TestChunkedPipelineDeduplication:
             "20260219_000000",
         )
         pipeline._save_mapping(
-            [{"repo_id": "new-a", "index": 0, "hash": "", "full_name": None},
-             {"repo_id": "new-b", "index": 1, "hash": "", "full_name": None}],
+            [
+                {"repo_id": "new-a", "index": 0, "hash": "", "full_name": None},
+                {"repo_id": "new-b", "index": 1, "hash": "", "full_name": None},
+            ],
             "20260219_000001",
         )
 
@@ -510,13 +541,13 @@ class TestChunkedPipelineDeduplication:
         """_dedupe_repositories in chunked mode is identical to run() — same method."""
         repos = [
             {"_id": "abc", "name": "repo-a"},
-            {"_id": "abc", "name": "repo-a-duplicate"},   # same _id → drop
+            {"_id": "abc", "name": "repo-a-duplicate"},  # same _id → drop
             {"full_name": "org/repo-b"},
         ]
         result = pipeline._dedupe_repositories(repos)
 
         assert len(result) == 2
-        assert result[0]["name"] == "repo-a"       # first occurrence kept
+        assert result[0]["name"] == "repo-a"  # first occurrence kept
         assert result[1]["full_name"] == "org/repo-b"
 
     def test_run_chunked_skips_all_chunks_when_no_new_repos(self, pipeline, sample_repos):
@@ -524,18 +555,17 @@ class TestChunkedPipelineDeduplication:
         # Write prev mapping covering all sample repos
         meta_dir = Path(pipeline.models_dir) / "metadata"
         meta_dir.mkdir(parents=True, exist_ok=True)
-        prev_mapping = [
-            {"repo_id": pipeline._stable_id(r), "index": i, "hash": ""}
-            for i, r in enumerate(sample_repos)
-        ]
+        prev_mapping = [{"repo_id": pipeline._stable_id(r), "index": i, "hash": ""} for i, r in enumerate(sample_repos)]
         (meta_dir / "repo_mapping_latest.json").write_text(json.dumps(prev_mapping))
 
         fake_embed = MagicMock(return_value=np.zeros((0, 384), dtype=np.float32))
 
-        with patch.object(pipeline, "_get_total_count", return_value=3), \
-             patch.object(pipeline, "_fetch_batch", return_value=sample_repos), \
-             patch.object(pipeline, "_embed_chunk_parallel", fake_embed) as mock_embed, \
-             patch.object(pipeline, "_save_mapping") as mock_save_mapping:
+        with (
+            patch.object(pipeline, "_get_total_count", return_value=3),
+            patch.object(pipeline, "_fetch_batch", return_value=sample_repos),
+            patch.object(pipeline, "_embed_chunk_parallel", fake_embed) as mock_embed,
+            patch.object(pipeline, "_save_mapping") as mock_save_mapping,
+        ):
             pipeline.run_chunked(
                 chunk_size=100_000,
                 max_repos=3,
@@ -552,8 +582,7 @@ class TestChunkedPipelineDeduplication:
         meta_dir.mkdir(parents=True, exist_ok=True)
         # Only repo-1 and repo-2 exist from last run
         prev_mapping = [
-            {"repo_id": pipeline._stable_id(r), "index": i, "hash": ""}
-            for i, r in enumerate(sample_repos[:2])
+            {"repo_id": pipeline._stable_id(r), "index": i, "hash": ""} for i, r in enumerate(sample_repos[:2])
         ]
         (meta_dir / "repo_mapping_latest.json").write_text(json.dumps(prev_mapping))
 
@@ -567,12 +596,16 @@ class TestChunkedPipelineDeduplication:
         fake_uploader.upload_batch.return_value = {"status": "ok"}
         fake_uploader.ensure_collection.return_value = None
 
-        with patch.object(pipeline, "_get_total_count", return_value=3), \
-             patch.object(pipeline, "_fetch_batch", return_value=sample_repos), \
-             patch.object(pipeline, "_embed_chunk_parallel", side_effect=fake_embed), \
-             patch("src.recommender.training.pipelines.embedding_indexing_pipeline.SentenceTransformer"), \
-             patch("src.recommender.training.pipelines.embedding_indexing_pipeline.EmbeddingUploader",
-                   return_value=fake_uploader):
+        with (
+            patch.object(pipeline, "_get_total_count", return_value=3),
+            patch.object(pipeline, "_fetch_batch", return_value=sample_repos),
+            patch.object(pipeline, "_embed_chunk_parallel", side_effect=fake_embed),
+            patch("src.recommender.training.pipelines.embedding_indexing_pipeline.SentenceTransformer"),
+            patch(
+                "src.recommender.training.pipelines.embedding_indexing_pipeline.EmbeddingUploader",
+                return_value=fake_uploader,
+            ),
+        ):
             pipeline.run_chunked(
                 chunk_size=100_000,
                 max_repos=3,

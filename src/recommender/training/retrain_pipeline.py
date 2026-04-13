@@ -88,9 +88,7 @@ def _purge_qdrant_collection(api_url: str, api_key: str, collection: str) -> Non
 async def main() -> None:
     api_url = os.environ["API_BASE_URL"]
     api_key = os.environ["APIKEY_MONGODB"]
-    recommender_url = os.getenv(
-        "RECOMMENDER_URL", "http://git-query-recommender:8095"
-    ).rstrip("/")
+    recommender_url = os.getenv("RECOMMENDER_URL", "http://git-query-recommender:8095").rstrip("/")
     qdrant_api_key = os.getenv("APIKEY_QDRANT", api_key)
     models_dir = os.getenv("MODELS_DIR", "/app/models")
     # Keep config-driven trainers aligned with orchestrator model directory.
@@ -118,9 +116,7 @@ async def main() -> None:
     await EmbeddingIndexingPipeline(
         api_base_url=api_url,
         api_key=api_key,
-        model_name=os.getenv(
-            "EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
-        ),
+        model_name=os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"),
         models_dir=models_dir,
         data_cache_dir=os.getenv("DATA_CACHE_DIR", "/app/training_data"),
         batch_size=int(os.getenv("BATCH_SIZE", "32")),
@@ -142,8 +138,8 @@ async def main() -> None:
 
     logger.info("=== Step 2: LightGBM reranker ===")
 
-    from training.pipelines.reranker_lgbm_pipeline import RerankerLGBMPipeline
     from mlops.mlflow_tracker import MLflowTracker
+    from training.pipelines.reranker_lgbm_pipeline import RerankerLGBMPipeline
 
     tracker = MLflowTracker(
         tracking_uri=os.getenv("MLFLOW_TRACKING_URI", "file:///app/mlruns"),
@@ -161,22 +157,54 @@ async def main() -> None:
         candidates_per_query=int(os.getenv("LGBM_CANDIDATES_PER_QUERY", "100")),
         tracker=tracker,
     )
+    from mlops.model_promoter import ModelPromoter
+
     with tracker.start_run(run_name="lgbm-retrain"):
         lgbm_result = await pipeline.run()
 
-    model_id = lgbm_result.get("model_id") if isinstance(lgbm_result, dict) else None
-    if model_id:
-        promote_url = f"{recommender_url}/admin/models/promote/{model_id}"
-        if _post_non_fatal(promote_url):
-            logger.info("Promoted reranker model %s", model_id)
+        model_id = lgbm_result.get("model_id") if isinstance(lgbm_result, dict) else None
+        model_path = lgbm_result.get("model_path") if isinstance(lgbm_result, dict) else None
 
-        reload_url = f"{recommender_url}/admin/models/reload"
-        if _post_non_fatal(reload_url):
-            logger.info("Triggered recommender model reload")
-    else:
-        logger.warning(
-            "No model_id returned by RerankerLGBMPipeline; skipping promote/reload"
-        )
+        if model_id:
+            run_id = tracker.get_run_id()
+
+            # Log training metrics from the main thread — LGBMRanker.train() runs in
+            # a thread-pool executor where MLflow's thread-local run context is absent,
+            # so metrics logged there are silently dropped. Re-logging here guarantees
+            # they appear in the UI.
+            candidate_metrics = {k: float(v) for k, v in lgbm_result.items() if isinstance(v, (int, float))}
+            tracker.log_metrics(candidate_metrics)
+            tracker.log_params({"model_id": model_id, "variant": "default"})
+
+            # Log model artifact and register in MLflow Model Registry as Staging
+            mlflow_version = None
+            if run_id and model_path and Path(model_path).exists():
+                artifact_subpath = "models"
+                tracker.log_artifact(model_path, artifact_subpath)
+                mlflow_version = tracker.register_model_version(
+                    run_id=run_id,
+                    model_name="git-query-lgbm-reranker",
+                    artifact_path=f"{artifact_subpath}/{Path(model_path).name}",
+                )
+
+            # Champion/challenger: promote only if better than current production
+            promoter = ModelPromoter(
+                recommender_url=recommender_url,
+                mlflow_tracker=tracker,
+            )
+            promoted = promoter.promote_if_better(
+                candidate_model_id=model_id,
+                candidate_metrics=candidate_metrics,
+                candidate_mlflow_version=mlflow_version,
+            )
+            tracker.set_tag("promoted", str(promoted))
+            tracker.set_tag("mlflow_version", str(mlflow_version) if mlflow_version else "none")
+            if promoted:
+                logger.info("Model %s promoted to production", model_id)
+            else:
+                logger.info("Model %s did not improve on production — kept as candidate", model_id)
+        else:
+            logger.warning("No model_id returned by RerankerLGBMPipeline; skipping promote/reload")
 
     logger.info("LightGBM training complete.")
     logger.info("Full retraining pipeline complete.")

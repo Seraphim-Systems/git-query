@@ -27,9 +27,7 @@ class DatabaseConfig:
             f"http://{os.getenv('QDRANT_HOST', 'localhost')}:{os.getenv('QDRANT_HTTP_PORT', '6333')}",
         )
 
-        qdrant_api_key = getattr(settings, "qdrant_api_key", None) or os.getenv(
-            "QDRANT_API_KEY"
-        )
+        qdrant_api_key = getattr(settings, "qdrant_api_key", None) or os.getenv("QDRANT_API_KEY")
 
         return cls(
             mongodb_url=mongodb_url,
@@ -67,9 +65,7 @@ class DatabaseClients:
         if self._qdrant_client is None and self.config.qdrant_url:
             from qdrant_client import QdrantClient
 
-            self._qdrant_client = QdrantClient(
-                url=self.config.qdrant_url, api_key=self.config.qdrant_api_key
-            )
+            self._qdrant_client = QdrantClient(url=self.config.qdrant_url, api_key=self.config.qdrant_api_key)
         return self._qdrant_client
 
     @property

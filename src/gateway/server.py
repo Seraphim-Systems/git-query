@@ -141,9 +141,7 @@ async def _seed_admin_user(user_service) -> None:
         )
         logger.info("Admin seed user created: %s (%s)", email, username)
     except DuplicateKeyError:
-        logger.info(
-            "Admin seed user already exists (duplicate key): %s (%s)", email, username
-        )
+        logger.info("Admin seed user already exists (duplicate key): %s (%s)", email, username)
 
 
 @asynccontextmanager
@@ -173,12 +171,8 @@ async def lifespan(app_instance: FastAPI):
     }
 
     # Initialize services
-    app_instance.state.session_manager = SessionManager(
-        redis_async, ttl=settings.session_ttl
-    )
-    app_instance.state.user_service = UserService(
-        app_instance.state.mongodb, redis_async
-    )
+    app_instance.state.session_manager = SessionManager(redis_async, ttl=settings.session_ttl)
+    app_instance.state.user_service = UserService(app_instance.state.mongodb, redis_async)
     logger.info("Services initialized (gateway async + shared sync clients)")
 
     # Seed admin user if configured (idempotent – skipped if user already exists)
@@ -240,9 +234,7 @@ async def global_exception_handler(_request: Request, exc: Exception):
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     """Return simple JSON for HTTP errors and log details (including 404)."""
     # Log 404s as warnings with request context; log other HTTP errors at info level
-    msg = (
-        f"HTTP {exc.status_code} on {request.method} {request.url.path} - {exc.detail}"
-    )
+    msg = f"HTTP {exc.status_code} on {request.method} {request.url.path} - {exc.detail}"
     if exc.status_code == 404:
         logger.warning(msg)
     else:
@@ -265,9 +257,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     # Preserve any headers the original exception carried (e.g., WWW-Authenticate)
     headers = getattr(exc, "headers", None)
     if headers:
-        return JSONResponse(
-            status_code=exc.status_code, content=content, headers=headers
-        )
+        return JSONResponse(status_code=exc.status_code, content=content, headers=headers)
 
     return JSONResponse(status_code=exc.status_code, content=content)
 
@@ -277,12 +267,8 @@ app.include_router(health.router)
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(chat.router, prefix="/chat", tags=["Chat"])
 app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
-app.include_router(
-    recommendations.router, prefix="/recommend", tags=["Recommendations"]
-)
-app.include_router(
-    recommendations.router, prefix="/api/recommend", tags=["Recommendations"]
-)
+app.include_router(recommendations.router, prefix="/recommend", tags=["Recommendations"])
+app.include_router(recommendations.router, prefix="/api/recommend", tags=["Recommendations"])
 app.include_router(user.router, prefix="/user", tags=["User"])
 
 # Mount the storage routers under `/api` so DB endpoints are served by the
@@ -335,11 +321,7 @@ async def proxy_frontend(path: str, request: Request):
     target = f"{web_url}{full_path}"
 
     # Forward headers except host (rewritten by httpx to the target host)
-    forward_headers = {
-        k: v
-        for k, v in request.headers.items()
-        if k.lower() not in ("host", "content-length")
-    }
+    forward_headers = {k: v for k, v in request.headers.items() if k.lower() not in ("host", "content-length")}
 
     async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
         try:

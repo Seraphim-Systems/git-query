@@ -220,9 +220,7 @@ class LGBMRanker:
 
             # --- Dot-product labels from interaction profile ---
             if has_interaction_col:
-                interaction_scores = pd.to_numeric(
-                    grp["interaction_score"], errors="coerce"
-                ).fillna(0.0).values
+                interaction_scores = pd.to_numeric(grp["interaction_score"], errors="coerce").fillna(0.0).values
                 pos_mask = interaction_scores > 0
                 if pos_mask.sum() >= 3:
                     # Interaction profile = weighted mean of positively interacted repo features
@@ -238,9 +236,7 @@ class LGBMRanker:
 
                     dot_scores = feat_norm @ profile  # shape: (n_repos,)
                     threshold_dot = np.percentile(dot_scores, 60)  # top 40% = relevant
-                    rel = pd.Series(
-                        (dot_scores >= threshold_dot).astype(int), index=grp.index
-                    )
+                    rel = pd.Series((dot_scores >= threshold_dot).astype(int), index=grp.index)
                     dot_product_groups += 1
 
             feature_frames.append(feats)
@@ -250,7 +246,8 @@ class LGBMRanker:
         if has_interaction_col:
             logger.info(
                 "Dot-product labels used for %d / %d query groups; star fallback for the rest",
-                dot_product_groups, len(group_sizes),
+                dot_product_groups,
+                len(group_sizes),
             )
 
         X = pd.concat(feature_frames, axis=0).reset_index(drop=True)
@@ -414,9 +411,7 @@ class LGBMRanker:
 
         # --- MLflow logging ---
         if tracker is not None:
-            loggable_params: dict[str, Any] = {
-                k: v for k, v in self.params.items() if not isinstance(v, list)
-            }
+            loggable_params: dict[str, Any] = {k: v for k, v in self.params.items() if not isinstance(v, list)}
             loggable_params["num_boost_rounds"] = num_boost_rounds
             loggable_params["early_stopping_rounds"] = early_stopping_rounds
             loggable_params["num_features"] = len(self.feature_cols)

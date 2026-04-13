@@ -1,0 +1,7 @@
+FROM python:3.11-slim
+
+RUN pip install --no-cache-dir "evidently==0.4.33"
+
+WORKDIR /app
+
+EXPOSE 8000

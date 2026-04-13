@@ -16,12 +16,7 @@ router = APIRouter(prefix="/repos", tags=["Repos"])
 
 def _normalize(doc: Dict[str, Any]) -> Dict[str, Any]:
     """Map raw Kaggle/MongoDB document fields to the display shape."""
-    full_name: str = (
-        doc.get("nameWithOwner")
-        or doc.get("full_name")
-        or doc.get("repo_id")
-        or str(doc.get("_id", ""))
-    )
+    full_name: str = doc.get("nameWithOwner") or doc.get("full_name") or doc.get("repo_id") or str(doc.get("_id", ""))
 
     # owner: stored as {login: "..."} in Kaggle data
     owner_raw = doc.get("owner", "")
@@ -30,9 +25,7 @@ def _normalize(doc: Dict[str, Any]) -> Dict[str, Any]:
     else:
         owner = owner_raw or (full_name.split("/")[0] if "/" in full_name else "Unknown")
 
-    name: str = doc.get("name") or (
-        full_name.split("/")[1] if "/" in full_name else full_name
-    )
+    name: str = doc.get("name") or (full_name.split("/")[1] if "/" in full_name else full_name)
 
     # language: stored as {name: "Python"} in Kaggle data; _augment_fields
     # copies it to `language` as-is (still an object).
@@ -70,10 +63,9 @@ async def lookup_repos(
 
     Body: ``{"repo_ids": ["owner/repo", ...]}``
 
-    Queries ``gitquery.raw_repositories`` by ``_id`` (which equals
-    ``nameWithOwner`` / ``repo_id`` written by kaggle_to_mongo.py).
-    Falls back to querying by the ``repo_id`` field for documents whose
-    ``_id`` was written differently.
+    Queries ``gitquery.repositories`` by ``_id`` (which equals
+    ``nameWithOwner`` / ``repo_id``) and falls back to querying by
+    the ``repo_id`` field for documents whose ``_id`` was written differently.
     """
     repo_ids: List[str] = body.get("repo_ids", [])
     if not repo_ids:
@@ -85,20 +77,16 @@ async def lookup_repos(
 
     try:
         db = mongo_client.get_database("gitquery")
-        coll = db.get_collection("raw_repositories")
+        coll = db.get_collection("repositories")
 
         # Primary lookup: _id field (set by kaggle_to_mongo to nameWithOwner)
-        docs: List[Dict[str, Any]] = list(
-            coll.find({"_id": {"$in": repo_ids}}, limit=len(repo_ids))
-        )
+        docs: List[Dict[str, Any]] = list(coll.find({"_id": {"$in": repo_ids}}, limit=len(repo_ids)))
 
         # Secondary lookup for any IDs not found by _id
         found_ids = {str(d["_id"]) for d in docs}
         missing = [rid for rid in repo_ids if rid not in found_ids]
         if missing:
-            extra = list(
-                coll.find({"repo_id": {"$in": missing}}, limit=len(missing))
-            )
+            extra = list(coll.find({"repo_id": {"$in": missing}}, limit=len(missing)))
             docs.extend(extra)
 
         # Preserve the original order from repo_ids

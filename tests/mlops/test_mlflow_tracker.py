@@ -205,3 +205,176 @@ class TestMLflowTrackerContextManager:
         with tracker.start_run(run_name="parent"):
             with tracker.start_run(run_name="child", nested=True):
                 pass  # Should not raise
+
+
+# ---------------------------------------------------------------------------
+# P4: register_model_version — full path with real MLflow file-store
+# ---------------------------------------------------------------------------
+
+
+class TestRegisterModelVersion:
+    def test_returns_none_when_mlflow_unavailable(self):
+        from src.recommender.mlops.mlflow_tracker import MLflowTracker
+
+        tracker = MLflowTracker(experiment_name="test")
+        tracker._client = None  # simulate unavailable
+
+        result = tracker.register_model_version(
+            run_id="fake-run-id",
+            model_name="test-model",
+            artifact_path="models/lgbm.pkl",
+        )
+
+        assert result is None
+
+    def test_returns_version_number_on_success(self, tmp_path):
+        from src.recommender.mlops.mlflow_tracker import MLFLOW_AVAILABLE, MLflowTracker
+
+        if not MLFLOW_AVAILABLE:
+            pytest.skip("MLflow not installed")
+
+        mock_client = MagicMock()
+        mock_mv = MagicMock()
+        mock_mv.version = "3"
+        mock_client.create_model_version.return_value = mock_mv
+
+        mock_run = MagicMock()
+        mock_run.info.artifact_uri = f"file://{tmp_path}/artifacts"
+        mock_client.get_run.return_value = mock_run
+
+        tracker = MLflowTracker(experiment_name="test", tracking_uri=str(tmp_path))
+        tracker._client = mock_client
+
+        version = tracker.register_model_version(
+            run_id="run-abc",
+            model_name="git-query-lgbm-reranker",
+            artifact_path="models/lgbm.pkl",
+        )
+
+        assert version == 3
+        mock_client.create_model_version.assert_called_once()
+        mock_client.transition_model_version_stage.assert_called_once_with(
+            name="git-query-lgbm-reranker", version="3", stage="Staging"
+        )
+
+    def test_builds_correct_source_uri(self, tmp_path):
+        from src.recommender.mlops.mlflow_tracker import MLFLOW_AVAILABLE, MLflowTracker
+
+        if not MLFLOW_AVAILABLE:
+            pytest.skip("MLflow not installed")
+
+        mock_client = MagicMock()
+        mock_mv = MagicMock()
+        mock_mv.version = "1"
+        mock_client.create_model_version.return_value = mock_mv
+
+        mock_run = MagicMock()
+        mock_run.info.artifact_uri = "file:///app/mlruns/123/abc/artifacts"
+        mock_client.get_run.return_value = mock_run
+
+        tracker = MLflowTracker(experiment_name="test", tracking_uri=str(tmp_path))
+        tracker._client = mock_client
+
+        tracker.register_model_version(
+            run_id="run-abc",
+            model_name="test-model",
+            artifact_path="models/lgbm.pkl",
+        )
+
+        call_kwargs = mock_client.create_model_version.call_args
+        source = call_kwargs.kwargs.get("source") or call_kwargs.args[1]
+        assert source == "file:///app/mlruns/123/abc/artifacts/models/lgbm.pkl"
+
+    def test_returns_none_on_client_exception(self, tmp_path):
+        from src.recommender.mlops.mlflow_tracker import MLFLOW_AVAILABLE, MLflowTracker
+
+        if not MLFLOW_AVAILABLE:
+            pytest.skip("MLflow not installed")
+
+        mock_client = MagicMock()
+        mock_client.get_run.side_effect = Exception("run not found")
+
+        tracker = MLflowTracker(experiment_name="test", tracking_uri=str(tmp_path))
+        tracker._client = mock_client
+
+        result = tracker.register_model_version(
+            run_id="bad-run",
+            model_name="test-model",
+            artifact_path="models/lgbm.pkl",
+        )
+
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# P4: get_production_metrics — no production model + normal path
+# ---------------------------------------------------------------------------
+
+
+class TestGetProductionMetrics:
+    def test_returns_empty_dict_when_mlflow_unavailable(self):
+        from src.recommender.mlops.mlflow_tracker import MLflowTracker
+
+        tracker = MLflowTracker(experiment_name="test")
+        tracker._client = None
+
+        result = tracker.get_production_metrics("test-model", ["mean_ndcg_at_10"])
+        assert result == {}
+
+    def test_returns_empty_dict_when_no_production_version(self):
+        from src.recommender.mlops.mlflow_tracker import MLFLOW_AVAILABLE, MLflowTracker
+
+        if not MLFLOW_AVAILABLE:
+            pytest.skip("MLflow not installed")
+
+        mock_client = MagicMock()
+        mock_client.get_latest_versions.return_value = []  # no Production version
+
+        tracker = MLflowTracker(experiment_name="test")
+        tracker._client = mock_client
+
+        result = tracker.get_production_metrics("git-query-lgbm-reranker", ["mean_ndcg_at_10"])
+
+        assert result == {}
+
+    def test_returns_requested_metrics_from_production_run(self):
+        from src.recommender.mlops.mlflow_tracker import MLFLOW_AVAILABLE, MLflowTracker
+
+        if not MLFLOW_AVAILABLE:
+            pytest.skip("MLflow not installed")
+
+        mock_client = MagicMock()
+        mock_version = MagicMock()
+        mock_version.run_id = "prod-run-123"
+        mock_client.get_latest_versions.return_value = [mock_version]
+
+        mock_run_data = MagicMock()
+        mock_run_data.data.metrics = {
+            "mean_ndcg_at_10": 0.82,
+            "std_ndcg_at_10": 0.05,
+            "unrelated_metric": 99.0,
+        }
+        mock_client.get_run.return_value = mock_run_data
+
+        tracker = MLflowTracker(experiment_name="test")
+        tracker._client = mock_client
+
+        result = tracker.get_production_metrics("git-query-lgbm-reranker", ["mean_ndcg_at_10", "std_ndcg_at_10"])
+
+        assert result == {"mean_ndcg_at_10": 0.82, "std_ndcg_at_10": 0.05}
+        assert "unrelated_metric" not in result
+
+    def test_returns_empty_dict_on_client_exception(self):
+        from src.recommender.mlops.mlflow_tracker import MLFLOW_AVAILABLE, MLflowTracker
+
+        if not MLFLOW_AVAILABLE:
+            pytest.skip("MLflow not installed")
+
+        mock_client = MagicMock()
+        mock_client.get_latest_versions.side_effect = Exception("mlflow down")
+
+        tracker = MLflowTracker(experiment_name="test")
+        tracker._client = mock_client
+
+        result = tracker.get_production_metrics("test-model", ["mean_ndcg_at_10"])
+        assert result == {}

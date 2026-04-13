@@ -126,7 +126,7 @@ Runs a read-only MongoDB query over repository-related collections.
 
 | Parameter    | Type    | Required | Description                                                       |
 | ------------ | ------- | -------- | ----------------------------------------------------------------- |
-| `collection` | string  | yes      | Collection name, e.g. `repositories`, `raw_repositories`, `users` |
+| `collection` | string  | yes      | Collection name, e.g. `repositories`, `users` |
 | `filters`    | object  | no       | MongoDB filter object                                             |
 | `projection` | array   | no       | List of fields to include                                         |
 | `sort_by`    | string  | no       | Field name for sorting                                            |

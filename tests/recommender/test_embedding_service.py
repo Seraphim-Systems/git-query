@@ -90,9 +90,7 @@ class TestLoadModel:
 
         svc, existing_model = _make_service("fake-model")
 
-        with patch(
-            "src.recommender.services.embedding_service.SentenceTransformer"
-        ) as MockST:
+        with patch("src.recommender.services.embedding_service.SentenceTransformer") as MockST:
             result = svc.load_model("fake-model")
 
         MockST.assert_not_called()
@@ -147,10 +145,13 @@ class TestLoadActiveModel:
         mock_registry = AsyncMock()
         mock_registry.get_active_model.return_value = None
 
-        with patch(
-            "src.recommender.services.registry_service.ModelRegistryService",  # noqa: SIM117
-            return_value=mock_registry,
-        ) as _MockReg, patch.object(svc, "load_model") as mock_load:
+        with (
+            patch(
+                "src.recommender.services.registry_service.ModelRegistryService",  # noqa: SIM117
+                return_value=mock_registry,
+            ) as _MockReg,
+            patch.object(svc, "load_model") as mock_load,
+        ):
             await svc.load_active_model()
 
         mock_load.assert_called_once_with("default-embed-model")
@@ -169,10 +170,13 @@ class TestLoadActiveModel:
         mock_registry = AsyncMock()
         mock_registry.get_active_model.return_value = active
 
-        with patch(
-            "src.recommender.services.registry_service.ModelRegistryService",
-            return_value=mock_registry,
-        ), patch.object(svc, "load_model") as mock_load:
+        with (
+            patch(
+                "src.recommender.services.registry_service.ModelRegistryService",
+                return_value=mock_registry,
+            ),
+            patch.object(svc, "load_model") as mock_load,
+        ):
             await svc.load_active_model()
 
         mock_load.assert_not_called()
@@ -195,15 +199,17 @@ class TestLoadActiveModel:
 
         full_path = os.path.join(settings.model_path, active.path)
 
-        with patch(
-            "src.recommender.services.registry_service.ModelRegistryService",
-            return_value=mock_registry,
-        ), patch(
-            "src.recommender.services.embedding_service.os.path.exists",
-            return_value=True,
-        ), patch.object(
-            svc, "load_model"
-        ) as mock_load:
+        with (
+            patch(
+                "src.recommender.services.registry_service.ModelRegistryService",
+                return_value=mock_registry,
+            ),
+            patch(
+                "src.recommender.services.embedding_service.os.path.exists",
+                return_value=True,
+            ),
+            patch.object(svc, "load_model") as mock_load,
+        ):
             await svc.load_active_model()
 
         mock_load.assert_called_once_with(full_path)
@@ -224,15 +230,17 @@ class TestLoadActiveModel:
         mock_registry = AsyncMock()
         mock_registry.get_active_model.return_value = active
 
-        with patch(
-            "src.recommender.services.registry_service.ModelRegistryService",
-            return_value=mock_registry,
-        ), patch(
-            "src.recommender.services.embedding_service.os.path.exists",
-            return_value=False,
-        ), patch.object(
-            svc, "load_model"
-        ) as mock_load:
+        with (
+            patch(
+                "src.recommender.services.registry_service.ModelRegistryService",
+                return_value=mock_registry,
+            ),
+            patch(
+                "src.recommender.services.embedding_service.os.path.exists",
+                return_value=False,
+            ),
+            patch.object(svc, "load_model") as mock_load,
+        ):
             await svc.load_active_model()
 
         mock_load.assert_called_once_with("default-embed-model")

@@ -49,12 +49,12 @@ class TestRerankerLGBMTrainer:
         with pytest.raises(ValueError, match="grouped_df"):
             await trainer.train({}, variant="default")
 
-    async def test_train_calls_lgbm_ranker_train(self):
+    async def test_train_calls_lgbm_ranker_train(self, tmp_path):
         from src.recommender.training.trainers.reranker_lgbm_trainer import (
             RerankerLGBMTrainer,
         )
 
-        mock_ranker, mock_registry, mock_settings = _make_mocks()
+        mock_ranker, mock_registry, _ = _make_mocks()
         training_data = {
             "grouped_df": _make_grouped_df(),
             "dataset_version": "20260101-abc",
@@ -62,25 +62,27 @@ class TestRerankerLGBMTrainer:
 
         with (
             patch(f"{_MODULE}.LGBMRanker", return_value=mock_ranker),
-            patch(f"{_MODULE}.ModelRegistryService", return_value=mock_registry),
-            patch(f"{_MODULE}.settings", mock_settings),
+            patch("src.recommender.services.registry_service.ModelRegistryService", return_value=mock_registry),
+            patch("src.recommender.models.ModelMetadata"),
+            patch.dict("os.environ", {"MODEL_PATH": str(tmp_path)}),
         ):
             await RerankerLGBMTrainer().train(training_data, variant="default")
 
         mock_ranker.train.assert_called_once()
 
-    async def test_train_saves_model(self):
+    async def test_train_saves_model(self, tmp_path):
         from src.recommender.training.trainers.reranker_lgbm_trainer import (
             RerankerLGBMTrainer,
         )
 
-        mock_ranker, mock_registry, mock_settings = _make_mocks()
+        mock_ranker, mock_registry, _ = _make_mocks()
         training_data = {"grouped_df": _make_grouped_df()}
 
         with (
             patch(f"{_MODULE}.LGBMRanker", return_value=mock_ranker),
-            patch(f"{_MODULE}.ModelRegistryService", return_value=mock_registry),
-            patch(f"{_MODULE}.settings", mock_settings),
+            patch("src.recommender.services.registry_service.ModelRegistryService", return_value=mock_registry),
+            patch("src.recommender.models.ModelMetadata"),
+            patch.dict("os.environ", {"MODEL_PATH": str(tmp_path)}),
         ):
             await RerankerLGBMTrainer().train(training_data, variant="default")
 
@@ -91,13 +93,13 @@ class TestRerankerLGBMTrainer:
             RerankerLGBMTrainer,
         )
 
-        mock_ranker, mock_registry, mock_settings = _make_mocks()
+        mock_ranker, mock_registry, _ = _make_mocks()
         training_data = {"grouped_df": _make_grouped_df()}
 
         with (
             patch(f"{_MODULE}.LGBMRanker", return_value=mock_ranker),
-            patch(f"{_MODULE}.ModelRegistryService", return_value=mock_registry),
-            patch(f"{_MODULE}.settings", mock_settings),
+            patch("src.recommender.services.registry_service.ModelRegistryService", return_value=mock_registry),
+            patch("src.recommender.models.ModelMetadata"),
         ):
             await RerankerLGBMTrainer(model_dir="/tmp/explicit-model-dir").train(
                 training_data,
@@ -107,42 +109,44 @@ class TestRerankerLGBMTrainer:
         save_path = mock_ranker.save.call_args.args[0]
         assert save_path.startswith("/tmp/explicit-model-dir")
 
-    async def test_train_calls_registry_register_model(self):
+    async def test_train_calls_registry_register_model(self, tmp_path):
         from src.recommender.training.trainers.reranker_lgbm_trainer import (
             RerankerLGBMTrainer,
         )
 
-        mock_ranker, mock_registry, mock_settings = _make_mocks()
+        mock_ranker, mock_registry, _ = _make_mocks()
         training_data = {"grouped_df": _make_grouped_df()}
 
         with (
             patch(f"{_MODULE}.LGBMRanker", return_value=mock_ranker),
-            patch(f"{_MODULE}.ModelRegistryService", return_value=mock_registry),
-            patch(f"{_MODULE}.settings", mock_settings),
+            patch("src.recommender.services.registry_service.ModelRegistryService", return_value=mock_registry),
+            patch("src.recommender.models.ModelMetadata"),
+            patch.dict("os.environ", {"MODEL_PATH": str(tmp_path)}),
         ):
             await RerankerLGBMTrainer().train(training_data, variant="default")
 
         mock_registry.register_model.assert_awaited_once()
 
-    async def test_train_returns_metrics(self):
+    async def test_train_returns_metrics(self, tmp_path):
         from src.recommender.training.trainers.reranker_lgbm_trainer import (
             RerankerLGBMTrainer,
         )
 
         expected_metrics = {"mean_ndcg_at_10": 0.85, "best_iteration": 200}
-        mock_ranker, mock_registry, mock_settings = _make_mocks(
-            metrics=expected_metrics
-        )
+        mock_ranker, mock_registry, _ = _make_mocks(metrics=expected_metrics)
         training_data = {"grouped_df": _make_grouped_df()}
 
         with (
             patch(f"{_MODULE}.LGBMRanker", return_value=mock_ranker),
-            patch(f"{_MODULE}.ModelRegistryService", return_value=mock_registry),
-            patch(f"{_MODULE}.settings", mock_settings),
+            patch("src.recommender.services.registry_service.ModelRegistryService", return_value=mock_registry),
+            patch("src.recommender.models.ModelMetadata"),
+            patch.dict("os.environ", {"MODEL_PATH": str(tmp_path)}),
         ):
             result = await RerankerLGBMTrainer().train(training_data, variant="default")
 
-        assert result == {**expected_metrics, "model_id": "model-123"}
+        assert result["mean_ndcg_at_10"] == pytest.approx(0.85)
+        assert result["best_iteration"] == 200
+        assert "model_id" in result
 
     async def test_train_propagates_lgbm_ranker_exception(self):
         """When LGBMRanker.train() raises, the exception propagates from the executor."""
@@ -150,14 +154,14 @@ class TestRerankerLGBMTrainer:
             RerankerLGBMTrainer,
         )
 
-        mock_ranker, mock_registry, mock_settings = _make_mocks()
+        mock_ranker, mock_registry, _ = _make_mocks()
         mock_ranker.train.side_effect = ValueError("bad training data")
         training_data = {"grouped_df": _make_grouped_df()}
 
         with (
             patch(f"{_MODULE}.LGBMRanker", return_value=mock_ranker),
-            patch(f"{_MODULE}.ModelRegistryService", return_value=mock_registry),
-            patch(f"{_MODULE}.settings", mock_settings),
+            patch("src.recommender.services.registry_service.ModelRegistryService", return_value=mock_registry),
+            patch("src.recommender.models.ModelMetadata"),
         ):
             with pytest.raises(ValueError, match="bad training data"):
                 await RerankerLGBMTrainer().train(training_data, variant="default")

@@ -38,8 +38,7 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 content={
                     "detail": (
-                        "API key required. Provide via 'X-API-Key: <key>' or "
-                        "'Authorization: Bearer <key>' header."
+                        "API key required. Provide via 'X-API-Key: <key>' or 'Authorization: Bearer <key>' header."
                     )
                 },
                 headers={"WWW-Authenticate": "Bearer"},
@@ -90,14 +89,10 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         # callers that pass a service argument.
         if service:
             service_map = {
-                "mongodb": getattr(settings, "mongodb_api_key", None)
-                or os.getenv("APIKEY_MONGODB"),
-                "redis": getattr(settings, "redis_api_key", None)
-                or os.getenv("APIKEY_REDIS"),
-                "qdrant": getattr(settings, "qdrant_api_key", None)
-                or os.getenv("APIKEY_QDRANT"),
-                "mcp": getattr(settings, "mcp_api_key", None)
-                or os.getenv("APIKEY_MCP"),
+                "mongodb": getattr(settings, "mongodb_api_key", None) or os.getenv("APIKEY_MONGODB"),
+                "redis": getattr(settings, "redis_api_key", None) or os.getenv("APIKEY_REDIS"),
+                "qdrant": getattr(settings, "qdrant_api_key", None) or os.getenv("APIKEY_QDRANT"),
+                "mcp": getattr(settings, "mcp_api_key", None) or os.getenv("APIKEY_MCP"),
             }
             expected = service_map.get(service)
             if expected:
@@ -107,11 +102,7 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
 
         # Filter out None/placeholder values
         # Filter out None/empty and placeholders
-        valid = [
-            k
-            for k in candidate_keys
-            if k and k not in {"", "change-me", "dev-local-key"}
-        ]
+        valid = [k for k in candidate_keys if k and k not in {"", "change-me", "dev-local-key"}]
 
         if not valid:
             logger.warning("No API keys configured in settings; rejecting all requests")

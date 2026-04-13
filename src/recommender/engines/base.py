@@ -22,9 +22,7 @@ class RecommendationEngine(ABC):
         self.version = version
 
     @abstractmethod
-    async def recommend(
-        self, request: RecommendationRequest
-    ) -> List[RepositoryResult]:
+    async def recommend(self, request: RecommendationRequest) -> List[RepositoryResult]:
         """
         Generate repository recommendations for a given request.
 
@@ -37,9 +35,7 @@ class RecommendationEngine(ABC):
         pass
 
     @abstractmethod
-    async def explain(
-        self, repo_id: str, request: RecommendationRequest
-    ) -> Dict[str, Any]:
+    async def explain(self, repo_id: str, request: RecommendationRequest) -> Dict[str, Any]:
         """
         Explain why a repository was recommended.
 
@@ -55,4 +51,3 @@ class RecommendationEngine(ABC):
     def get_metadata(self) -> Dict[str, str]:
         """Get engine metadata."""
         return {"name": self.name, "version": self.version}
-

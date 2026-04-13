@@ -49,16 +49,12 @@ class RerankerService:
                 return
 
             if active_model.model_id == self.current_model_id:
-                logger.info(
-                    "Reranker model %s is already loaded.", active_model.model_id
-                )
+                logger.info("Reranker model %s is already loaded.", active_model.model_id)
                 return
 
             # Load from path (prefer model files stored under settings.model_path)
             full_path = (
-                os.path.join(settings.model_path, active_model.path)
-                if getattr(active_model, "path", None)
-                else None
+                os.path.join(settings.model_path, active_model.path) if getattr(active_model, "path", None) else None
             )
             loop = asyncio.get_running_loop()
             if full_path and os.path.exists(full_path):
@@ -109,23 +105,17 @@ class RerankerService:
                         self.model_name,
                     )
                     loop = asyncio.get_running_loop()
-                    loaded_adapter = await loop.run_in_executor(
-                        None, self.load_model, self.model_name
-                    )
+                    loaded_adapter = await loop.run_in_executor(None, self.load_model, self.model_name)
                     if loaded_adapter is not None:
                         self._adapter = loaded_adapter
                         self.model = loaded_adapter
                         self._loaded_path = self.model_name
 
         if self._adapter is None:
-            raise RuntimeError(
-                "Reranker adapter is unavailable after lazy load attempt"
-            )
+            raise RuntimeError("Reranker adapter is unavailable after lazy load attempt")
 
         loop = asyncio.get_running_loop()
-        scores = await loop.run_in_executor(
-            None, self._adapter.score, query, candidates
-        )
+        scores = await loop.run_in_executor(None, self._adapter.score, query, candidates)
 
         for candidate, score in zip(candidates, scores):
             candidate.explanation = candidate.explanation or {}

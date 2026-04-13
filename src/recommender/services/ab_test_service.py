@@ -15,9 +15,7 @@ class ABTestService:
     Uses consistent hashing to assign users to variants.
     """
 
-    async def get_variant_for_user(
-        self, user_id: Optional[str], request_variant: Optional[str] = None
-    ) -> str:
+    async def get_variant_for_user(self, user_id: Optional[str], request_variant: Optional[str] = None) -> str:
         """
         Get the variant for a user.
 
@@ -83,4 +81,3 @@ class ABTestService:
 
         # Fallback (should not happen if traffic splits sum to 1)
         return ab_test.variants[0]
-

@@ -98,9 +98,7 @@ async def recommend_repositories(
 
     logger.info("Tool called: recommend_repositories(query=%s)", query)
     result = await mcp_client.execute_tool("recommend_repositories", params)
-    ctx.deps.tool_calls.append(
-        {"tool": "recommend_repositories", "parameters": params, "result": result}
-    )
+    ctx.deps.tool_calls.append({"tool": "recommend_repositories", "parameters": params, "result": result})
     return result
 
 
@@ -141,9 +139,7 @@ async def log_repository_interaction(
         interaction_type,
     )
     result = await mcp_client.execute_tool("log_repository_interaction", params)
-    ctx.deps.tool_calls.append(
-        {"tool": "log_repository_interaction", "parameters": params, "result": result}
-    )
+    ctx.deps.tool_calls.append({"tool": "log_repository_interaction", "parameters": params, "result": result})
     return result
 
 
@@ -198,9 +194,7 @@ async def query_repository_data(
 
     logger.info("Tool called: query_repository_data(collection=%s)", collection)
     result = await mcp_client.execute_tool("query_repository_data", params)
-    ctx.deps.tool_calls.append(
-        {"tool": "query_repository_data", "parameters": params, "result": result}
-    )
+    ctx.deps.tool_calls.append({"tool": "query_repository_data", "parameters": params, "result": result})
     return result
 
 
@@ -224,23 +218,15 @@ async def explain_repository(
 
     logger.info("Tool called: explain_repository(repo=%s)", full_name or repo_url)
     result = await mcp_client.execute_tool("explain_repository", params)
-    ctx.deps.tool_calls.append(
-        {"tool": "explain_repository", "parameters": params, "result": result}
-    )
+    ctx.deps.tool_calls.append({"tool": "explain_repository", "parameters": params, "result": result})
     return result
 
 
 @agent.tool
-async def get_recommendation(
-    ctx: RunContext[ChatbotDependencies], user_id: str, category: str = "general"
-) -> dict:
+async def get_recommendation(ctx: RunContext[ChatbotDependencies], user_id: str, category: str = "general") -> dict:
     """Get personalized recommendations for a user (legacy tool)."""
-    logger.info(
-        "Tool called: get_recommendation(user_id=%s, category=%s)", user_id, category
-    )
-    result = await mcp_client.execute_tool(
-        "get_recommendation", {"user_id": user_id, "category": category}
-    )
+    logger.info("Tool called: get_recommendation(user_id=%s, category=%s)", user_id, category)
+    result = await mcp_client.execute_tool("get_recommendation", {"user_id": user_id, "category": category})
     ctx.deps.tool_calls.append(
         {
             "tool": "get_recommendation",
@@ -252,14 +238,10 @@ async def get_recommendation(
 
 
 @agent.tool
-async def search_items(
-    ctx: RunContext[ChatbotDependencies], query: str, limit: int = 10
-) -> dict:
+async def search_items(ctx: RunContext[ChatbotDependencies], query: str, limit: int = 10) -> dict:
     """Search for items in the system (legacy tool)."""
     logger.info("Tool called: search_items(query=%s, limit=%d)", query, limit)
-    result = await mcp_client.execute_tool(
-        "search_items", {"query": query, "limit": limit}
-    )
+    result = await mcp_client.execute_tool("search_items", {"query": query, "limit": limit})
     ctx.deps.tool_calls.append(
         {
             "tool": "search_items",

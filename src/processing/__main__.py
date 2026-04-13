@@ -10,34 +10,26 @@ from multiprocessing import Process
 from processing.processor import DataProcessor
 from processing.config import settings
 
-logging.basicConfig(
-    level=settings.log_level,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=settings.log_level, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
 def run_health_server():
     """Run health check server in separate process"""
-    uvicorn.run(
-        "processing.server:app",
-        host="0.0.0.0",
-        port=8090,
-        log_level=settings.log_level.lower()
-    )
+    uvicorn.run("processing.server:app", host="0.0.0.0", port=8090, log_level=settings.log_level.lower())
 
 
 async def main():
     """Main processing loop"""
     logger.info("Starting Data Processing Service...")
-    
+
     # Start health check server in background
     health_process = Process(target=run_health_server)
     health_process.start()
     logger.info("Health check server started on port 8090")
-    
+
     processor = DataProcessor()
-    
+
     try:
         await processor.run()
     except KeyboardInterrupt:

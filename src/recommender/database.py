@@ -50,18 +50,13 @@ class DatabaseManager:
 
     async def _ensure_collections(self):
         """Ensure MongoDB indexes and Qdrant collection exist."""
-        await self.db[settings.interactions_collection].create_index(
-            [("user_id", 1), ("timestamp", -1)]
-        )
+        await self.db[settings.interactions_collection].create_index([("user_id", 1), ("timestamp", -1)])
         await self.db[settings.interactions_collection].create_index([("repo_id", 1)])
-        await self.db[settings.interactions_collection].create_index(
-            [("variant", 1), ("timestamp", -1)]
-        )
+        await self.db[settings.interactions_collection].create_index([("variant", 1), ("timestamp", -1)])
         await self.db[settings.user_prefs_collection].create_index([("user_id", 1)], unique=True)
 
-        # Repository text index — created on both collections so keyword search
-        # works whether raw or normalised data is active.
-        for collection_name in {settings.repos_collection, settings.raw_repos_collection}:
+        # Repository text index on the repositories collection.
+        for collection_name in {settings.repos_collection}:
             try:
                 await self.db[collection_name].create_index(
                     [
@@ -87,9 +82,7 @@ class DatabaseManager:
                 None,
                 lambda: self.qdrant_client.create_collection(
                     collection_name=settings.qdrant_repos_collection,
-                    vectors_config=VectorParams(
-                        size=settings.embedding_dimension, distance=Distance.COSINE
-                    ),
+                    vectors_config=VectorParams(size=settings.embedding_dimension, distance=Distance.COSINE),
                 ),
             )
 
@@ -104,19 +97,18 @@ class DatabaseManager:
 
     async def log_interaction(self, interaction: UserInteraction) -> str:
         """Log a user interaction."""
-        result = await self.db[settings.interactions_collection].insert_one(
-            interaction.model_dump()
-        )
+        result = await self.db[settings.interactions_collection].insert_one(interaction.model_dump())
         return str(result.inserted_id)
 
-    async def get_user_interactions(
-        self, user_id: str, limit: int = 100, days: int = 30
-    ) -> List[UserInteraction]:
+    async def get_user_interactions(self, user_id: str, limit: int = 100, days: int = 30) -> List[UserInteraction]:
         """Get recent interactions for a user."""
         cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-        cursor = self.db[settings.interactions_collection].find(
-            {"user_id": user_id, "timestamp": {"$gte": cutoff}}
-        ).sort("timestamp", -1).limit(limit)
+        cursor = (
+            self.db[settings.interactions_collection]
+            .find({"user_id": user_id, "timestamp": {"$gte": cutoff}})
+            .sort("timestamp", -1)
+            .limit(limit)
+        )
 
         interactions = []
         async for doc in cursor:
@@ -150,18 +142,9 @@ class DatabaseManager:
         limit: int = 100,
         skip: int = 0,
     ) -> List[Dict[str, Any]]:
-        """Search repositories with filters.
-
-        Queries repos_collection first; if empty falls back to
-        raw_repos_collection so Kaggle-imported data is always searchable.
-        """
-        for collection_name in [settings.repos_collection, settings.raw_repos_collection]:
-            cursor = (
-                self.db[collection_name]
-                .find(query_filter)
-                .skip(skip)
-                .limit(limit)
-            )
+        """Search repositories with filters."""
+        for collection_name in [settings.repos_collection]:
+            cursor = self.db[collection_name].find(query_filter).skip(skip).limit(limit)
             repos = []
             async for doc in cursor:
                 doc["_id"] = str(doc["_id"])
@@ -170,10 +153,8 @@ class DatabaseManager:
                 return repos
         return []
 
-    async def get_repositories_by_repo_ids(
-        self, repo_ids: List[str]
-    ) -> Dict[str, Any]:
-        """Fetch full repo metadata from raw_repositories by repo_id / _id.
+    async def get_repositories_by_repo_ids(self, repo_ids: List[str]) -> Dict[str, Any]:
+        """Fetch full repo metadata from repositories by repo_id / _id.
 
         Returns a mapping of repo_id → document for any IDs found.
         """
@@ -189,12 +170,12 @@ class DatabaseManager:
 
         docs: List[Dict[str, Any]] = []
         try:
-            cursor = self.db[settings.raw_repos_collection].find(query_filter).limit(len(repo_ids))
+            cursor = self.db[settings.repos_collection].find(query_filter).limit(len(repo_ids))
             async for doc in cursor:
                 doc["_id"] = str(doc["_id"])
                 docs.append(doc)
         except Exception as exc:
-            logger.warning("raw_repositories lookup failed: %s", exc)
+            logger.warning("repositories lookup failed: %s", exc)
             return {}
 
         result_map: Dict[str, Any] = {}
@@ -253,9 +234,7 @@ class DatabaseManager:
         if not settings.enable_cache:
             return
         ttl = ttl or settings.cache_ttl_seconds
-        await self.redis_client.setex(
-            f"reco:{key}", ttl, json.dumps(value, default=str)
-        )
+        await self.redis_client.setex(f"reco:{key}", ttl, json.dumps(value, default=str))
 
     # ===== Metrics =====
 
@@ -265,9 +244,7 @@ class DatabaseManager:
 
     async def get_latest_metrics(self, variant: str) -> Optional[EvaluationMetrics]:
         """Get latest metrics for a variant."""
-        doc = await self.db["evaluation_metrics"].find_one(
-            {"variant": variant}, sort=[("timestamp", -1)]
-        )
+        doc = await self.db["evaluation_metrics"].find_one({"variant": variant}, sort=[("timestamp", -1)])
         if doc:
             doc.pop("_id", None)
             return EvaluationMetrics(**doc)

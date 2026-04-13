@@ -86,9 +86,7 @@ async def main():
         )
 
         # Insert new test
-        await db_manager.db[settings.ab_tests_collection].insert_one(
-            ab_test.model_dump()
-        )
+        await db_manager.db[settings.ab_tests_collection].insert_one(ab_test.model_dump())
 
         logger.info(f"A/B test created successfully: {test_id}")
 

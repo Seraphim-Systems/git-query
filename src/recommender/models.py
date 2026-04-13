@@ -30,7 +30,9 @@ class RecommendationRequest(BaseModel):
     top_k: int = Field(10, description="Number of results to return", ge=1, le=50)
     enable_personalization: bool = Field(True, description="Apply personalization if available")
     variant: Optional[str] = Field(None, description="A/B test variant to use")
-    preferred_languages: Optional[List[str]] = Field(default_factory=list, description="A list of preferred languages for soft boosting")
+    preferred_languages: Optional[List[str]] = Field(
+        default_factory=list, description="A list of preferred languages for soft boosting"
+    )
 
 
 class RepositoryResult(BaseModel):
@@ -48,9 +50,7 @@ class RepositoryResult(BaseModel):
     last_updated: Optional[datetime]
     score: float = Field(..., description="Relevance score")
     rank: int = Field(..., description="Position in results")
-    explanation: Optional[Dict[str, Any]] = Field(
-        None, description="Why this was recommended"
-    )
+    explanation: Optional[Dict[str, Any]] = Field(None, description="Why this was recommended")
 
 
 class RecommendationResponse(BaseModel):
@@ -84,12 +84,8 @@ class UserPreferences(BaseModel):
     """Learned user preferences."""
 
     user_id: str
-    language_preferences: Dict[str, float] = Field(
-        default_factory=dict, description="Language -> preference score"
-    )
-    topic_preferences: Dict[str, float] = Field(
-        default_factory=dict, description="Topic -> preference score"
-    )
+    language_preferences: Dict[str, float] = Field(default_factory=dict, description="Language -> preference score")
+    topic_preferences: Dict[str, float] = Field(default_factory=dict, description="Topic -> preference score")
     explicit_languages: List[str] = Field(
         default_factory=list,
         description="Languages the user explicitly said they use (e.g. during onboarding)",
@@ -102,9 +98,7 @@ class EvaluationMetrics(BaseModel):
     """Evaluation metrics for a model variant."""
 
     variant: str
-    precision_at_k: Dict[int, float] = Field(
-        default_factory=dict, description="Precision@K for different K values"
-    )
+    precision_at_k: Dict[int, float] = Field(default_factory=dict, description="Precision@K for different K values")
     recall_at_k: Dict[int, float] = Field(default_factory=dict)
     ndcg_at_k: Dict[int, float] = Field(default_factory=dict)
     mrr: float = Field(..., description="Mean Reciprocal Rank")
@@ -124,9 +118,7 @@ class ABTestConfig(BaseModel):
     name: str
     description: str
     variants: List[str] = Field(..., description="List of variant names")
-    traffic_split: Dict[str, float] = Field(
-        ..., description="Variant -> traffic percentage (0-1)"
-    )
+    traffic_split: Dict[str, float] = Field(..., description="Variant -> traffic percentage (0-1)")
     start_date: datetime
     end_date: Optional[datetime] = None
     is_active: bool = True
@@ -142,11 +134,8 @@ class ModelMetadata(BaseModel):
     version: str
     path: str = Field(..., description="Relative path within the model volume")
     hyperparameters: Dict[str, Any] = Field(default_factory=dict)
-    metrics: Dict[str, float] = Field(
-        default_factory=dict, description="Training evaluation metrics"
-    )
+    metrics: Dict[str, float] = Field(default_factory=dict, description="Training evaluation metrics")
     trained_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     is_active: bool = False
     status: Literal["candidate", "active", "archived"] = "candidate"
     notes: Optional[str] = None
-

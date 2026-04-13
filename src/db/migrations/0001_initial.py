@@ -21,6 +21,4 @@ def apply(db):
     db.repository_activity.create_index([("timestamp", -1)])
 
     # Record migration
-    coll.update_one(
-        {"id": "0001_initial"}, {"$setOnInsert": {"applied_at": True}}, upsert=True
-    )
+    coll.update_one({"id": "0001_initial"}, {"$setOnInsert": {"applied_at": True}}, upsert=True)

@@ -50,9 +50,7 @@ async def search_qdrant(query: QdrantQuery):
 
     try:
         adapter = QdrantAdapter(qdrant_client)
-        return adapter.search(
-            query.collection, query.vector, limit=query.limit, filter=None
-        )
+        return adapter.search(query.collection, query.vector, limit=query.limit, filter=None)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
 
@@ -105,9 +103,7 @@ async def list_qdrant_collections():
     except Exception as e:
         # Provide a clearer error message while avoiding leaking internal
         # client types/structures in the response.
-        raise HTTPException(
-            status_code=500, detail=f"Failed to list collections: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to list collections: {str(e)}")
 
 
 async def search_collection_impl(
@@ -204,9 +200,7 @@ async def bulk_upsert_vectors_impl(
                 try:
                     qdrant_client.create_collection(
                         collection_name=collection,
-                        vectors_config=VectorParams(
-                            size=vec_size, distance=Distance.COSINE
-                        ),
+                        vectors_config=VectorParams(size=vec_size, distance=Distance.COSINE),
                     )
                 except Exception:
                     raise
@@ -234,9 +228,7 @@ async def delete_collection_impl(collection: str):
         adapter = QdrantAdapter(qdrant_client)
         return adapter.delete_collection(collection)
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Delete collection failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Delete collection failed: {str(e)}")
 
 
 async def delete_points_impl(collection: str, payload: Dict[str, Any] = Body(...)):

@@ -64,9 +64,7 @@ def _get_db(database: Optional[str] = None):
     return client[db_name]
 
 
-def _extract_full_name(
-    repo_url: Optional[str], full_name: Optional[str]
-) -> Optional[str]:
+def _extract_full_name(repo_url: Optional[str], full_name: Optional[str]) -> Optional[str]:
     if full_name:
         name = full_name.strip()
         if _FULL_NAME_RE.match(name):
@@ -80,9 +78,7 @@ def _extract_full_name(
     return f"{match.group('owner')}/{match.group('repo')}"
 
 
-def _build_repo_summary(
-    repo_data: dict[str, Any], readme_excerpt: Optional[str]
-) -> dict[str, Any]:
+def _build_repo_summary(repo_data: dict[str, Any], readme_excerpt: Optional[str]) -> dict[str, Any]:
     """Create a concise explanation payload from metadata plus README text."""
     language = repo_data.get("language")
     stars = repo_data.get("stargazers_count") or repo_data.get("stars")
@@ -146,24 +142,18 @@ async def query_repository_data(
         database: Optional DB name. Defaults to configured Mongo DB.
     """
     if not collection or not _COLLECTION_NAME_RE.match(collection):
-        return {
-            "error": "Invalid collection name. Use letters, numbers, underscores, or hyphens only."
-        }
+        return {"error": "Invalid collection name. Use letters, numbers, underscores, or hyphens only."}
 
     query_filter = filters or {}
     if not isinstance(query_filter, dict):
         return {"error": "Filter must be a JSON object."}
 
     if not _validate_safe_filter(query_filter):
-        return {
-            "error": "Filter contains disallowed operators ($where, $function, or $accumulator)."
-        }
+        return {"error": "Filter contains disallowed operators ($where, $function, or $accumulator)."}
 
     projection_doc = None
     if projection is not None:
-        if not isinstance(projection, list) or not all(
-            isinstance(field, str) and field for field in projection
-        ):
+        if not isinstance(projection, list) or not all(isinstance(field, str) and field for field in projection):
             return {"error": "Projection must be a list of non-empty field names."}
         projection_doc = {field: 1 for field in projection}
 
@@ -220,9 +210,7 @@ async def explain_repository(
         readme_path = Path(__file__).resolve().parents[3] / "README.md"
         try:
             content = readme_path.read_text(encoding="utf-8")
-            excerpt_lines = [
-                line.strip() for line in content.splitlines() if line.strip()
-            ]
+            excerpt_lines = [line.strip() for line in content.splitlines() if line.strip()]
             excerpt = " ".join(excerpt_lines[:10])[:700]
         except OSError:
             excerpt = "Git-Query is a modular GitHub repository recommendation system with MCP, recommender, and training services."
@@ -264,9 +252,7 @@ async def explain_repository(
     }
     async with httpx.AsyncClient(timeout=15.0, headers=headers) as client:
         try:
-            repo_resp = await client.get(
-                f"https://api.github.com/repos/{resolved_full_name}"
-            )
+            repo_resp = await client.get(f"https://api.github.com/repos/{resolved_full_name}")
             if repo_resp.status_code == 200:
                 github_repo = repo_resp.json()
         except httpx.HTTPError as e:
@@ -283,16 +269,10 @@ async def explain_repository(
                 )
                 if readme_resp.status_code == 200:
                     readme_text = readme_resp.text
-                    lines = [
-                        line.strip()
-                        for line in readme_text.splitlines()
-                        if line.strip()
-                    ]
+                    lines = [line.strip() for line in readme_text.splitlines() if line.strip()]
                     readme_excerpt = " ".join(lines[:5])[:500]
             except httpx.HTTPError as e:
-                logger.warning(
-                    "GitHub README fetch failed for %s: %s", resolved_full_name, e
-                )
+                logger.warning("GitHub README fetch failed for %s: %s", resolved_full_name, e)
 
     merged = {}
     merged.update(db_payload or {})
@@ -324,7 +304,7 @@ TOOL_DEFINITIONS = [
             {
                 "name": "collection",
                 "type": "string",
-                "description": "MongoDB collection name (e.g. repositories, raw_repositories, users)",
+                "description": "MongoDB collection name (e.g. repositories, users)",
                 "required": True,
             },
             {

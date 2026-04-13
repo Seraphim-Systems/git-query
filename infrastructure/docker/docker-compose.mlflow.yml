@@ -12,10 +12,10 @@ services:
       - "5000:5000"
     volumes:
       # Persistent storage for experiments and artifacts
-      - mlflow-runs:/mlflow/mlruns
+      - mlflow-runs:/mlflow
       - mlflow-artifacts:/mlflow/artifacts
     environment:
-      - MLFLOW_BACKEND_STORE_URI=/mlflow/mlruns
+      - MLFLOW_BACKEND_STORE_URI=/mlflow
       - MLFLOW_DEFAULT_ARTIFACT_ROOT=/mlflow/artifacts
     networks:
       - internal-network

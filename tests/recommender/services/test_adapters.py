@@ -83,6 +83,7 @@ class TestLGBMAdapter:
 
         mock_fe = MagicMock()
         import pandas as pd
+
         mock_fe.extract_all.return_value = pd.DataFrame({"f": [1.0] * n})
 
         payload = {"model": mock_model, "feature_cols": ["f"]}

@@ -35,9 +35,7 @@ class MongoAdapter(CollectionRepository):
                 d["_id"] = str(d["_id"])
         return {"count": len(docs), "documents": docs}
 
-    def insert(
-        self, database: str, collection: str, documents: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+    def insert(self, database: str, collection: str, documents: List[Dict[str, Any]]) -> Dict[str, Any]:
         db = self.client[database]
         coll = db[collection]
         result = coll.insert_many(documents)

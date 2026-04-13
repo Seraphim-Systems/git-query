@@ -22,9 +22,7 @@ class LanguagePreferenceService:
     """
 
     # Public API
-    async def set_explicit_languages(
-        self, user_id: str, languages: List[str]
-    ) -> UserPreferences:
+    async def set_explicit_languages(self, user_id: str, languages: List[str]) -> UserPreferences:
         """
         Store languages the user has explicitly said they work in.
 
@@ -39,18 +37,14 @@ class LanguagePreferenceService:
 
         for lang in normalized:
             current = prefs.language_preferences.get(lang, 0.0)
-            prefs.language_preferences[lang] = max(
-                current, settings.explicit_language_boost
-            )
+            prefs.language_preferences[lang] = max(current, settings.explicit_language_boost)
 
         prefs.last_updated = datetime.now(timezone.utc)
         await db_manager.update_user_preferences(prefs)
         logger.info("Set explicit languages for user %s: %s", user_id, normalized)
         return prefs
 
-    async def get_top_languages(
-        self, user_id: str, top_n: int = 5
-    ) -> List[Dict]:
+    async def get_top_languages(self, user_id: str, top_n: int = 5) -> List[Dict]:
         """
         Return the user's top N preferred languages with source info.
 
@@ -77,9 +71,7 @@ class LanguagePreferenceService:
             for lang, score in ranked
         ]
 
-    async def remove_language(
-        self, user_id: str, language: str
-    ) -> UserPreferences:
+    async def remove_language(self, user_id: str, language: str) -> UserPreferences:
         """
         Remove a language from both explicit declarations and scored preferences.
         Raises ValueError if the user has no preferences on record.

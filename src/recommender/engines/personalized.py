@@ -25,9 +25,7 @@ class PersonalizedEngine(HybridRetrievalEngine):
         self.version = "1.0.0"
         self.language_enricher = LanguageEnricherService()
 
-    async def recommend(
-        self, request: RecommendationRequest
-    ) -> List[RepositoryResult]:
+    async def recommend(self, request: RecommendationRequest) -> List[RepositoryResult]:
         """Generate personalized recommendations."""
 
         # Enrich request with language preferences
@@ -37,11 +35,7 @@ class PersonalizedEngine(HybridRetrievalEngine):
         results = await super().recommend(request)
 
         # Apply personalization if enabled and user_id provided
-        if (
-            request.enable_personalization
-            and request.user_id
-            and settings.enable_personalization
-        ):
+        if request.enable_personalization and request.user_id and settings.enable_personalization:
             results = await self._apply_personalization(results, request)
 
         return results
@@ -89,9 +83,7 @@ class PersonalizedEngine(HybridRetrievalEngine):
 
         return results
 
-    async def explain(
-        self, repo_id: str, request: RecommendationRequest
-    ) -> Dict[str, Any]:
+    async def explain(self, repo_id: str, request: RecommendationRequest) -> Dict[str, Any]:
         """Explain personalized ranking."""
         explanation = await super().explain(repo_id, request)
         explanation["engine"] = self.name
@@ -112,4 +104,3 @@ class PersonalizedEngine(HybridRetrievalEngine):
                 )
 
         return explanation
-

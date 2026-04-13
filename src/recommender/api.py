@@ -10,7 +10,7 @@ import os
 import time
 from typing import Optional
 from datetime import datetime, timezone
-from typing import List, Optional  
+from typing import List, Optional
 
 from .config import settings
 from .models import (
@@ -28,7 +28,7 @@ from .services import (
     PersonalizationService,
     ABTestService,
     ModelRegistryService,
-    LanguagePreferenceService,  
+    LanguagePreferenceService,
 )
 
 logger = logging.getLogger(__name__)
@@ -95,10 +95,11 @@ app.add_middleware(
 
 # ===== Root Redirect =====
 
+
 @app.get("/")
 async def root():
     """Redirect to frontend nginx server.
-    
+
     In production: Uses SVC_NGINX_SERVER_NAME from GitHub secrets
     In development: Defaults to localhost:8080
     """
@@ -107,11 +108,12 @@ async def root():
         frontend_url = f"https://{nginx_server}"
     else:
         frontend_url = "http://localhost:8080"
-    
+
     return RedirectResponse(url=frontend_url)
 
 
 # ===== Health Check =====
+
 
 @app.get("/health")
 async def health_check():
@@ -125,6 +127,7 @@ async def health_check():
 
 
 # ===== Recommendation Endpoints =====
+
 
 @app.post("/recommend", response_model=RecommendationResponse)
 async def get_recommendations(request: RecommendationRequest):
@@ -141,9 +144,7 @@ async def get_recommendations(request: RecommendationRequest):
     try:
         # Determine variant
         ab_test_service: ABTestService = app.state.ab_test_service
-        variant = await ab_test_service.get_variant_for_user(
-            request.user_id, request.variant
-        )
+        variant = await ab_test_service.get_variant_for_user(request.user_id, request.variant)
 
         # Get appropriate engine
         engine = app.state.engines.get(variant, app.state.engines["baseline"])
@@ -183,9 +184,7 @@ async def explain_recommendation(repo_id: str, request: RecommendationRequest):
     try:
         # Get variant
         ab_test_service: ABTestService = app.state.ab_test_service
-        variant = await ab_test_service.get_variant_for_user(
-            request.user_id, request.variant
-        )
+        variant = await ab_test_service.get_variant_for_user(request.user_id, request.variant)
 
         # Get engine and explanation
         engine = app.state.engines.get(variant, app.state.engines["baseline"])
@@ -199,6 +198,7 @@ async def explain_recommendation(repo_id: str, request: RecommendationRequest):
 
 
 # ===== Interaction Tracking =====
+
 
 @app.post("/interaction")
 async def log_interaction(
@@ -247,14 +247,13 @@ async def update_user_preferences_task(
         repos = list(repo_map.values())
 
         if repos:
-            await personalization_service.update_preferences_from_interaction(
-                interaction, repos[0]
-            )
+            await personalization_service.update_preferences_from_interaction(interaction, repos[0])
     except Exception as e:
         logger.error("Failed to update preferences: %s", e, exc_info=True)
 
 
 # ===== User Preferences =====
+
 
 @app.get("/preferences/{user_id}")
 async def get_user_preferences(user_id: str):
@@ -264,7 +263,9 @@ async def get_user_preferences(user_id: str):
         raise HTTPException(status_code=404, detail="User preferences not found")
     return prefs
 
+
 # ===== Language Preference Endpoints =====
+
 
 @app.post("/preferences/{user_id}/languages", status_code=200)
 async def set_language_preferences(user_id: str, languages: List[str]):
@@ -335,6 +336,7 @@ async def remove_language_preference(user_id: str, language: str):
 
 # ===== Metrics & Evaluation =====
 
+
 @app.get("/metrics/{variant}")
 async def get_metrics(variant: str):
     """Get latest evaluation metrics for a variant."""
@@ -354,6 +356,7 @@ async def get_active_ab_test():
 
 
 # ===== Admin Endpoints =====
+
 
 @app.post("/admin/cache/clear")
 async def clear_cache():
@@ -378,11 +381,9 @@ async def list_engines():
 
 # ===== Model Management Endpoints =====
 
+
 @app.get("/admin/models")
-async def list_models(
-    model_type: Optional[str] = None, 
-    status: Optional[str] = None
-):
+async def list_models(model_type: Optional[str] = None, status: Optional[str] = None):
     """List all registered models."""
     registry: ModelRegistryService = app.state.registry_service
     models = await registry.list_models(model_type, status)

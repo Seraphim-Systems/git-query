@@ -14,6 +14,7 @@ from src.recommender.models import RecommendationRequest, RepositoryResult
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_request(
     query: str = "machine learning",
     top_k: int = 5,
@@ -90,7 +91,13 @@ class TestReciprocalRankFusion:
                 "repo_id": "c/d",
                 "score": 1.0,
                 "source": "keyword",
-                "repo_data": {"name": "d", "full_name": "c/d", "stars": 50, "forks": 2, "url": "https://github.com/c/d"},
+                "repo_data": {
+                    "name": "d",
+                    "full_name": "c/d",
+                    "stars": 50,
+                    "forks": 2,
+                    "url": "https://github.com/c/d",
+                },
             }
         ]
         results = engine._reciprocal_rank_fusion([], keyword, _make_request())
@@ -149,7 +156,13 @@ class TestReciprocalRankFusion:
                 "repo_id": repo_id,
                 "score": 1.0,
                 "source": "keyword",
-                "repo_data": {"name": "from_keyword", "full_name": repo_id, "stars": 999, "forks": 5, "url": "https://github.com/owner/dual"},
+                "repo_data": {
+                    "name": "from_keyword",
+                    "full_name": repo_id,
+                    "stars": 999,
+                    "forks": 5,
+                    "url": "https://github.com/owner/dual",
+                },
             }
         ]
 
@@ -178,9 +191,7 @@ class TestReciprocalRankFusion:
     def test_rrf_derives_name_from_repo_id_when_no_metadata(self):
         """With empty payload and no keyword data, name is derived from repo_id."""
         engine = _make_engine()
-        semantic = [
-            {"repo_id": "myorg/my-cool-repo", "score": 0.5, "source": "semantic", "payload": {}}
-        ]
+        semantic = [{"repo_id": "myorg/my-cool-repo", "score": 0.5, "source": "semantic", "payload": {}}]
 
         results = engine._reciprocal_rank_fusion(semantic, [], _make_request())
 
@@ -213,11 +224,12 @@ class TestReciprocalRankFusion:
     def test_rrf_applies_soft_boost_for_preferred_languages(self, mocker):
         engine = _make_engine()
         from src.recommender.config import settings
+
         mocker.patch.object(settings, "personalization_weight", 0.15)
-        
+
         request = _make_request()
         request.preferred_languages = ["python"]
-        
+
         semantic = [{"repo_id": "a/a", "score": 0.8, "source": "semantic", "payload": {}}]
         keyword = [
             {
@@ -227,9 +239,9 @@ class TestReciprocalRankFusion:
                 "repo_data": {"name": "repo", "full_name": "a/a", "language": "Python"},
             }
         ]
-        
+
         results = engine._reciprocal_rank_fusion(semantic, keyword, request)
-        
+
         base_score = 2 / 61
         expected_score = base_score * 1.15
         assert results[0].score == pytest.approx(expected_score)
@@ -302,9 +314,7 @@ class TestSemanticSearch:
             db_manager,
             "vector_search",
             new_callable=AsyncMock,
-            return_value=[
-                {"repo_id": repo_id, "score": 0.8, "payload": {"repo_id": repo_id}}
-            ],
+            return_value=[{"repo_id": repo_id, "score": 0.8, "payload": {"repo_id": repo_id}}],
         )
         mock_enrich = mocker.patch.object(
             db_manager,
@@ -327,9 +337,7 @@ class TestSemanticSearch:
             db_manager,
             "vector_search",
             new_callable=AsyncMock,
-            return_value=[
-                {"repo_id": repo_id, "score": 0.8, "payload": {"repo_id": repo_id, "stars": 500}}
-            ],
+            return_value=[{"repo_id": repo_id, "score": 0.8, "payload": {"repo_id": repo_id, "stars": 500}}],
         )
         mock_enrich = mocker.patch.object(
             db_manager,
@@ -440,7 +448,7 @@ class TestApplyFilters:
         results = [
             _make_repo_result("a/a", language="Python", stars=600, license="MIT"),
             _make_repo_result("b/b", language="Python", stars=200, license="MIT"),  # below min_stars
-            _make_repo_result("c/c", language="Rust", stars=800, license="MIT"),    # wrong language
+            _make_repo_result("c/c", language="Rust", stars=800, license="MIT"),  # wrong language
             _make_repo_result("d/d", language="Python", stars=700, license="GPL"),  # wrong license
         ]
         request = _make_request(language="Python", min_stars=500, license="MIT")
@@ -459,9 +467,7 @@ class TestRecommend:
     async def test_recommend_calls_reranker_when_results_exist(self, mocker):
         mocker.patch.object(db_manager, "cache_get", new_callable=AsyncMock, return_value=None)
         mocker.patch.object(db_manager, "cache_set", new_callable=AsyncMock)
-        mocker.patch.object(
-            db_manager, "vector_search", new_callable=AsyncMock, return_value=[]
-        )
+        mocker.patch.object(db_manager, "vector_search", new_callable=AsyncMock, return_value=[])
         mocker.patch.object(
             db_manager,
             "search_repositories",
@@ -494,12 +500,8 @@ class TestRecommend:
     async def test_recommend_skips_reranker_when_service_is_none(self, mocker):
         mocker.patch.object(db_manager, "cache_get", new_callable=AsyncMock, return_value=None)
         mocker.patch.object(db_manager, "cache_set", new_callable=AsyncMock)
-        mocker.patch.object(
-            db_manager, "vector_search", new_callable=AsyncMock, return_value=[]
-        )
-        mocker.patch.object(
-            db_manager, "search_repositories", new_callable=AsyncMock, return_value=[]
-        )
+        mocker.patch.object(db_manager, "vector_search", new_callable=AsyncMock, return_value=[])
+        mocker.patch.object(db_manager, "search_repositories", new_callable=AsyncMock, return_value=[])
         engine = _make_engine(reranker_service=None)
         # Should not raise even without a reranker
         results = await engine.recommend(_make_request())
@@ -508,9 +510,7 @@ class TestRecommend:
     async def test_recommend_returns_top_k_results(self, mocker):
         mocker.patch.object(db_manager, "cache_get", new_callable=AsyncMock, return_value=None)
         mocker.patch.object(db_manager, "cache_set", new_callable=AsyncMock)
-        mocker.patch.object(
-            db_manager, "vector_search", new_callable=AsyncMock, return_value=[]
-        )
+        mocker.patch.object(db_manager, "vector_search", new_callable=AsyncMock, return_value=[])
         mocker.patch.object(
             db_manager,
             "search_repositories",
@@ -539,9 +539,7 @@ class TestRecommend:
     async def test_recommend_assigns_final_ranks(self, mocker):
         mocker.patch.object(db_manager, "cache_get", new_callable=AsyncMock, return_value=None)
         mocker.patch.object(db_manager, "cache_set", new_callable=AsyncMock)
-        mocker.patch.object(
-            db_manager, "vector_search", new_callable=AsyncMock, return_value=[]
-        )
+        mocker.patch.object(db_manager, "vector_search", new_callable=AsyncMock, return_value=[])
         mocker.patch.object(
             db_manager,
             "search_repositories",

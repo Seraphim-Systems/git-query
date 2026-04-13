@@ -21,6 +21,7 @@ from src.recommender.engines.baseline import BaselineEngine
 # Shared fixture — bypasses lifespan and injects mock services
 # ---------------------------------------------------------------------------
 
+
 @pytest_asyncio.fixture
 async def client(mocker):
     """AsyncClient with lifespan bypassed (no real DB or model loading)."""
@@ -50,18 +51,14 @@ async def client(mocker):
         return_value=None,
     )
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         # Override engines with mocks so endpoint tests control behaviour
         mock_engine = AsyncMock(spec=BaselineEngine)
         mock_engine.recommend = AsyncMock(return_value=[])
         mock_engine.explain = AsyncMock(
             return_value={"engine": "baseline", "method": "keyword_search", "query": "test"}
         )
-        mock_engine.get_metadata = MagicMock(
-            return_value={"name": "baseline", "version": "1.0.0"}
-        )
+        mock_engine.get_metadata = MagicMock(return_value={"name": "baseline", "version": "1.0.0"})
         app.state.engines = {"baseline": mock_engine}
         app.state.ab_test_service = AsyncMock()
         app.state.ab_test_service.get_variant_for_user = AsyncMock(return_value="baseline")
@@ -72,6 +69,7 @@ async def client(mocker):
 # ---------------------------------------------------------------------------
 # /health
 # ---------------------------------------------------------------------------
+
 
 class TestHealth:
     async def test_health_returns_200(self, client):
@@ -91,6 +89,7 @@ class TestHealth:
 # /recommend
 # ---------------------------------------------------------------------------
 
+
 class TestRecommend:
     async def test_recommend_422_on_missing_query(self, client):
         response = await client.post("/recommend", json={})
@@ -105,34 +104,24 @@ class TestRecommend:
         assert response.status_code == 422
 
     async def test_recommend_200_with_valid_request(self, client):
-        response = await client.post(
-            "/recommend", json={"query": "machine learning python", "top_k": 5}
-        )
+        response = await client.post("/recommend", json={"query": "machine learning python", "top_k": 5})
         assert response.status_code == 200
 
     async def test_recommend_response_includes_processing_time(self, client):
-        response = await client.post(
-            "/recommend", json={"query": "machine learning python", "top_k": 5}
-        )
+        response = await client.post("/recommend", json={"query": "machine learning python", "top_k": 5})
         assert response.status_code == 200
         data = response.json()
         assert "processing_time_ms" in data
         assert isinstance(data["processing_time_ms"], float)
 
     async def test_recommend_response_includes_variant(self, client):
-        response = await client.post(
-            "/recommend", json={"query": "machine learning python", "top_k": 5}
-        )
+        response = await client.post("/recommend", json={"query": "machine learning python", "top_k": 5})
         assert response.status_code == 200
         assert "variant" in response.json()
 
     async def test_recommend_500_when_engine_raises(self, client):
-        app.state.engines["baseline"].recommend = AsyncMock(
-            side_effect=RuntimeError("engine blew up")
-        )
-        response = await client.post(
-            "/recommend", json={"query": "crash test", "top_k": 5}
-        )
+        app.state.engines["baseline"].recommend = AsyncMock(side_effect=RuntimeError("engine blew up"))
+        response = await client.post("/recommend", json={"query": "crash test", "top_k": 5})
         assert response.status_code == 500
 
 
@@ -140,31 +129,27 @@ class TestRecommend:
 # /recommend/explain/{repo_id}
 # ---------------------------------------------------------------------------
 
+
 class TestExplain:
     async def test_explain_200_with_valid_request(self, client):
         # Use a simple repo_id without slashes — %2F decodes to / in the path,
         # which breaks the route match since starlette sees it as a path separator.
-        response = await client.post(
-            "/recommend/explain/test-repo", json={"query": "test"}
-        )
+        response = await client.post("/recommend/explain/test-repo", json={"query": "test"})
         assert response.status_code == 200
         data = response.json()
         assert "engine" in data
         assert "method" in data
 
     async def test_explain_500_when_engine_raises(self, client):
-        app.state.engines["baseline"].explain = AsyncMock(
-            side_effect=RuntimeError("explode")
-        )
-        response = await client.post(
-            "/recommend/explain/bad-repo", json={"query": "test"}
-        )
+        app.state.engines["baseline"].explain = AsyncMock(side_effect=RuntimeError("explode"))
+        response = await client.post("/recommend/explain/bad-repo", json={"query": "test"})
         assert response.status_code == 500
 
 
 # ---------------------------------------------------------------------------
 # /interaction
 # ---------------------------------------------------------------------------
+
 
 class TestInteraction:
     async def test_interaction_422_on_invalid_interaction_type(self, client):
@@ -204,6 +189,7 @@ class TestInteraction:
 # /preferences/{user_id}
 # ---------------------------------------------------------------------------
 
+
 class TestPreferences:
     async def test_preferences_404_when_not_found(self, client, mocker):
         mocker.patch.object(
@@ -241,6 +227,7 @@ class TestPreferences:
 # /metrics/{variant}
 # ---------------------------------------------------------------------------
 
+
 class TestMetrics:
     async def test_metrics_404_when_not_found(self, client, mocker):
         mocker.patch.object(
@@ -256,6 +243,7 @@ class TestMetrics:
 # ---------------------------------------------------------------------------
 # /ab-test
 # ---------------------------------------------------------------------------
+
 
 class TestABTest:
     async def test_ab_test_returns_no_active_test_when_none(self, client, mocker):
@@ -274,6 +262,7 @@ class TestABTest:
 # ---------------------------------------------------------------------------
 # /admin/cache/clear
 # ---------------------------------------------------------------------------
+
 
 class TestAdminCache:
     async def test_cache_clear_200(self, mocker):
@@ -307,9 +296,7 @@ class TestAdminCache:
         mock_redis.scan_iter = MagicMock(return_value=_aiter([]))
         mocker.patch.object(db_manager, "redis_client", mock_redis)
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             response = await ac.post("/admin/cache/clear")
 
         assert response.status_code == 200
@@ -320,6 +307,7 @@ class TestAdminCache:
 # ---------------------------------------------------------------------------
 # /admin/engines
 # ---------------------------------------------------------------------------
+
 
 class TestAdminEngines:
     async def test_engines_list_200(self, client):
@@ -334,6 +322,7 @@ class TestAdminEngines:
 # ---------------------------------------------------------------------------
 # update_user_preferences_task
 # ---------------------------------------------------------------------------
+
 
 class TestUpdateUserPreferencesTask:
     async def test_background_task_updates_prefs_when_repo_found(self, mocker):
@@ -362,9 +351,7 @@ class TestUpdateUserPreferencesTask:
 
         await update_user_preferences_task(interaction, mock_personalization)
 
-        mock_personalization.update_preferences_from_interaction.assert_awaited_once_with(
-            interaction, repo_doc
-        )
+        mock_personalization.update_preferences_from_interaction.assert_awaited_once_with(interaction, repo_doc)
 
     async def test_background_task_does_nothing_when_repo_not_found(self, mocker):
         from src.recommender.api import update_user_preferences_task
@@ -422,6 +409,7 @@ class TestUpdateUserPreferencesTask:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 async def _aiter_helper(items):
     for item in items:

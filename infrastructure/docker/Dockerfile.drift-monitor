@@ -17,17 +17,28 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# libgomp is required by LightGBM for OpenMP support
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 && rm -rf /var/lib/apt/lists/*
+
 # Install dependencies (no torch — keep image small)
 RUN pip install --no-cache-dir \
-    evidently>=0.4.0 \
+    "evidently==0.4.33" \
     pandas>=2.0.0 \
     numpy>=1.26.3 \
     pyarrow>=14.0.0 \
     requests>=2.31.0 \
-    qdrant-client>=1.7.0
+    qdrant-client>=1.7.0 \
+    lightgbm>=4.0.0 \
+    joblib>=1.3.0 \
+    scikit-learn>=1.3.0
 
 # Copy MLOps source
 COPY src/recommender/mlops/ /app/
+# Copy LGBM ranker + feature extractor needed for prediction drift scoring.
+# Empty __init__.py files make these importable as packages (from training.lgbm_ranker import ...).
+COPY src/recommender/training/lgbm_ranker.py /app/training/lgbm_ranker.py
+COPY src/recommender/data/features.py /app/data/features.py
+RUN touch /app/training/__init__.py /app/data/__init__.py
 
 # Default report output directory
 RUN mkdir -p /app/drift_reports

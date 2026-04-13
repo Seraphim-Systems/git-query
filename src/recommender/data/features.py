@@ -30,15 +30,17 @@ if TYPE_CHECKING:
 # Constants
 # ---------------------------------------------------------------------------
 
-PERMISSIVE_LICENSES = frozenset([
-    "MIT",
-    "Apache-2.0",
-    "BSD-2-Clause",
-    "BSD-3-Clause",
-    "ISC",
-    "Unlicense",
-    "0BSD",
-])
+PERMISSIVE_LICENSES = frozenset(
+    [
+        "MIT",
+        "Apache-2.0",
+        "BSD-2-Clause",
+        "BSD-3-Clause",
+        "ISC",
+        "Unlicense",
+        "0BSD",
+    ]
+)
 
 TOP_N_LANGUAGES = 20
 
@@ -48,6 +50,7 @@ _STALE_SENTINEL_DAYS = 3650.0  # ~10 years, used for missing dates
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _extract_topic_strings(topics_value) -> list:
     """Normalize a topics field into a flat list of lowercase strings.
@@ -81,6 +84,7 @@ def _extract_topic_strings(topics_value) -> list:
 # ---------------------------------------------------------------------------
 # FeatureExtractor
 # ---------------------------------------------------------------------------
+
 
 class FeatureExtractor:
     """Feature extraction for recommendation ranking models.
@@ -166,12 +170,18 @@ class FeatureExtractor:
             ts = _pd.to_datetime(df["pushed_at"], errors="coerce", utc=True)
         else:
             return _pd.Series(
-                _STALE_SENTINEL_DAYS, index=df.index, name="days_since_update",
+                _STALE_SENTINEL_DAYS,
+                index=df.index,
+                name="days_since_update",
             )
 
         delta = (now - ts).dt.total_seconds() / 86_400.0
-        return delta.fillna(_STALE_SENTINEL_DAYS).clip(lower=0).rename(
-            "days_since_update",
+        return (
+            delta.fillna(_STALE_SENTINEL_DAYS)
+            .clip(lower=0)
+            .rename(
+                "days_since_update",
+            )
         )
 
     # ------------------------------------------------------------------
@@ -189,16 +199,7 @@ class FeatureExtractor:
 
             return _pd.Series(0, index=df.index, name="has_readme")
 
-        return (
-            df["readme"]
-            .fillna("")
-            .astype(str)
-            .str.strip()
-            .str.len()
-            .gt(0)
-            .astype(int)
-            .rename("has_readme")
-        )
+        return df["readme"].fillna("").astype(str).str.strip().str.len().gt(0).astype(int).rename("has_readme")
 
     @staticmethod
     def readme_length(df: pd.DataFrame) -> pd.Series:
@@ -214,13 +215,7 @@ class FeatureExtractor:
 
             return _pd.Series(0, index=df.index, name="readme_length")
 
-        return (
-            df["readme"]
-            .fillna("")
-            .astype(str)
-            .str.len()
-            .rename("readme_length")
-        )
+        return df["readme"].fillna("").astype(str).str.len().rename("readme_length")
 
     @staticmethod
     def description_length(df: pd.DataFrame) -> pd.Series:
@@ -230,13 +225,7 @@ class FeatureExtractor:
 
         Range: [0, inf).
         """
-        return (
-            df["description"]
-            .fillna("")
-            .astype(str)
-            .str.len()
-            .rename("description_length")
-        )
+        return df["description"].fillna("").astype(str).str.len().rename("description_length")
 
     # ------------------------------------------------------------------
     # Topics
@@ -255,11 +244,7 @@ class FeatureExtractor:
 
             return _pd.Series(0, index=df.index, name="num_topics")
 
-        return (
-            df["topics"]
-            .apply(lambda v: len(_extract_topic_strings(v)))
-            .rename("num_topics")
-        )
+        return df["topics"].apply(lambda v: len(_extract_topic_strings(v))).rename("num_topics")
 
     # ------------------------------------------------------------------
     # License
@@ -271,16 +256,7 @@ class FeatureExtractor:
 
         Range: {0, 1}.
         """
-        return (
-            df["license"]
-            .fillna("")
-            .astype(str)
-            .str.strip()
-            .str.len()
-            .gt(0)
-            .astype(int)
-            .rename("has_license")
-        )
+        return df["license"].fillna("").astype(str).str.strip().str.len().gt(0).astype(int).rename("has_license")
 
     @staticmethod
     def is_permissive_license(df: pd.DataFrame) -> pd.Series:
@@ -322,13 +298,7 @@ class FeatureExtractor:
         """
         import pandas as _pd
 
-        lang = (
-            df["language"]
-            .fillna("other")
-            .astype(str)
-            .str.strip()
-            .str.lower()
-        )
+        lang = df["language"].fillna("other").astype(str).str.strip().str.lower()
 
         top_languages = lang.value_counts().head(top_n).index.tolist()
         lang = lang.where(lang.isin(top_languages), other="other")

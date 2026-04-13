@@ -234,7 +234,9 @@ class MongoDataFetcher:
                     scores[repo_id] = scores.get(repo_id, 0.0) + weight
             logger.info(
                 "Fetched %d interactions → %d repos with non-zero scores (last %d days)",
-                len(docs), len(scores), days,
+                len(docs),
+                len(scores),
+                days,
             )
             return scores
         except Exception as e:
@@ -286,7 +288,9 @@ class MongoDataFetcher:
             coverage = (df["interaction_score"] != 0).sum()
             logger.info(
                 "Interaction coverage: %d / %d repos (%.1f%%)",
-                coverage, len(df), 100 * coverage / max(len(df), 1),
+                coverage,
+                len(df),
+                100 * coverage / max(len(df), 1),
             )
         else:
             df["interaction_score"] = 0.0

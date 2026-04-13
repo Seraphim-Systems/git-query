@@ -24,9 +24,7 @@ class HybridRetrievalEngine(RecommendationEngine):
         self.reranker_service = reranker_service
         self.k = 60  # RRF constant
 
-    async def recommend(
-        self, request: RecommendationRequest
-    ) -> List[RepositoryResult]:
+    async def recommend(self, request: RecommendationRequest) -> List[RepositoryResult]:
         """Generate recommendations using hybrid retrieval."""
 
         # Build a deterministic cache key from parameters that affect results
@@ -37,9 +35,7 @@ class HybridRetrievalEngine(RecommendationEngine):
             "license": request.license,
             "top_k": getattr(request, "top_k", settings.final_top_k),
         }
-        cache_key = "hybrid:" + hashlib.md5(
-            json.dumps(cache_key_parts, sort_keys=True).encode()
-        ).hexdigest()
+        cache_key = "hybrid:" + hashlib.md5(json.dumps(cache_key_parts, sort_keys=True).encode()).hexdigest()
 
         cached = await db_manager.cache_get(cache_key)
         if cached is not None:
@@ -49,30 +45,26 @@ class HybridRetrievalEngine(RecommendationEngine):
         semantic_task = self._semantic_search(request)
         keyword_task = self._keyword_search(request)
 
-        semantic_results, keyword_results = await asyncio.gather(
-            semantic_task, keyword_task
-        )
+        semantic_results, keyword_results = await asyncio.gather(semantic_task, keyword_task)
 
         # Step 2: Fuse results using Reciprocal Rank Fusion
-        fused_results = self._reciprocal_rank_fusion(
-            semantic_results, keyword_results, request
-        )
+        fused_results = self._reciprocal_rank_fusion(semantic_results, keyword_results, request)
 
         # Step 3: Apply hard filters
         filtered_results = self._apply_filters(fused_results, request)
 
         # Step 4: Rerank top candidates if reranker available
         if self.reranker_service and len(filtered_results) > 0:
-            top_candidates = filtered_results[:settings.hybrid_search_top_k]
+            top_candidates = filtered_results[: settings.hybrid_search_top_k]
             reranked = await self.reranker_service.rerank(
                 query=request.query,
                 candidates=top_candidates,
                 top_k=settings.rerank_top_k,
             )
-            filtered_results = reranked + filtered_results[settings.hybrid_search_top_k:]
+            filtered_results = reranked + filtered_results[settings.hybrid_search_top_k :]
 
         # Step 5: Return top K
-        final_results = filtered_results[:request.top_k]
+        final_results = filtered_results[: request.top_k]
 
         # Add rank
         for idx, result in enumerate(final_results):
@@ -83,9 +75,7 @@ class HybridRetrievalEngine(RecommendationEngine):
 
         return final_results
 
-    async def _semantic_search(
-        self, request: RecommendationRequest
-    ) -> List[Dict[str, Any]]:
+    async def _semantic_search(self, request: RecommendationRequest) -> List[Dict[str, Any]]:
         """Search using semantic embeddings."""
         if not self.embedding_service:
             return []
@@ -104,24 +94,19 @@ class HybridRetrievalEngine(RecommendationEngine):
             payload = r.get("payload") or {}
             # Prefer the string repo_id stored in the Qdrant payload over the
             # point UUID so downstream RRF and MongoDB lookups use stable IDs.
-            string_id = (
-                payload.get("repo_id")
-                or payload.get("_orig_id")
-                or str(r["repo_id"])
+            string_id = payload.get("repo_id") or payload.get("_orig_id") or str(r["repo_id"])
+            out.append(
+                {
+                    "repo_id": string_id,
+                    "score": r["score"],
+                    "source": "semantic",
+                    "payload": payload,
+                }
             )
-            out.append({
-                "repo_id": string_id,
-                "score": r["score"],
-                "source": "semantic",
-                "payload": payload,
-            })
 
         # Batch-fetch full metadata for repos that only have minimal payload.
         # This enriches results even when Qdrant payloads lack name/stars/etc.
-        ids_needing_enrichment = [
-            r["repo_id"] for r in out
-            if "/" in r["repo_id"] and not r["payload"].get("stars")
-        ]
+        ids_needing_enrichment = [r["repo_id"] for r in out if "/" in r["repo_id"] and not r["payload"].get("stars")]
         if ids_needing_enrichment:
             meta_map = await db_manager.get_repositories_by_repo_ids(ids_needing_enrichment)
             if meta_map:
@@ -131,9 +116,7 @@ class HybridRetrievalEngine(RecommendationEngine):
 
         return out
 
-    async def _keyword_search(
-        self, request: RecommendationRequest
-    ) -> List[Dict[str, Any]]:
+    async def _keyword_search(self, request: RecommendationRequest) -> List[Dict[str, Any]]:
         """Search using keywords."""
         query_filter = {}
 
@@ -193,7 +176,7 @@ class HybridRetrievalEngine(RecommendationEngine):
             data = repo_data.get(repo_id) or {}
             repo_lang = data.get("language")
             if repo_lang and str(repo_lang).lower() in preferred_langs:
-                scores[repo_id] *= (1 + getattr(settings, "personalization_weight", 0.15))
+                scores[repo_id] *= 1 + getattr(settings, "personalization_weight", 0.15)
                 sources.setdefault(repo_id, set()).add("personalization_boost")
 
         # Sort by fused score
@@ -207,9 +190,7 @@ class HybridRetrievalEngine(RecommendationEngine):
             # Derive a human-readable name from the repo_id string when full
             # metadata is absent (e.g. Qdrant payload not yet populated).
             display_name = (
-                data.get("name")
-                or data.get("full_name")
-                or (repo_id.split("/")[-1] if "/" in str(repo_id) else "")
+                data.get("name") or data.get("full_name") or (repo_id.split("/")[-1] if "/" in str(repo_id) else "")
             )
             results.append(
                 RepositoryResult(
@@ -235,9 +216,7 @@ class HybridRetrievalEngine(RecommendationEngine):
 
         return results
 
-    def _apply_filters(
-        self, results: List[RepositoryResult], request: RecommendationRequest
-    ) -> List[RepositoryResult]:
+    def _apply_filters(self, results: List[RepositoryResult], request: RecommendationRequest) -> List[RepositoryResult]:
         """Apply hard constraints - filters are never violated."""
         filtered = []
 
@@ -258,9 +237,7 @@ class HybridRetrievalEngine(RecommendationEngine):
 
         return filtered
 
-    async def explain(
-        self, repo_id: str, request: RecommendationRequest
-    ) -> Dict[str, Any]:
+    async def explain(self, repo_id: str, request: RecommendationRequest) -> Dict[str, Any]:
         """Explain hybrid ranking."""
         return {
             "engine": self.name,
@@ -268,4 +245,3 @@ class HybridRetrievalEngine(RecommendationEngine):
             "query": request.query,
             "message": "Repository retrieved via hybrid search (semantic + keyword) and fused with RRF",
         }
-

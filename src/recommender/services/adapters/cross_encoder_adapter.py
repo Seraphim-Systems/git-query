@@ -22,11 +22,13 @@ class CrossEncoderAdapter(BaseRerankerAdapter):
         pairs = [
             [
                 query,
-                prepare_repo_text({
-                    "name": getattr(c, "name", None),
-                    "description": getattr(c, "description", None),
-                    "language": getattr(c, "language", None),
-                }),
+                prepare_repo_text(
+                    {
+                        "name": getattr(c, "name", None),
+                        "description": getattr(c, "description", None),
+                        "language": getattr(c, "language", None),
+                    }
+                ),
             ]
             for c in candidates
         ]

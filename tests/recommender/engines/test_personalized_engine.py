@@ -14,6 +14,7 @@ from src.recommender.models import RecommendationRequest, RepositoryResult, User
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_request(
     query: str = "python web framework",
     top_k: int = 5,
@@ -80,9 +81,7 @@ def _make_engine(embedding_service=None, reranker_service=None) -> PersonalizedE
 
 class TestApplyPersonalization:
     async def test_no_personalization_when_prefs_is_none(self, mocker):
-        mocker.patch.object(
-            db_manager, "get_user_preferences", new_callable=AsyncMock, return_value=None
-        )
+        mocker.patch.object(db_manager, "get_user_preferences", new_callable=AsyncMock, return_value=None)
         engine = _make_engine()
         original = [_make_result("a/a", score=0.9, rank=1), _make_result("b/b", score=0.5, rank=2)]
         request = _make_request()
@@ -98,9 +97,7 @@ class TestApplyPersonalization:
         """Engine returns results unchanged when total_interactions < min threshold."""
         from src.recommender.config import settings
 
-        low_interaction_prefs = _make_prefs(
-            total_interactions=settings.min_interactions_for_personalization - 1
-        )
+        low_interaction_prefs = _make_prefs(total_interactions=settings.min_interactions_for_personalization - 1)
         mocker.patch.object(
             db_manager,
             "get_user_preferences",
@@ -121,9 +118,7 @@ class TestApplyPersonalization:
             language_preferences={"Python": 0.5},
             total_interactions=settings.min_interactions_for_personalization,
         )
-        mocker.patch.object(
-            db_manager, "get_user_preferences", new_callable=AsyncMock, return_value=prefs
-        )
+        mocker.patch.object(db_manager, "get_user_preferences", new_callable=AsyncMock, return_value=prefs)
         engine = _make_engine()
         result = _make_result("a/a", language="Python", score=0.6, rank=1)
 
@@ -163,12 +158,10 @@ class TestRecommend:
             hybrid_search_top_k=100,
             rerank_top_k=20,
         )
-        mock_apply = mocker.patch.object(
-            PersonalizedEngine, "_apply_personalization", new_callable=AsyncMock
-        )
+        mock_apply = mocker.patch.object(PersonalizedEngine, "_apply_personalization", new_callable=AsyncMock)
         engine = _make_engine()
         mocker.patch.object(engine.language_enricher, "enrich", new_callable=AsyncMock, side_effect=lambda req: req)
-        
+
         await engine.recommend(_make_request())
 
         mock_apply.assert_not_awaited()
@@ -176,12 +169,10 @@ class TestRecommend:
     async def test_recommend_skips_personalization_when_no_user_id(self, mocker):
         base_results = [_make_result("a/a", score=0.9, rank=1)]
         self._patch_hybrid_recommend(mocker, return_value=base_results)
-        mock_apply = mocker.patch.object(
-            PersonalizedEngine, "_apply_personalization", new_callable=AsyncMock
-        )
+        mock_apply = mocker.patch.object(PersonalizedEngine, "_apply_personalization", new_callable=AsyncMock)
         engine = _make_engine()
         mocker.patch.object(engine.language_enricher, "enrich", new_callable=AsyncMock, side_effect=lambda req: req)
-        
+
         # No user_id in request
         await engine.recommend(_make_request(user_id=None))
 
@@ -190,12 +181,10 @@ class TestRecommend:
     async def test_recommend_skips_personalization_when_flag_false_in_request(self, mocker):
         base_results = [_make_result("a/a", score=0.9, rank=1)]
         self._patch_hybrid_recommend(mocker, return_value=base_results)
-        mock_apply = mocker.patch.object(
-            PersonalizedEngine, "_apply_personalization", new_callable=AsyncMock
-        )
+        mock_apply = mocker.patch.object(PersonalizedEngine, "_apply_personalization", new_callable=AsyncMock)
         engine = _make_engine()
         mocker.patch.object(engine.language_enricher, "enrich", new_callable=AsyncMock, side_effect=lambda req: req)
-        
+
         await engine.recommend(_make_request(enable_personalization=False))
 
         mock_apply.assert_not_awaited()
@@ -209,15 +198,13 @@ class TestRecommend:
             language_preferences={"Python": 0.8},
             total_interactions=real_settings.min_interactions_for_personalization,
         )
-        mocker.patch.object(
-            db_manager, "get_user_preferences", new_callable=AsyncMock, return_value=prefs
-        )
+        mocker.patch.object(db_manager, "get_user_preferences", new_callable=AsyncMock, return_value=prefs)
         engine = _make_engine()
-        
+
         # Mock language enricher
         mock_enrich = mocker.patch.object(engine.language_enricher, "enrich", new_callable=AsyncMock)
         mock_enrich.side_effect = lambda req: req
-        
+
         request = _make_request(user_id="user-42", enable_personalization=True)
         results = await engine.recommend(request)
 
@@ -234,9 +221,7 @@ class TestRecommend:
 
 class TestExplain:
     async def test_explain_includes_parent_explanation(self, mocker):
-        mocker.patch.object(
-            db_manager, "get_user_preferences", new_callable=AsyncMock, return_value=None
-        )
+        mocker.patch.object(db_manager, "get_user_preferences", new_callable=AsyncMock, return_value=None)
         engine = _make_engine()
         result = await engine.explain("owner/repo", _make_request())
 
@@ -245,9 +230,7 @@ class TestExplain:
         assert "query" in result
 
     async def test_explain_adds_personalization_key(self, mocker):
-        mocker.patch.object(
-            db_manager, "get_user_preferences", new_callable=AsyncMock, return_value=None
-        )
+        mocker.patch.object(db_manager, "get_user_preferences", new_callable=AsyncMock, return_value=None)
         engine = _make_engine()
         result = await engine.explain("owner/repo", _make_request())
 
@@ -255,9 +238,7 @@ class TestExplain:
 
     async def test_explain_includes_user_interactions_count_when_prefs_found(self, mocker):
         prefs = _make_prefs(total_interactions=42)
-        mocker.patch.object(
-            db_manager, "get_user_preferences", new_callable=AsyncMock, return_value=prefs
-        )
+        mocker.patch.object(db_manager, "get_user_preferences", new_callable=AsyncMock, return_value=prefs)
         engine = _make_engine()
         result = await engine.explain("owner/repo", _make_request(user_id="user-42"))
 
@@ -268,9 +249,7 @@ class TestExplain:
             language_preferences={"Python": 0.9, "Rust": 0.6, "Go": 0.4},
             total_interactions=20,
         )
-        mocker.patch.object(
-            db_manager, "get_user_preferences", new_callable=AsyncMock, return_value=prefs
-        )
+        mocker.patch.object(db_manager, "get_user_preferences", new_callable=AsyncMock, return_value=prefs)
         engine = _make_engine()
         result = await engine.explain("owner/repo", _make_request(user_id="user-42"))
 

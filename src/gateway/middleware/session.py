@@ -35,9 +35,7 @@ class SessionMiddleware(BaseHTTPMiddleware):
         # If API key middleware has already validated an API key for a
         # backend service mounted under `/api/...`, skip user session checks
         # because these requests are authenticated by service keys.
-        if request.url.path.startswith("/api/") and getattr(
-            request.state, "api_key", None
-        ):
+        if request.url.path.startswith("/api/") and getattr(request.state, "api_key", None):
             return await call_next(request)
 
         # Extract token from cookie or Authorization header
@@ -62,9 +60,7 @@ class SessionMiddleware(BaseHTTPMiddleware):
         if jwt_payload:
             request.state.user_id = jwt_payload["sub"]
             request.state.session_id = token
-            request.state.ip_address = (
-                request.client.host if request.client else "unknown"
-            )
+            request.state.ip_address = request.client.host if request.client else "unknown"
             request.state.is_admin = jwt_payload.get("is_admin", False)
         else:
             # --- Redis session fallback ---
@@ -106,9 +102,7 @@ async def get_current_user(request: Request) -> str:
         User ID
     """
     if not hasattr(request.state, "user_id"):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="User not authenticated"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not authenticated")
     return request.state.user_id
 
 
@@ -135,9 +129,7 @@ async def get_session_id(request: Request) -> str:
         Session ID
     """
     if not hasattr(request.state, "session_id"):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="No active session"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No active session")
     return request.state.session_id
 
 
@@ -149,11 +141,7 @@ async def require_admin(request: Request) -> str:
         User ID of the authenticated admin.
     """
     if not hasattr(request.state, "user_id"):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="User not authenticated"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not authenticated")
     if not getattr(request.state, "is_admin", False):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return request.state.user_id

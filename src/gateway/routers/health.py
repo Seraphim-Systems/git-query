@@ -99,9 +99,7 @@ async def _check_mcp_server(request: Request) -> Dict[str, Any]:
 async def health_mongodb(request: Request):
     return JSONResponse(
         status_code=(
-            status.HTTP_200_OK
-            if (await _check_mongodb(request)).get("status")
-            else status.HTTP_503_SERVICE_UNAVAILABLE
+            status.HTTP_200_OK if (await _check_mongodb(request)).get("status") else status.HTTP_503_SERVICE_UNAVAILABLE
         ),
         content={"service": "mongodb", "result": await _check_mongodb(request)},
     )
@@ -111,9 +109,7 @@ async def health_mongodb(request: Request):
 async def health_redis(request: Request):
     return JSONResponse(
         status_code=(
-            status.HTTP_200_OK
-            if (await _check_redis(request)).get("status")
-            else status.HTTP_503_SERVICE_UNAVAILABLE
+            status.HTTP_200_OK if (await _check_redis(request)).get("status") else status.HTTP_503_SERVICE_UNAVAILABLE
         ),
         content={"service": "redis", "result": await _check_redis(request)},
     )
@@ -123,9 +119,7 @@ async def health_redis(request: Request):
 async def health_qdrant(request: Request):
     return JSONResponse(
         status_code=(
-            status.HTTP_200_OK
-            if (await _check_qdrant(request)).get("status")
-            else status.HTTP_503_SERVICE_UNAVAILABLE
+            status.HTTP_200_OK if (await _check_qdrant(request)).get("status") else status.HTTP_503_SERVICE_UNAVAILABLE
         ),
         content={"service": "qdrant", "result": await _check_qdrant(request)},
     )
@@ -164,11 +158,7 @@ async def health_check_all(request: Request):
         }
 
         overall_status = "healthy" if any(services_status.values()) else "unhealthy"
-        http_status = (
-            status.HTTP_200_OK
-            if overall_status == "healthy"
-            else status.HTTP_503_SERVICE_UNAVAILABLE
-        )
+        http_status = status.HTTP_200_OK if overall_status == "healthy" else status.HTTP_503_SERVICE_UNAVAILABLE
 
         return JSONResponse(
             status_code=http_status,
@@ -213,11 +203,7 @@ async def health_check_databases(request: Request):
     overall_healthy = any(db.get("status", False) for db in databases.values())
 
     return JSONResponse(
-        status_code=(
-            status.HTTP_200_OK
-            if overall_healthy
-            else status.HTTP_503_SERVICE_UNAVAILABLE
-        ),
+        status_code=(status.HTTP_200_OK if overall_healthy else status.HTTP_503_SERVICE_UNAVAILABLE),
         content={
             "status": "healthy" if overall_healthy else "unhealthy",
             "timestamp": datetime.now(timezone.utc).isoformat(),

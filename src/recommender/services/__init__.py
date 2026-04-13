@@ -5,7 +5,7 @@ from .reranker_service import RerankerService
 from .personalization_service import PersonalizationService
 from .ab_test_service import ABTestService
 from .registry_service import ModelRegistryService
-from .language_preference_service import LanguagePreferenceService  
+from .language_preference_service import LanguagePreferenceService
 
 __all__ = [
     "EmbeddingService",
@@ -13,5 +13,5 @@ __all__ = [
     "PersonalizationService",
     "ABTestService",
     "ModelRegistryService",
-    "LanguagePreferenceService",   
+    "LanguagePreferenceService",
 ]

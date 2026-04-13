@@ -7,6 +7,7 @@ from typing import Optional
 
 _config_logger = logging.getLogger(__name__)
 
+
 class RecommenderSettings(BaseSettings):
     """Settings for the recommender service."""
 
@@ -54,9 +55,9 @@ class RecommenderSettings(BaseSettings):
     enable_personalization: bool = True
     personalization_weight: float = 0.15  # How much to boost based on user prefs
     min_interactions_for_personalization: int = 5
-    language_decay_half_life_days: float = 30.0   # Interaction half-life for decay
-    view_interaction_weight: float = 0.3          # Weight for VIEW interactions
-    explicit_language_boost: float = 0.8          # Score floor for explicitly set langs
+    language_decay_half_life_days: float = 30.0  # Interaction half-life for decay
+    view_interaction_weight: float = 0.3  # Weight for VIEW interactions
+    explicit_language_boost: float = 0.8  # Score floor for explicitly set langs
 
     # Caching
     cache_ttl_seconds: int = 3600  # 1 hour
@@ -68,7 +69,6 @@ class RecommenderSettings(BaseSettings):
 
     # Collections
     repos_collection: str = "repositories"
-    raw_repos_collection: str = "raw_repositories"
     interactions_collection: str = "user_interactions"
     user_prefs_collection: str = "user_preferences"
     models_collection: str = "ml_models"
@@ -87,6 +87,4 @@ class RecommenderSettings(BaseSettings):
 settings = RecommenderSettings()
 
 if not settings.embedding_api_key:
-    _config_logger.warning(
-        "EMBEDDING_API_KEY not set. Embedding functionality may be limited."
-    )
+    _config_logger.warning("EMBEDDING_API_KEY not set. Embedding functionality may be limited.")

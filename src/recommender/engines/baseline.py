@@ -15,9 +15,7 @@ class BaselineEngine(RecommendationEngine):
     def __init__(self):
         super().__init__(name="baseline", version="1.0.0")
 
-    async def recommend(
-        self, request: RecommendationRequest
-    ) -> List[RepositoryResult]:
+    async def recommend(self, request: RecommendationRequest) -> List[RepositoryResult]:
         """Generate recommendations using keyword search."""
         # Build filter
         query_filter = {}
@@ -64,9 +62,7 @@ class BaselineEngine(RecommendationEngine):
 
         return results
 
-    async def explain(
-        self, repo_id: str, request: RecommendationRequest
-    ) -> Dict[str, Any]:
+    async def explain(self, repo_id: str, request: RecommendationRequest) -> Dict[str, Any]:
         """Explain baseline ranking."""
         return {
             "engine": self.name,
@@ -74,4 +70,3 @@ class BaselineEngine(RecommendationEngine):
             "query": request.query,
             "message": "Repository matched keyword search criteria",
         }
-

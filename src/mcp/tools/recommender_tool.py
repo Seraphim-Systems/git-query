@@ -162,9 +162,7 @@ async def log_repository_interaction(
             response.raise_for_status()
             return response.json()
         except httpx.HTTPStatusError as e:
-            logger.error(
-                "Recommender returned HTTP error while logging interaction: %s", e
-            )
+            logger.error("Recommender returned HTTP error while logging interaction: %s", e)
             return {
                 "error": f"Recommender service error: {e.response.status_code}",
                 "detail": e.response.text,

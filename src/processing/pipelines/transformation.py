@@ -9,19 +9,20 @@ from processing.config import settings
 
 logger = logging.getLogger(__name__)
 
+
 class DataTransformer:
     """Transforms raw repository data into a consistent cleaned schema."""
-    
+
     def __init__(self):
         self.max_desc_length = settings.max_description_length
-    
+
     def transform(self, raw_record: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
         Transform and clean a raw record.
-        
+
         Args:
             raw_record: Raw repository data
-            
+
         Returns:
             Cleaned record or None if invalid
         """
@@ -146,7 +147,7 @@ class DataTransformer:
 
         value = str(value).strip()
         # Remove excessive whitespace
-        value = re.sub(r'\s+', ' ', value)
+        value = re.sub(r"\s+", " ", value)
         return value
 
     def _clean_description(self, description: Any) -> Optional[str]:
@@ -158,10 +159,10 @@ class DataTransformer:
 
         # Truncate if too long
         if len(desc) > self.max_desc_length:
-            desc = desc[:self.max_desc_length] + "..."
+            desc = desc[: self.max_desc_length] + "..."
 
         # Remove common prefixes/patterns
-        desc = re.sub(r'^(A |An |The )', '', desc, flags=re.IGNORECASE)
+        desc = re.sub(r"^(A |An |The )", "", desc, flags=re.IGNORECASE)
 
         return desc.strip()
 
@@ -182,7 +183,7 @@ class DataTransformer:
 
         try:
             # Try ISO format
-            parsed = datetime.fromisoformat(str(date_value).replace('Z', '+00:00'))
+            parsed = datetime.fromisoformat(str(date_value).replace("Z", "+00:00"))
             return parsed.isoformat()
         except ValueError:
             return None
@@ -231,7 +232,7 @@ class DataTransformer:
             return ""
 
         # Basic URL validation
-        if not url.startswith(('http://', 'https://')):
+        if not url.startswith(("http://", "https://")):
             return ""
 
         return url

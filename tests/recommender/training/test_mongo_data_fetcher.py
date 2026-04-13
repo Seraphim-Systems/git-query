@@ -207,12 +207,8 @@ class TestFetchTrainingPairs:
         fetcher = _make_fetcher()
         # Enough repos with distinct languages so build_query_groups works
         docs = [
-            {"repo_id": f"py{i}", "name": f"pyrepo{i}", "language": "Python", "stars": i * 10}
-            for i in range(10)
-        ] + [
-            {"repo_id": f"js{i}", "name": f"jsrepo{i}", "language": "JavaScript", "stars": i * 5}
-            for i in range(10)
-        ]
+            {"repo_id": f"py{i}", "name": f"pyrepo{i}", "language": "Python", "stars": i * 10} for i in range(10)
+        ] + [{"repo_id": f"js{i}", "name": f"jsrepo{i}", "language": "JavaScript", "stars": i * 5} for i in range(10)]
         with patch("src.recommender.training.data.mongo_data_fetcher.requests.post") as mock_post:
             mock_post.return_value = _mock_post(documents=docs, count=len(docs))
             result = fetcher.fetch_training_pairs(max_repos=100)
@@ -227,12 +223,8 @@ class TestFetchTrainingPairs:
         """grouped_df must always carry an interaction_score column."""
         fetcher = _make_fetcher()
         docs = [
-            {"repo_id": f"py{i}", "name": f"pyrepo{i}", "language": "Python", "stars": i * 10}
-            for i in range(10)
-        ] + [
-            {"repo_id": f"js{i}", "name": f"jsrepo{i}", "language": "JavaScript", "stars": i * 5}
-            for i in range(10)
-        ]
+            {"repo_id": f"py{i}", "name": f"pyrepo{i}", "language": "Python", "stars": i * 10} for i in range(10)
+        ] + [{"repo_id": f"js{i}", "name": f"jsrepo{i}", "language": "JavaScript", "stars": i * 5} for i in range(10)]
         with patch("src.recommender.training.data.mongo_data_fetcher.requests.post") as mock_post:
             mock_post.return_value = _mock_post(documents=docs, count=len(docs))
             result = fetcher.fetch_training_pairs(max_repos=100)
@@ -242,12 +234,8 @@ class TestFetchTrainingPairs:
     def test_interaction_score_zero_when_no_interactions(self):
         """When fetch_interactions returns {}, all interaction_score values are 0.0."""
         fetcher = _make_fetcher()
-        docs = [
-            {"repo_id": f"py{i}", "name": f"r{i}", "language": "Python", "stars": i * 10}
-            for i in range(10)
-        ] + [
-            {"repo_id": f"js{i}", "name": f"r{i}", "language": "JavaScript", "stars": i * 5}
-            for i in range(10)
+        docs = [{"repo_id": f"py{i}", "name": f"r{i}", "language": "Python", "stars": i * 10} for i in range(10)] + [
+            {"repo_id": f"js{i}", "name": f"r{i}", "language": "JavaScript", "stars": i * 5} for i in range(10)
         ]
         with patch("src.recommender.training.data.mongo_data_fetcher.requests.post") as mock_post:
             mock_post.return_value = _mock_post(documents=docs, count=len(docs))
@@ -258,12 +246,8 @@ class TestFetchTrainingPairs:
     def test_interaction_scores_joined_correctly(self):
         """Repos with matching IDs get their weighted interaction score."""
         fetcher = _make_fetcher()
-        docs = [
-            {"repo_id": f"py{i}", "name": f"r{i}", "language": "Python", "stars": i * 10}
-            for i in range(10)
-        ] + [
-            {"repo_id": f"js{i}", "name": f"r{i}", "language": "JavaScript", "stars": i * 5}
-            for i in range(10)
+        docs = [{"repo_id": f"py{i}", "name": f"r{i}", "language": "Python", "stars": i * 10} for i in range(10)] + [
+            {"repo_id": f"js{i}", "name": f"r{i}", "language": "JavaScript", "stars": i * 5} for i in range(10)
         ]
         # py0 has a save (+3) and a click (+1) = 4.0
         interaction_docs = [
@@ -307,10 +291,10 @@ class TestFetchInteractions:
         """Multiple interactions on the same repo are summed."""
         fetcher = _make_fetcher()
         docs = [
-            {"repo_id": "r1", "interaction_type": "save"},    # +3
-            {"repo_id": "r1", "interaction_type": "click"},   # +1 → total 4
+            {"repo_id": "r1", "interaction_type": "save"},  # +3
+            {"repo_id": "r1", "interaction_type": "click"},  # +1 → total 4
             {"repo_id": "r2", "interaction_type": "thumbs_up"},  # +5
-            {"repo_id": "r2", "interaction_type": "dismiss"},    # -2 → total 3
+            {"repo_id": "r2", "interaction_type": "dismiss"},  # -2 → total 3
         ]
         with patch("src.recommender.training.data.mongo_data_fetcher.requests.post") as mock_post:
             mock_post.return_value = _mock_post(documents=docs)

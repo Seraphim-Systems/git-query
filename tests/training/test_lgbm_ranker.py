@@ -441,9 +441,7 @@ class TestBuildRankDataDotProduct:
         _, y_dot, _ = ranker._build_rank_data(grouped_with_scores, fe)
         _, y_star, _ = ranker._build_rank_data(star_only, fe)
 
-        pd.testing.assert_series_equal(
-            y_dot.reset_index(drop=True), y_star.reset_index(drop=True)
-        )
+        pd.testing.assert_series_equal(y_dot.reset_index(drop=True), y_star.reset_index(drop=True))
 
     def test_all_zero_interaction_scores_uses_star_labels(self):
         """All-zero interaction_score → pos_mask empty → star fallback."""
@@ -457,9 +455,7 @@ class TestBuildRankDataDotProduct:
         _, y_dot, _ = ranker._build_rank_data(grouped_zeros, fe)
         _, y_star, _ = ranker._build_rank_data(star_only, fe)
 
-        pd.testing.assert_series_equal(
-            y_dot.reset_index(drop=True), y_star.reset_index(drop=True)
-        )
+        pd.testing.assert_series_equal(y_dot.reset_index(drop=True), y_star.reset_index(drop=True))
 
     def test_zero_norm_profile_does_not_raise(self):
         """All-zero feature vectors must not cause ZeroDivisionError."""

@@ -28,9 +28,7 @@ class MCPClient:
             logger.error("Failed to list tools from MCP server: %s", e)
             return []
 
-    async def execute_tool(
-        self, tool_name: str, parameters: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def execute_tool(self, tool_name: str, parameters: dict[str, Any]) -> dict[str, Any]:
         """Execute a tool on the MCP server."""
         try:
             response = await self.client.post(

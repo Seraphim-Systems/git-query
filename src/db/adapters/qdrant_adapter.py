@@ -39,16 +39,10 @@ class QdrantAdapter(VectorRepository):
         cols = self.client.get_collections()
         out = []
         for c in getattr(cols, "collections", []):
-            out.append(
-                getattr(c, "name", None)
-                or getattr(c, "collection_name", None)
-                or str(c)
-            )
+            out.append(getattr(c, "name", None) or getattr(c, "collection_name", None) or str(c))
         return out
 
-    def upsert_points(
-        self, collection: str, points: List[Dict[str, Any]], wait: bool = True
-    ) -> Dict[str, Any]:
+    def upsert_points(self, collection: str, points: List[Dict[str, Any]], wait: bool = True) -> Dict[str, Any]:
         """Upsert points: prefer qdrant-client, fall back to HTTP (and legacy payloads).
 
         Points format: [{"id": ..., "vector": [...], "payload": {...}}, ...]
@@ -88,9 +82,7 @@ class QdrantAdapter(VectorRepository):
             try:
                 # Newer clients accept wait kwarg
                 try:
-                    self.client.upsert(
-                        collection_name=collection, points=pts, wait=wait
-                    )
+                    self.client.upsert(collection_name=collection, points=pts, wait=wait)
                 except TypeError:
                     self.client.upsert(collection_name=collection, points=pts)
                 return {"collection": collection, "upserted": len(pts)}
@@ -181,9 +173,7 @@ class QdrantAdapter(VectorRepository):
                     continue
                 r.raise_for_status()
                 data = r.json()
-                items = (
-                    data.get("result") or data.get("points") or data.get("hits") or []
-                )
+                items = data.get("result") or data.get("points") or data.get("hits") or []
                 hits = []
                 for it in items:
                     if isinstance(it, dict):
