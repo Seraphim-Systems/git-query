@@ -1,5 +1,5 @@
-# CI-only requirements: everything needed for unit tests, without heavy ML deps.
-# Excludes: torch, sentence-transformers, transformers, kagglehub, ijson,
+# CI-only requirements: everything needed for lint and unit tests.
+# Excludes only non-essential extras for CI runtime/cost, e.g. kagglehub, ijson,
 #           pyarrow, fastparquet, matplotlib, ipykernel
 
 # Web Framework & API
@@ -41,6 +41,8 @@ pandas>=2.0.0
 numpy>=1.26.3
 scikit-learn>=1.4.0
 lightgbm>=4.0.0
+torch>=2.2.0
+sentence-transformers>=2.3.1
 
 # MLOps
 mlflow>=2.10.0
