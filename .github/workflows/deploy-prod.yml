@@ -1,0 +1,19 @@
+name: Deploy to Production
+
+# Single Responsibility: Deploy to production with all services
+# Triggered: Push to 'prod' branch
+# Services: Full stack with persistent volumes and prod overrides
+
+on:
+  push:
+    branches: [prod]
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/reusable-deploy.yml
+    with:
+      compose_files: "-f docker-compose.base.yml -f docker-compose.databases.yml -f docker-compose.gateway.yml -f docker-compose.app.yml -f docker-compose.prod.yml"
+      services: ""
+      branch: ${{ github.ref_name }}
+      health_check_url: "http://localhost/health"
+    secrets: inherit

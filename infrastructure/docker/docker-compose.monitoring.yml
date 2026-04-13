@@ -1,0 +1,101 @@
+# Monitoring stack: drift detection + Evidently UI + MLflow tracking server
+#
+# Usage (one-off drift check):
+#   docker compose -f docker-compose.base.yml -f docker-compose.monitoring.yml run --rm drift-monitor
+#
+# Usage (persistent UI services):
+#   docker compose -f docker-compose.base.yml -f docker-compose.monitoring.yml up evidently-ui mlflow
+
+services:
+  drift-monitor:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.drift-monitor
+    image: git-query-drift-monitor:latest
+    container_name: git-query-drift-monitor
+    environment:
+      # Reference data written by the training pipeline
+      REFERENCE_DATA_PATH: /app/models/metadata/reference_data.parquet
+      REFERENCE_EMBEDDINGS_PATH: /app/models/vectors/repo_embeddings_latest.npy
+      REFERENCE_SCORES_PATH: /app/models/metadata/reference_scores.npy
+      MODELS_DIR: /app/models
+
+      # Live data sources — provide current state for comparison
+      API_BASE_URL: ${API_BASE_URL:-}
+      APIKEY_MONGODB: ${APIKEY_MONGODB:-}
+      QDRANT_URL: ${QDRANT_URL:-http://git-query-qdrant:6333}
+      APIKEY_QDRANT: ${APIKEY_QDRANT:-}
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-repositories_embeddings}
+
+      # MLflow tracking server — drift results logged here alongside model metrics
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://git-query-mlflow:5000}
+      MLFLOW_EXPERIMENT_NAME: ${MLFLOW_EXPERIMENT_NAME:-git-query-drift-checks}
+
+      # Output paths
+      EVIDENTLY_REPORT_PATH: /app/drift_reports
+      EVIDENTLY_WORKSPACE_PATH: /app/workspace
+    volumes:
+      - drift-reports:/app/drift_reports
+      - evidently-workspace:/app/workspace
+      # Read-only access to model artifacts (reference data + embeddings)
+      - model-artifacts:/app/models:ro
+    networks:
+      - internal-network
+    restart: "no"
+
+  evidently-ui:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.evidently-ui
+    image: git-query-evidently-ui:latest
+    container_name: git-query-evidently-ui
+    command: ["evidently", "ui", "--workspace", "/app/workspace", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+    volumes:
+      - evidently-workspace:/app/workspace
+    restart: unless-stopped
+
+  mlflow:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.mlflow
+    image: git-query-mlflow:latest
+    container_name: git-query-mlflow
+    command: >
+      mlflow server
+      --backend-store-uri /mlflow
+      --default-artifact-root /mlflow/artifacts
+      --host 0.0.0.0
+      --port 5000
+      --allowed-hosts "*"
+    environment:
+      # Mount point matches the volume below — must equal where training writes (/app/mlruns → volume root).
+      # Dockerfile.mlflow CMD uses this env var via shell form.
+      MLFLOW_BACKEND_STORE_URI: /mlflow
+      MLFLOW_DEFAULT_ARTIFACT_ROOT: ${MLFLOW_DEFAULT_ARTIFACT_ROOT:-/mlflow/artifacts}
+    ports:
+      - "${MLFLOW_PORT:-5000}:5000"
+    volumes:
+      # Shared with training container (git-query-mlflow-runs).
+      # Training writes to /app/mlruns (= volume root); UI reads from /mlflow (= same volume root).
+      - mlflow-runs:/mlflow
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  drift-reports:
+    driver: local
+  evidently-workspace:
+    driver: local
+  model-artifacts:
+    external: true
+    name: git-query-model-artifacts
+  mlflow-runs:
+    external: true
+    name: git-query-mlflow-runs

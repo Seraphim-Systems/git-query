@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - GitQuery</title>
+    <link rel="stylesheet" href="/styles/auth.css">
+</head>
+<body>
+    <div class="bg-orb bg-orb-1"></div>
+    <div class="bg-orb bg-orb-2"></div>
+    <a href="/" class="auth-logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+        GitQuery
+    </a>
+    <div class="auth-container">
+        <div class="auth-header">
+            <h1 class="auth-title">Welcome back</h1>
+            <p class="auth-subtitle">Sign in to continue</p>
+        </div>
+        
+        <div id="message" class="message"></div>
+        
+        <form id="loginForm" class="auth-form">
+            <div class="form-group">
+                <label for="email" class="form-label">Email address</label>
+                <input 
+                    type="email" 
+                    id="email" 
+                    class="form-input" 
+                    placeholder="you@example.com"
+                    required
+                    autocomplete="email">
+            </div>
+            
+            <div class="form-group">
+                <label for="password" class="form-label">Password</label>
+                <div class="password-toggle">
+                    <input 
+                        type="password" 
+                        id="password" 
+                        class="form-input" 
+                        placeholder="Enter your password"
+                        required
+                        autocomplete="current-password">
+                    <button type="button" id="passwordToggle" class="password-toggle-btn">👁️</button>
+                </div>
+            </div>
+            
+            <button type="submit" id="submitBtn" class="submit-btn" disabled>
+                Sign In
+            </button>
+        </form>
+        
+        <div class="auth-divider">or</div>
+        
+        <div class="auth-link">
+            Don't have an account? <a href="/register.html">Sign up</a>
+        </div>
+    </div>
+    
+    <script src="/src/login.js"></script>
+</body>
+</html>

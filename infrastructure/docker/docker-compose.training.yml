@@ -1,0 +1,69 @@
+# Training service compose
+# Usage: docker-compose -f docker-compose.base.yml -f docker-compose.training.yml up
+
+services:
+  training:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.training
+    container_name: git-query-training
+    image: git-query-training:latest
+    environment:
+      # API Configuration
+      - API_BASE_URL=${API_BASE_URL:-http://git-query-gateway}
+      - RECOMMENDER_URL=${RECOMMENDER_URL:-http://git-query-recommender:8095}
+      - APIKEY_MONGODB=${APIKEY_MONGODB}
+
+      # Training Configuration
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
+      - BATCH_SIZE=${BATCH_SIZE:-256}
+      - FETCH_BATCH_SIZE=${FETCH_BATCH_SIZE:-100}
+      - MAX_REPOS=${MAX_REPOS:-}
+      - SKIP_IF_NO_NEW_DATA=${SKIP_IF_NO_NEW_DATA:-true}
+
+      # Qdrant Upload Configuration
+      - APIKEY_QDRANT=${APIKEY_QDRANT}
+      - QDRANT_COLLECTION=${QDRANT_COLLECTION:-repositories_embeddings}
+      - UPLOAD_BATCH_SIZE=${UPLOAD_BATCH_SIZE:-100}
+      - SKIP_QDRANT_UPLOAD=${SKIP_QDRANT_UPLOAD:-false}
+
+      # Chunked Pipeline Configuration
+      - USE_CHUNKED_PIPELINE=${USE_CHUNKED_PIPELINE:-true}
+      - CHUNK_SIZE=${CHUNK_SIZE:-100000}
+      - N_WORKERS=${N_WORKERS:-6}
+
+      # MLflow experiment tracking
+      - MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI:-file:///app/mlruns}
+      - MLFLOW_EXPERIMENT_NAME=${MLFLOW_EXPERIMENT_NAME:-git-query-retrain}
+      - ENABLE_LGBM_TRAINING=${ENABLE_LGBM_TRAINING:-true}
+      - LGBM_TOP_N_QUERIES=${LGBM_TOP_N_QUERIES:-100}
+      - LGBM_CANDIDATES_PER_QUERY=${LGBM_CANDIDATES_PER_QUERY:-100}
+      - LGBM_NUM_BOOST_ROUNDS=${LGBM_NUM_BOOST_ROUNDS:-300}
+
+    # No network needed - training only connects to external API via internet
+    restart: "no"  # Run once, don't restart
+    shm_size: '2gb'
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]  # PyTorch multiprocessing needs shared memory for model weights
+    volumes:
+      # Persist trained models
+      - model-artifacts:/app/models
+      # Cache downloaded data
+      - training-data:/app/training_data
+      # Logs
+      - training-logs:/app/logs
+      # MLflow tracking artifacts
+      - mlflow-runs:/app/mlruns
+    networks:
+      - internal-network
+
+volumes:
+  training-data:
+    name: git-query-training-data
+  training-logs:
+    name: git-query-training-logs

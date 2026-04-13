@@ -1,0 +1,18 @@
+name: Deploy Training Pipeline
+
+# Single Responsibility: Run the training pipeline
+# Triggered: Manual workflow dispatch
+# Services: Training pipeline (standalone, no internal deps)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/reusable-deploy.yml
+    with:
+      compose_files: "-f docker-compose.base.yml -f docker-compose.training.yml"
+      services: "training"
+      branch: ${{ github.ref_name }}
+      health_check_url: ""
+    secrets: inherit

@@ -1,0 +1,27 @@
+FROM python:3.11-slim AS base
+WORKDIR /app
+
+FROM base AS builder
+RUN --mount=type=cache,target=/var/cache/apt/archives \
+  apt-get update && apt-get install -y --no-install-recommends git curl python3-venv && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt /app/requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+  python -m venv /app/.venv && /app/.venv/bin/pip install --upgrade pip && /app/.venv/bin/pip install --no-cache-dir -r /app/requirements.txt
+
+FROM base AS final
+COPY --from=builder /app/.venv /app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Copy scraper code
+COPY src/scraper /app/scraper
+COPY src/shared /app/shared
+
+# Create data directory
+RUN mkdir -p /app/data
+
+# Set Python path
+ENV PYTHONPATH=/app
+
+# Run scraper
+CMD ["python", "-m", "scraper"]

@@ -1,0 +1,20 @@
+name: Deploy Application Stack
+
+# Single Responsibility: Deploy all application services (excluding Web UI)
+# Triggered: Manual workflow dispatch
+# Services: Gateway, Recommender, MCP Server
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [prod]
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/reusable-deploy.yml
+    with:
+      compose_files: "-f docker-compose.base.yml -f docker-compose.databases.yml -f docker-compose.gateway.yml -f docker-compose.app.yml -f docker-compose.dev.yml"
+      services: "gateway recommender mcp-server"
+      branch: ${{ github.ref_name }}
+      health_check_url: "http://localhost/health"
+    secrets: inherit

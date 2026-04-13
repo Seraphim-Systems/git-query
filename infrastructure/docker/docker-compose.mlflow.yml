@@ -1,0 +1,46 @@
+# MLflow Tracking Server Compose Configuration
+# Provides experiment tracking, model registry, and artifact storage
+
+services:
+  mlflow:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.mlflow
+    image: git-query-mlflow:latest
+    container_name: git-query-mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      # Persistent storage for experiments and artifacts
+      - mlflow-runs:/mlflow
+      - mlflow-artifacts:/mlflow/artifacts
+    command: >
+      mlflow server
+      --backend-store-uri /mlflow
+      --default-artifact-root /mlflow/artifacts
+      --host 0.0.0.0
+      --port 5000
+      --allowed-hosts "*"
+    environment:
+      - MLFLOW_BACKEND_STORE_URI=/mlflow
+      - MLFLOW_DEFAULT_ARTIFACT_ROOT=/mlflow/artifacts
+    networks:
+      - internal-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  mlflow-runs:
+    external: true
+    name: git-query-mlflow-runs
+  mlflow-artifacts:
+    driver: local
+
+networks:
+  internal-network:
+    external: true

@@ -1,0 +1,19 @@
+name: Deploy MCP Server
+
+# Single Responsibility: Deploy only the MCP (Model Context Protocol) server
+# Triggered: Manual workflow dispatch
+# Services: MCP Server (with database dependencies)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/reusable-deploy.yml
+    with:
+      compose_files: "-f docker-compose.base.yml -f docker-compose.databases.yml -f docker-compose.app.yml"
+      services: "mcp-server"
+      branch: ${{ github.ref_name }}
+      # Port 8090 is not exposed to the host in production; exec into the container.
+      health_check_command: "docker exec git-query-mcp curl -f http://localhost:8090/health"
+    secrets: inherit

@@ -1,0 +1,59 @@
+FROM python:3.11-slim AS base
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+FROM base AS builder
+
+# Create virtual environment
+RUN python -m venv /app/.venv
+
+# Copy requirements
+COPY src/recommender/requirements.txt /tmp/requirements.txt
+
+# Install Python dependencies
+RUN --mount=type=cache,target=/root/.cache/pip \
+    /app/.venv/bin/pip install --upgrade pip && \
+    /app/.venv/bin/pip install -r /tmp/requirements.txt && \
+    /app/.venv/bin/pip install requests lightgbm>=4.0.0 mlflow>=2.10.0 evidently>=0.4.0 && \
+    /app/.venv/bin/pip install torch --index-url https://download.pytorch.org/whl/cu121
+
+FROM base AS final
+
+# Copy virtual environment from builder
+COPY --from=builder /app/.venv /app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Copy training code, MLOps modules, data loaders, and upload scripts
+COPY src/recommender/training /app/training
+COPY src/recommender/mlops /app/mlops
+COPY src/recommender/data /app/data
+COPY src/recommender/scripts /app/scripts
+COPY src/shared /app/shared
+
+# Create directories for models and data
+RUN mkdir -p /app/models/vectors /app/models/metadata /app/models/checkpoints && \
+    mkdir -p /app/training_data && \
+    mkdir -p /app/logs && \
+    mkdir -p /app/models/metadata && \
+    mkdir -p /app/mlruns
+
+# Set Python path
+ENV PYTHONPATH=/app
+
+# Environment variables (override via docker-compose or .env)
+ENV PYTHONUNBUFFERED=1
+# API credentials MUST be provided via environment variables
+# Do NOT set API_BASE_URL or APIKEY_MONGODB here
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD test -f /app/models/metadata/training_metadata_latest.json || exit 1
+
+# Run full retraining pipeline (embeddings + LightGBM ranker + MLflow logging)
+CMD ["python", "-m", "training.retrain_pipeline"]

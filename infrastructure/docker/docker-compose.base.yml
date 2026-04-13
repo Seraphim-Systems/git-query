@@ -1,0 +1,36 @@
+# Base compose configuration - defines shared networks and volumes
+# This is the foundation for all other compose files
+# Usage: docker-compose -f docker-compose.base.yml -f <service-compose>.yml up
+
+volumes:
+  mongodb-data:
+    name: git-query-mongodb-data
+  mongodb-config:
+    name: git-query-mongodb-config
+  qdrant-storage:
+    name: git-query-qdrant-storage
+  qdrant-snapshots:
+    name: git-query-qdrant-snapshots
+  redis-data:
+    name: git-query-redis-data
+  scraper-data:
+    name: git-query-scraper-data
+  processing-data:
+    name: git-query-processing-data
+  model-artifacts:
+    name: git-query-model-artifacts
+  training-data:
+    name: git-query-training-data
+  training-logs:
+    name: git-query-training-logs
+  mlflow-runs:
+    name: git-query-mlflow-runs
+  huggingface-cache:
+    name: git-query-huggingface-cache
+
+networks:
+  internal-network:
+    name: git-query-internal-network
+    driver: bridge
+
+services: {}
