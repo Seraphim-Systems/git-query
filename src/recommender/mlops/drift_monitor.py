@@ -27,9 +27,9 @@ try:
     from evidently.report import Report
 
     EVIDENTLY_AVAILABLE = True
-except ImportError:
+except Exception:
     EVIDENTLY_AVAILABLE = False
-    logger.warning("Evidently not installed. Drift monitoring will be disabled.")
+    logger.warning("Evidently not available. Drift monitoring will be disabled.")
 
 
 class DriftMonitor:

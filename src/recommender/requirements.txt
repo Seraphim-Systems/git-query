@@ -23,7 +23,7 @@ ipykernel>=6.0.0
 
 # MLOps dependencies
 mlflow>=2.10.0
-evidently>=0.4.0
+evidently>=0.6.0
 lightgbm>=4.0.0
 
 # Testing dependencies
