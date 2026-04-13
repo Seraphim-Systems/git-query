@@ -12,6 +12,8 @@ services:
       RECOMMENDER_HOST: 0.0.0.0
       RECOMMENDER_PORT: 8095
       LOG_LEVEL: ${SVC_LOG_LEVEL:-INFO}
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow:5000}
+      MLFLOW_EXPERIMENT_NAME: ${MLFLOW_EXPERIMENT_NAME:-git-query-recommender}
       MONGODB_URL: mongodb://${DB_MONGODB_USER:-admin}:${DB_MONGODB_PASSWORD:-mongopass}@mongodb:27017/gitquery?authSource=admin
       QDRANT_HOST: qdrant
       QDRANT_PORT: 6333
