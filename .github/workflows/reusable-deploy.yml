@@ -83,12 +83,19 @@ jobs:
           if [ -d "$REPO_PATH/.git" ]; then
             cd "$REPO_PATH"
             git fetch origin
+<<<<<<< HEAD
             git reset --hard origin/${{ inputs.branch }}
             # Do not run git clean here: persistent bind-mount data under
+=======
+            git checkout ${{ inputs.branch }} 2>/dev/null || git checkout -b ${{ inputs.branch }} origin/${{ inputs.branch }}
+            git pull --ff-only origin ${{ inputs.branch }}
+            # Do not run git clean/reset here: persistent bind-mount data under
+>>>>>>> b4de9bece4d020391aa53cc3daf18e55c7d4c9c3
             # volumes/ must survive deployments and may be container-owned.
           else
             git clone https://github.com/Seraphim-Systems/git-query.git "$REPO_PATH"
             cd "$REPO_PATH"
+            git checkout ${{ inputs.branch }} 2>/dev/null || true
           fi
           ENDSSH
 
@@ -101,15 +108,8 @@ jobs:
           # docker-compose services that use `env_file: .env` require the file
           # to exist in the compose working directory.
           cp /tmp/deploy.env .env
-          # Fix network label mismatch from docker-compose v1 -> docker compose v2 migration.
-          # v1 set com.docker.compose.network=<full-name>; v2 expects the compose key name.
-          # If the old label is present, tear down first so the network is recreated correctly.
-          NETLABEL=$(docker network inspect git-query-internal-network --format '{{ index .Labels "com.docker.compose.network" }}' 2>/dev/null || true)
-          if [ "$NETLABEL" = "git-query-internal-network" ]; then
-            echo "Removing mis-labeled network from docker-compose v1..."
-            docker compose ${{ inputs.compose_files }} down || true
-            docker network rm git-query-internal-network || true
-          fi
+          # Non-destructive deploy policy:
+          # never run `docker compose down`, never remove volumes, never prune.
           # Ensure the external proxy network exists (used by the gateway service).
           docker network inspect proxy >/dev/null 2>&1 || docker network create proxy >/dev/null
           docker compose ${{ inputs.compose_files }} up -d --build ${{ inputs.services }}

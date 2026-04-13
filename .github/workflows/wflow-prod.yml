@@ -1,0 +1,21 @@
+name: Workflow for Production Deployment
+
+# Single Responsibility: Deploy full stack to production
+# Triggered: Push to 'prod' branch
+# Services: Runtime stack only (databases, gateway, recommender, MCP, web)
+
+on:
+  push:
+    branches: [prod]
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/reusable-deploy.yml
+    with:
+      compose_files: "-f docker-compose.base.yml -f docker-compose.databases.yml -f docker-compose.gateway.yml -f docker-compose.app.yml -f docker-compose.web.yml -f docker-compose.prod.yml"
+      services: ""
+      force_rebuild_services: "web"
+      branch: ${{ github.ref_name }}
+      health_check_url: ""
+      health_check_command: "docker exec git-query-gateway curl -fsS http://localhost:80/health >/dev/null && docker exec git-query-gateway curl -fsS http://localhost:80/styles/main.css >/dev/null && docker exec git-query-gateway curl -fsS http://localhost:80/styles/landing.css >/dev/null"
+    secrets: inherit

@@ -1,0 +1,169 @@
+name: Run Raw Repositories Population
+
+# Single Responsibility: run raw repositories population script on server
+# Triggered: Manual workflow dispatch
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to run from on server"
+        required: false
+        type: string
+        default: "dev"
+      dataset:
+        description: "Kaggle dataset slug"
+        required: false
+        type: string
+        default: "jp797498e/github-repository-metadata-with-3-5-million-records"
+      dataset_file:
+        description: "Dataset JSON filename"
+        required: false
+        type: string
+        default: "repo_metadata.json"
+      batch_size:
+        description: "Batch size"
+        required: false
+        type: string
+        default: "200"
+      resume:
+        description: "Resume from checkpoint"
+        required: false
+        type: boolean
+        default: true
+      reset_checkpoint:
+        description: "Reset checkpoint before run"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  run-population:
+    name: Run population on server
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Run population in Docker on server
+        run: |
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
+          set -euo pipefail
+          REPO_PATH="/home/${{ secrets.INFRA_HETZNER_USER }}/git-query"
+          PROCESSING_IMAGE="git-query-processing:raw-population"
+          POP_CONTAINER="git-query-raw-population-job"
+          CHECKPOINT_FILE=".checkpoints/raw_repositories_population.server.json"
+          LOG_FILE="logs/raw_repositories_population.log"
+          MONGO_WAS_RUNNING=0
+
+          cleanup() {
+            if [ "$MONGO_WAS_RUNNING" -eq 0 ]; then
+              echo "Stopping Mongo container started by this workflow (data remains on named volume)."
+              docker compose \
+                -f infrastructure/docker/docker-compose.base.yml \
+                -f infrastructure/docker/docker-compose.databases.yml \
+                stop mongodb || true
+            fi
+          }
+          trap cleanup EXIT
+
+          if [ -d "$REPO_PATH/.git" ]; then
+            cd "$REPO_PATH"
+            git fetch origin
+            git reset --hard origin/${{ github.event.inputs.branch }}
+          else
+            git clone https://github.com/Seraphim-Systems/git-query.git "$REPO_PATH"
+            cd "$REPO_PATH"
+            git checkout ${{ github.event.inputs.branch }}
+          fi
+
+          mkdir -p "$REPO_PATH/logs" "$REPO_PATH/.checkpoints"
+
+          mkdir -p ~/.kaggle
+          cat > ~/.kaggle/kaggle.json << EOF
+          {
+            "username": "${{ secrets.KAGGLE_USERNAME }}",
+            "key": "${{ secrets.KAGGLE_KEY }}"
+          }
+          EOF
+          chmod 600 ~/.kaggle/kaggle.json
+
+          RESUME_FLAG=""
+          if [ "${{ github.event.inputs.resume }}" = "true" ]; then
+            RESUME_FLAG="--resume"
+          fi
+
+          RESET_FLAG=""
+          if [ "${{ github.event.inputs.reset_checkpoint }}" = "true" ]; then
+            RESET_FLAG="--reset-checkpoint"
+          fi
+
+          if docker ps --format '{{.Names}}' | grep -Fxq git-query-mongodb; then
+            MONGO_WAS_RUNNING=1
+            echo "Mongo container already running; reusing existing volume-backed DB."
+          else
+            echo "Starting Mongo container for this run..."
+            docker compose \
+              -f infrastructure/docker/docker-compose.base.yml \
+              -f infrastructure/docker/docker-compose.databases.yml \
+              up -d mongodb
+          fi
+
+          echo "Building processing image..."
+          docker build -f infrastructure/docker/Dockerfile.processing -t "$PROCESSING_IMAGE" .
+
+          docker rm -f "$POP_CONTAINER" >/dev/null 2>&1 || true
+
+          echo "Running raw population job in container..."
+          docker run --name "$POP_CONTAINER" --rm \
+            --network git-query-internal-network \
+            -e MONGODB_URL="mongodb://${{ secrets.DB_MONGODB_USER || 'admin' }}:${{ secrets.DB_MONGODB_PASSWORD || 'mongopass' }}@git-query-mongodb:27017/gitquery?authSource=admin" \
+            -e MONGODB_DB="gitquery" \
+            -e PYTHONPATH="/repo" \
+            -v "$REPO_PATH:/repo" \
+            -v "$HOME/.kaggle:/root/.kaggle:ro" \
+            "$PROCESSING_IMAGE" \
+            python /repo/src/processing/scripts/raw_repositories_population.py \
+            --dataset "${{ github.event.inputs.dataset }}" \
+            --file "${{ github.event.inputs.dataset_file }}" \
+            --collection raw_repositories \
+            --target mongodb \
+            --batch-size "${{ github.event.inputs.batch_size }}" \
+            --checkpoint-file "$CHECKPOINT_FILE" \
+            $RESUME_FLAG \
+            $RESET_FLAG \
+            2>&1 | tee "$REPO_PATH/$LOG_FILE"
+
+          echo "Population job finished."
+
+          echo "Checkpoint summary:"
+          cat "$REPO_PATH/$CHECKPOINT_FILE" || true
+
+          echo "Current raw_repositories count:"
+          docker exec git-query-mongodb mongosh \
+            "mongodb://${{ secrets.DB_MONGODB_USER || 'admin' }}:${{ secrets.DB_MONGODB_PASSWORD || 'mongopass' }}@localhost:27017/gitquery?authSource=admin" \
+            --quiet --eval 'db.raw_repositories.countDocuments({})' || true
+
+          ENDSSH
+
+      - name: Show checkpoint state
+        run: |
+          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
+          REPO_PATH="/home/${{ secrets.INFRA_HETZNER_USER }}/git-query"
+          if [ -f "$REPO_PATH/.checkpoints/raw_repositories_population.server.json" ]; then
+            cat "$REPO_PATH/.checkpoints/raw_repositories_population.server.json"
+          else
+            echo "No checkpoint file yet"
+          fi
+          if [ -f "$REPO_PATH/logs/raw_repositories_population.log" ]; then
+            tail -n 30 "$REPO_PATH/logs/raw_repositories_population.log"
+          else
+            echo "No log file yet"
+          fi
+          ENDSSH

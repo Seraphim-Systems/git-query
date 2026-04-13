@@ -1,4 +1,4 @@
-name: Deploy Recommendation Engine
+name: Deploy Recommendation Engine (Manual)
 
 # Single Responsibility: Deploy only the recommender service
 # Triggered: Manual workflow dispatch
