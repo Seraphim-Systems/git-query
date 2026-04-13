@@ -124,6 +124,11 @@ jobs:
             echo "Dispatch this workflow from the branch containing the latest script changes."
             exit 1
           fi
+          if ! grep -q -- "SRC_ROOT = REPO_ROOT / \"src\"" src/processing/scripts/clean_repositories_population.py; then
+            echo "Stale server code detected: clean_repositories_population.py missing import path bootstrap fix."
+            echo "Dispatch this workflow from the branch containing the latest script changes."
+            exit 1
+          fi
 
           mkdir -p "$REPO_PATH/logs" "$REPO_PATH/.checkpoints" "$REPO_PATH/.runtime" "$REPO_PATH/.reports"
 
@@ -165,7 +170,7 @@ jobs:
           MONGODB_URL=mongodb://${{ secrets.DB_MONGODB_USER || 'admin' }}:${{ secrets.DB_MONGODB_PASSWORD || 'mongopass' }}@git-query-mongodb:27017/gitquery?authSource=admin
           MONGODB_DB=gitquery
           REDIS_URL=redis://:${{ secrets.DB_REDIS_PASSWORD || 'redispass' }}@redis:6379
-          PYTHONPATH=/repo
+          PYTHONPATH=/repo/src:/repo
           BATCH_SIZE=${{ github.event.inputs.batch_size }}
           MAX_BATCHES=${{ github.event.inputs.max_batches }}
           SOURCE_COLLECTION=${{ github.event.inputs.source_collection }}
