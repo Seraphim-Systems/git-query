@@ -303,7 +303,8 @@ def _post_gateway_insert_with_retry(
 
 
 def load_to_cosmos(
-    dataset: str,
+    dataset: str | None,
+    dataset_dir: str | None,
     file_path: str | None,
     collection_name: str,
     database_name: str,
@@ -323,33 +324,41 @@ def load_to_cosmos(
     resume: bool,
     reset_checkpoint: bool,
 ) -> None:
-    print(f"Downloading dataset: {dataset}", flush=True)
-    dataset_dir = Path(kagglehub.dataset_download(dataset))
-    print(f"Dataset downloaded to: {dataset_dir}", flush=True)
+    if dataset_dir:
+        resolved_dataset_dir = Path(dataset_dir)
+        if not resolved_dataset_dir.exists():
+            raise FileNotFoundError(f"Provided dataset directory not found: {resolved_dataset_dir}")
+        print(f"Using pre-downloaded dataset directory: {resolved_dataset_dir}", flush=True)
+    else:
+        if not dataset:
+            raise ValueError("--dataset is required when --dataset-dir is not provided")
+        print(f"Downloading dataset: {dataset}", flush=True)
+        resolved_dataset_dir = Path(kagglehub.dataset_download(dataset))
+        print(f"Dataset downloaded to: {resolved_dataset_dir}", flush=True)
 
     if list_files:
-        all_files = sorted([p for p in dataset_dir.rglob("*") if p.is_file()])
+        all_files = sorted([p for p in resolved_dataset_dir.rglob("*") if p.is_file()])
         if not all_files:
             print("No files found in dataset.", flush=True)
             return
         print("Files in dataset:", flush=True)
         for p in all_files:
-            print(f"- {p.relative_to(dataset_dir)}", flush=True)
+                print(f"- {p.relative_to(resolved_dataset_dir)}", flush=True)
         return
 
     if file_path:
         candidate = Path(file_path)
         if not candidate.is_absolute():
-            candidate = dataset_dir / candidate
+                candidate = resolved_dataset_dir / candidate
         if not candidate.exists():
             raise FileNotFoundError(f"JSON file not found: {candidate}")
         json_file = candidate
     else:
-        json_files = _find_json_files(dataset_dir)
+        json_files = _find_json_files(resolved_dataset_dir)
         if not json_files:
             raise FileNotFoundError("No .json files found in the Kaggle dataset.")
         if len(json_files) > 1:
-            found = "\n".join(str(p.relative_to(dataset_dir)) for p in json_files)
+            found = "\n".join(str(p.relative_to(resolved_dataset_dir)) for p in json_files)
             raise ValueError("Multiple JSON files found. Use --file to choose one:\n" + found)
         json_file = json_files[0]
 
@@ -357,7 +366,8 @@ def load_to_cosmos(
 
     checkpoint_path = Path(checkpoint_file)
     context = {
-        "dataset": dataset,
+        "dataset": dataset or "",
+        "dataset_dir": str(resolved_dataset_dir),
         "file": str(json_file),
         "collection": collection_name,
         "database": database_name,
@@ -570,7 +580,11 @@ def load_to_cosmos(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Load Kaggle JSON array dataset into MongoDB/Cosmos DB.")
-    parser.add_argument("--dataset", required=True, help="Kaggle dataset slug")
+    parser.add_argument("--dataset", help="Kaggle dataset slug")
+    parser.add_argument(
+        "--dataset-dir",
+        help="Path to a pre-downloaded Kaggle dataset directory (skips kaggle download)",
+    )
     parser.add_argument("--file", help="JSON filename inside the dataset")
     parser.add_argument(
         "--collection",
@@ -648,8 +662,12 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    if not args.dataset and not args.dataset_dir:
+        parser.error("either --dataset or --dataset-dir must be provided")
+
     load_to_cosmos(
         dataset=args.dataset,
+        dataset_dir=args.dataset_dir,
         file_path=args.file,
         collection_name=args.collection,
         database_name=args.database,

@@ -257,6 +257,13 @@ body {
 
 .password-toggle {
     position: relative;
+    width: 100%;
+}
+
+.password-toggle .form-input {
+    width: 100%;
+    padding-right: 44px;
+    box-sizing: border-box;
 }
 
 .password-toggle-btn {
@@ -272,6 +279,10 @@ body {
     display: flex;
     align-items: center;
     transition: color 0.2s var(--ease);
+}
+
+.password-toggle-btn svg {
+    display: block;
 }
 
 .password-toggle-btn:hover {
