@@ -145,10 +145,10 @@ jobs:
               image: git-query-processing:raw-population
               container_name: git-query-raw-kaggle-precheck
               env_file:
-                - .runtime/raw-population.env
+                - raw-population.env
               volumes:
-                - ./:/repo
-                - ./.kaggle:/root/.kaggle:ro
+                - ../:/repo
+                - ../.kaggle:/root/.kaggle:ro
               command:
                 - python
                 - -c
@@ -175,12 +175,12 @@ jobs:
               image: git-query-processing:raw-population
               container_name: git-query-raw-population-job
               env_file:
-                - .runtime/raw-population.env
+                - raw-population.env
               networks:
                 - internal-network
               volumes:
-                - ./:/repo
-                - ./.kaggle:/root/.kaggle:ro
+                - ../:/repo
+                - ../.kaggle:/root/.kaggle:ro
               command:
                 - bash
                 - -lc
