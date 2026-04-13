@@ -30,24 +30,16 @@ _HOP_BY_HOP = frozenset(
     }
 )
 
+_METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+
 router = APIRouter(tags=["MLFlow"])
 
 
-@router.api_route(
-    "/{path:path}",
-    methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-)
-async def proxy_mlflow(path: str, request: Request):
-    """Reverse-proxy requests to the MLFlow tracking server.
-
-    The /mlflow prefix is stripped before forwarding so MLFlow receives
-    paths relative to its own root (e.g. /mlflow/runs → /runs).
-    """
+async def _proxy(request: Request, path: str) -> Response:
+    """Shared proxy logic: forward request to MLFlow and return its response."""
     await require_admin(request)
 
     target = f"{MLFLOW_INTERNAL_URL}/{path}"
-
-    # Forward query parameters
     if request.url.query:
         target = f"{target}?{request.url.query}"
 
@@ -82,3 +74,16 @@ async def proxy_mlflow(path: str, request: Request):
         headers=resp_headers,
         media_type=resp.headers.get("content-type"),
     )
+
+
+@router.api_route("", methods=_METHODS)
+@router.api_route("/", methods=_METHODS)
+async def proxy_mlflow_root(request: Request):
+    """Proxy /mlflow and /mlflow/ to the MLFlow root."""
+    return await _proxy(request, "")
+
+
+@router.api_route("/{path:path}", methods=_METHODS)
+async def proxy_mlflow(path: str, request: Request):
+    """Proxy /mlflow/{path} to the MLFlow tracking server."""
+    return await _proxy(request, path)

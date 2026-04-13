@@ -61,14 +61,15 @@ async def login(request: Request, response: Response, credentials: LoginRequest)
     except VerifyMismatchError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
+    is_admin = bool(user.get("is_admin", False))
+
     # Create session
     session_id = await session_manager.create_session(
         user_id=user["user_id"],
         ip_address=request.client.host if request.client else "unknown",
         user_agent=request.headers.get("user-agent", "unknown"),
+        is_admin=is_admin,
     )
-
-    is_admin = bool(user.get("is_admin", False))
     token = create_access_token(user["user_id"], user["username"], is_admin)
 
     # Set session cookie
