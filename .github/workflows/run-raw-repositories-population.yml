@@ -155,7 +155,6 @@ jobs:
                 - |
                   import sys, kagglehub
                   public_ds = "uciml/iris"
-                  target_ds = "${DATASET}"
                   try:
                       kagglehub.dataset_download(public_ds)
                       print(f"Kaggle auth check OK on public dataset: {public_ds}")
@@ -163,13 +162,6 @@ jobs:
                       print("Kaggle auth check FAILED on public dataset. Credentials are likely invalid/mismatched.")
                       print(e)
                       sys.exit(2)
-                  try:
-                      kagglehub.dataset_download(target_ds)
-                      print(f"Kaggle target dataset access OK: {target_ds}")
-                  except Exception as e:
-                      print("Kaggle target dataset access FAILED. Account likely lacks dataset permission/consent acceptance.")
-                      print(e)
-                      sys.exit(3)
 
             raw-population-job:
               image: git-query-processing:raw-population
@@ -186,6 +178,7 @@ jobs:
                 - -lc
                 - |
                   set -euo pipefail
+                  python -c "import os, pathlib; print('Kaggle env present:', bool(os.getenv('KAGGLE_USERNAME')), bool(os.getenv('KAGGLE_KEY'))); print('kaggle.json exists:', pathlib.Path('/root/.kaggle/kaggle.json').exists())"
                   python /repo/src/processing/scripts/raw_repositories_population.py \
                     --dataset "${DATASET}" \
                     --file "${DATASET_FILE}" \
