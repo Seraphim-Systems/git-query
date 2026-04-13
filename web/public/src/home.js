@@ -65,6 +65,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let folders = [];
     let currentView = 'welcome'; // 'welcome', 'repos', 'chat'
     let searchTimeout = null;
+    let lastQuery = '';       // last search/chat query — attached to all feedback events
+    let lastVariant = 'hybrid'; // last recommendation variant returned by the API
+    let typingIndicatorEl = null; // reference to the AI typing bubble
     
     // Check authentication
     const token = localStorage.getItem('token') || localStorage.getItem('sessionId');
@@ -81,7 +84,58 @@ document.addEventListener('DOMContentLoaded', () => {
         if (token) headers['Authorization'] = `Bearer ${token}`;
         return headers;
     }
-    
+
+    // Per-(repo,action) cooldown to prevent feedback spam skewing the model.
+    // Stores the last timestamp a given action was sent for a given repo.
+    const _feedbackCooldowns = {};
+    const FEEDBACK_COOLDOWN_MS = 5000; // 5 s between identical (repo, action) pairs
+
+    // Fire-and-forget interaction event — sends all five fields MLOps needs
+    function sendFeedback(repoId, action, position = null, query = '', variant = 'hybrid') {
+        if (!userId || !repoId) return;
+        const key = `${repoId}:${action}`;
+        const now = Date.now();
+        if (_feedbackCooldowns[key] && now - _feedbackCooldowns[key] < FEEDBACK_COOLDOWN_MS) return;
+        _feedbackCooldowns[key] = now;
+        fetch(`${API_BASE}/recommend/feedback`, {
+            method: 'POST',
+            headers: authHeaders(),
+            credentials: 'include',
+            body: JSON.stringify({
+                repo_id: repoId,
+                action,
+                query,
+                variant,
+                position_in_results: position,
+            }),
+        }).catch(() => {});
+    }
+
+    // Show animated typing dots while waiting for AI response
+    function showTypingIndicator() {
+        if (typingIndicatorEl) return;
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message assistant';
+        const avatar = document.createElement('div');
+        avatar.className = 'message-avatar';
+        avatar.textContent = 'AI';
+        const content = document.createElement('div');
+        content.className = 'message-content';
+        content.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+        messageDiv.appendChild(avatar);
+        messageDiv.appendChild(content);
+        messagesContainer.appendChild(messageDiv);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        typingIndicatorEl = messageDiv;
+    }
+
+    function removeTypingIndicator() {
+        if (typingIndicatorEl) {
+            typingIndicatorEl.remove();
+            typingIndicatorEl = null;
+        }
+    }
+
     // Initialize
     initializeUser();
     loadChatHistory();
@@ -286,7 +340,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Add AI message that includes inline repo cards
-    function addMessageWithReposToUI(text, topRepos, moreRepos) {
+    function addMessageWithReposToUI(text, topRepos, moreRepos, query = '', variant = 'hybrid') {
         const messageDiv = document.createElement('div');
         messageDiv.className = 'message assistant';
 
@@ -309,14 +363,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const topGrid = document.createElement('div');
             topGrid.className = 'message-repo-grid';
-            topRepos.forEach(repo => topGrid.appendChild(createRepoCard(repo)));
+            topRepos.forEach((repo, i) => topGrid.appendChild(createRepoCard(repo, i, query, variant)));
             reposSection.appendChild(topGrid);
 
             // Remaining repos — hidden until user expands
             if (moreRepos.length > 0) {
                 const moreGrid = document.createElement('div');
                 moreGrid.className = 'message-repos-more';
-                moreRepos.forEach(repo => moreGrid.appendChild(createRepoCard(repo)));
+                moreRepos.forEach((repo, i) => moreGrid.appendChild(createRepoCard(repo, topRepos.length + i, query, variant)));
                 reposSection.appendChild(moreGrid);
 
                 const expandBtn = document.createElement('button');
@@ -364,7 +418,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Add user message to UI
         addMessageToUI(message, 'user');
-        
+        showTypingIndicator();
+
         // Clear input
         messageInput.value = '';
         messageInput.style.height = 'auto';
@@ -405,23 +460,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     : 'Here are some repositories I found:';
 
                 let allRepos = [];
+                let recoVariant = 'hybrid';
                 if (recoRes.ok) {
                     const recoData = await recoRes.json();
+                    recoVariant = recoData.variant || 'hybrid';
                     allRepos = await enrichRepoIds(recoData.recommendations || recoData.results || []);
                 }
 
-                addMessageWithReposToUI(aiResponse, allRepos.slice(0, 3), allRepos.slice(3));
+                lastQuery = message;
+                lastVariant = recoVariant;
+                removeTypingIndicator();
+                addMessageWithReposToUI(aiResponse, allRepos.slice(0, 3), allRepos.slice(3), message, recoVariant);
                 updateChatHistory(currentChatId, aiResponse);
-
-                // Fire-and-forget view signal
-                if (userId) {
-                    fetch(`${API_BASE}/recommend/feedback`, {
-                        method: 'POST',
-                        headers: authHeaders(),
-                        credentials: 'include',
-                        body: JSON.stringify({ repo_id: `search:${message}`, action: 'view' })
-                    }).catch(() => {});
-                }
             } else {
                 // Regular chat — no repo results
                 const response = await fetch(`${API_BASE}/chat/`, {
@@ -434,14 +484,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (response.ok) {
                     const data = await response.json();
                     const aiResponse = data.response || 'I received your message!';
+                    removeTypingIndicator();
                     addMessageToUI(aiResponse, 'assistant');
                     updateChatHistory(currentChatId, aiResponse);
                 } else {
+                    removeTypingIndicator();
                     addMessageToUI('Sorry, I encountered an error. Please try again.', 'assistant');
                 }
             }
         } catch (error) {
             console.error('Error sending message:', error);
+            removeTypingIndicator();
             addMessageToUI('Sorry, I encountered an error. Please try again.', 'assistant');
         }
         
@@ -944,21 +997,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.debug('[search] /api/recommend raw response:', data);
                 const repos = await enrichRepoIds(data.recommendations || data.results || []);
                 console.debug('[search] enriched repos:', repos);
+
+                lastQuery = query;
+                lastVariant = data.variant || 'hybrid';
                 
                 if (repos.length > 0) {
-                    displayRepos(repos);
+                    displayRepos(repos, query, lastVariant);
                 } else {
                     repoGrid.innerHTML = '<div style="padding: 16px; color: var(--text-secondary); text-align: center;">No repositories found for your query.</div>';
-                }
-                
-                // Record implicit view signal
-                if (userId) {
-                    fetch(`${API_BASE}/recommend/feedback`, {
-                        method: 'POST',
-                        headers: authHeaders(),
-                        credentials: 'include',
-                        body: JSON.stringify({ repo_id: `search:${query}`, action: 'view' })
-                    }).catch(() => {}); // fire-and-forget
                 }
             } else {
                 console.error('Recommendation API error:', response.status);
@@ -970,15 +1016,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    function displayRepos(repos) {
+    function displayRepos(repos, query = '', variant = 'hybrid') {
         repoGrid.innerHTML = '';
-        repos.forEach(repo => {
-            const repoCard = createRepoCard(repo);
+        repos.forEach((repo, index) => {
+            const repoCard = createRepoCard(repo, index, query, variant);
             repoGrid.appendChild(repoCard);
         });
     }
     
-    function createRepoCard(repo) {
+    function createRepoCard(repo, position = null, query = '', variant = 'hybrid') {
         const card = document.createElement('div');
         card.className = 'repo-card';
         
@@ -988,6 +1034,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const folderSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>`;
         const starStatSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
         const forkSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M18 9a9 9 0 01-9 9"/></svg>`;
+        const thumbsUpSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>`;
+        const thumbsDownSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></svg>`;
+        const dismissSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
         
         card.innerHTML = `
             <div class="repo-card-header">
@@ -1005,28 +1054,60 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             </div>
             <div class="repo-card-description">${repo.description}</div>
-            <div class="repo-card-stats">
-                <div class="repo-card-stat">${starStatSvg} ${formatNumber(repo.stars)}</div>
-                <div class="repo-card-stat">${forkSvg} ${formatNumber(repo.forks)}</div>
+            <div class="repo-card-footer">
+                <div class="repo-card-stats">
+                    <div class="repo-card-stat">${starStatSvg} ${formatNumber(repo.stars)}</div>
+                    <div class="repo-card-stat">${forkSvg} ${formatNumber(repo.forks)}</div>
+                </div>
+                <div class="repo-card-footer-right">
+                    <div class="repo-card-language">${repo.language}</div>
+                    <button class="repo-action-btn thumbs-up-btn" data-repo-id="${repo.id}" title="Relevant">
+                        ${thumbsUpSvg}
+                    </button>
+                    <button class="repo-action-btn thumbs-down-btn" data-repo-id="${repo.id}" title="Not relevant">
+                        ${thumbsDownSvg}
+                    </button>
+                </div>
             </div>
-            <div class="repo-card-language">${repo.language}</div>
         `;
         
         // Add event listeners
         const starBtn = card.querySelector('.star-btn');
         const folderBtn = card.querySelector('.folder-btn');
+        const thumbsUpBtn = card.querySelector('.thumbs-up-btn');
+        const thumbsDownBtn = card.querySelector('.thumbs-down-btn');
         
         starBtn.addEventListener('click', (e) => {
             e.stopPropagation();
+            const wasFavorite = favorites.some(f => f.id === repo.id);
             toggleFavorite(repo);
+            // Unstarring an already-saved repo counts as a dismiss signal
+            if (wasFavorite) sendFeedback(repo.id, 'dismiss', position, query, variant);
         });
         
         folderBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             showFolderSelection(repo);
         });
+
+        thumbsUpBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const nowActive = !thumbsUpBtn.classList.contains('active');
+            thumbsUpBtn.classList.toggle('active', nowActive);
+            thumbsDownBtn.classList.remove('active');
+            if (nowActive) sendFeedback(repo.id, 'thumbs_up', position, query, variant);
+        });
+
+        thumbsDownBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const nowActive = !thumbsDownBtn.classList.contains('active');
+            thumbsDownBtn.classList.toggle('active', nowActive);
+            thumbsUpBtn.classList.remove('active');
+            if (nowActive) sendFeedback(repo.id, 'thumbs_down', position, query, variant);
+        });
         
         card.addEventListener('click', () => {
+            sendFeedback(repo.id, 'click', position, query, variant);
             window.open(repo.url, '_blank');
         });
         
@@ -1096,14 +1177,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             favorites.push(repo);
             // Record save interaction with recommender
-            if (userId && repo.id) {
-                fetch(`${API_BASE}/recommend/feedback`, {
-                    method: 'POST',
-                    headers: authHeaders(),
-                    credentials: 'include',
-                    body: JSON.stringify({ repo_id: repo.id, action: 'star' })
-                }).catch(() => {});
-            }
+            sendFeedback(repo.id, 'save', null, lastQuery, lastVariant);
         }
         localStorage.setItem('favoriteRepos', JSON.stringify(favorites));
         renderFavoriteRepos();

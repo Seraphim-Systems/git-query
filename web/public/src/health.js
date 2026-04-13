@@ -277,11 +277,13 @@ class HealthMonitor {
     }
 }
 
-// Initialize health monitor when DOM is ready
+// Initialize health monitor when DOM is ready — admins only
 document.addEventListener('DOMContentLoaded', () => {
+    const isAdmin = localStorage.getItem('isAdmin') === 'true';
+    if (!isAdmin) return;
     // Only initialize on home page
-    if (window.location.pathname.includes('home.html') || 
-        window.location.pathname === '/' && localStorage.getItem('authToken')) {
+    if (window.location.pathname.includes('home.html') ||
+        window.location.pathname === '/') {
         window.healthMonitor = new HealthMonitor();
     }
 });
