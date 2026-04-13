@@ -15,5 +15,6 @@ jobs:
       compose_files: "-f docker-compose.base.yml -f docker-compose.databases.yml -f docker-compose.gateway.yml -f docker-compose.app.yml -f docker-compose.web.yml -f docker-compose.prod.yml"
       services: ""
       branch: ${{ github.ref_name }}
-      health_check_url: "http://localhost/health"
+      health_check_url: ""
+      health_check_command: "docker exec git-query-gateway curl -f http://localhost:80/health"
     secrets: inherit
