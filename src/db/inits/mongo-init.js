@@ -31,4 +31,29 @@ if (!adminExists) {
     print('MongoDB: admin user already exists, skipping seed');
 }
 
+// Seed the env-configured admin account (WEB_ADMIN_EMAIL / WEB_ADMIN_USERNAME)
+// injected via docker-compose environment at init time.
+const envAdminEmail = process.env.WEB_ADMIN_EMAIL;
+const envAdminUsername = process.env.WEB_ADMIN_USERNAME;
+const envAdminPassword = process.env.WEB_ADMIN_PASSWORD;
+if (envAdminEmail && envAdminPassword && envAdminEmail !== 'admin@gitquery.local') {
+    const envAdminExists = db.users.findOne({ email: envAdminEmail });
+    if (!envAdminExists) {
+        // SHA-256 of the plain password — gateway uses same scheme for now
+        const crypto = require('crypto');
+        const hash = crypto.createHash('sha256').update(envAdminPassword).digest('hex');
+        db.users.insertOne({
+            user_id: envAdminEmail,
+            email: envAdminEmail,
+            username: envAdminUsername || envAdminEmail.split('@')[0],
+            password_hash: hash,
+            created_at: new Date(),
+            is_admin: true
+        });
+        print('MongoDB: env admin user seeded (' + envAdminEmail + ')');
+    } else {
+        print('MongoDB: env admin user already exists, skipping seed');
+    }
+}
+
 print(' MongoDB initialized');

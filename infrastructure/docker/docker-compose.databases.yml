@@ -10,6 +10,9 @@ services:
       MONGO_INITDB_ROOT_USERNAME: ${DB_MONGODB_USER:-admin}
       MONGO_INITDB_ROOT_PASSWORD: ${DB_MONGODB_PASSWORD:-mongopass}
       MONGO_INITDB_DATABASE: ${DB_MONGODB_DATABASE:-gitquery}
+      WEB_ADMIN_EMAIL: ${WEB_ADMIN_EMAIL:-admin@gitquery.dev}
+      WEB_ADMIN_PASSWORD: ${WEB_ADMIN_PASSWORD:-adminpassword}
+      WEB_ADMIN_USERNAME: ${WEB_ADMIN_USERNAME:-admin}
     volumes:
       - mongodb-data:/data/db
       - mongodb-config:/data/configdb
