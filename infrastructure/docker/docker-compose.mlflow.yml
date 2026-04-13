@@ -14,6 +14,13 @@ services:
       # Persistent storage for experiments and artifacts
       - mlflow-runs:/mlflow
       - mlflow-artifacts:/mlflow/artifacts
+    command: >
+      mlflow server
+      --backend-store-uri /mlflow
+      --default-artifact-root /mlflow/artifacts
+      --host 0.0.0.0
+      --port 5000
+      --allowed-hosts "*"
     environment:
       - MLFLOW_BACKEND_STORE_URI=/mlflow
       - MLFLOW_DEFAULT_ARTIFACT_ROOT=/mlflow/artifacts

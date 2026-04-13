@@ -27,6 +27,10 @@ services:
       APIKEY_QDRANT: ${APIKEY_QDRANT:-}
       QDRANT_COLLECTION: ${QDRANT_COLLECTION:-repositories_embeddings}
 
+      # MLflow tracking server — drift results logged here alongside model metrics
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://git-query-mlflow:5000}
+      MLFLOW_EXPERIMENT_NAME: ${MLFLOW_EXPERIMENT_NAME:-git-query-drift-checks}
+
       # Output paths
       EVIDENTLY_REPORT_PATH: /app/drift_reports
       EVIDENTLY_WORKSPACE_PATH: /app/workspace
@@ -58,6 +62,13 @@ services:
       dockerfile: infrastructure/docker/Dockerfile.mlflow
     image: git-query-mlflow:latest
     container_name: git-query-mlflow
+    command: >
+      mlflow server
+      --backend-store-uri /mlflow
+      --default-artifact-root /mlflow/artifacts
+      --host 0.0.0.0
+      --port 5000
+      --allowed-hosts "*"
     environment:
       # Mount point matches the volume below — must equal where training writes (/app/mlruns → volume root).
       # Dockerfile.mlflow CMD uses this env var via shell form.
