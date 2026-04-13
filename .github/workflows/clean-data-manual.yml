@@ -93,17 +93,6 @@ jobs:
           POP_COMPOSE_FILE=".runtime/docker-compose.clean-population.yml"
           MONGO_WAS_RUNNING=0
 
-          cleanup() {
-            if [ "$MONGO_WAS_RUNNING" -eq 0 ]; then
-              echo "Stopping Mongo container started by this workflow (data remains on named volume)."
-              docker compose \
-                -f infrastructure/docker/docker-compose.base.yml \
-                -f infrastructure/docker/docker-compose.databases.yml \
-                stop mongodb || true
-            fi
-          }
-          trap cleanup EXIT
-
           if [ -d "$REPO_PATH/.git" ]; then
             cd "$REPO_PATH"
             git fetch origin
@@ -222,44 +211,77 @@ jobs:
 
           docker rm -f "$POP_CONTAINER" >/dev/null 2>&1 || true
 
-          echo "Running clean population job in container..."
+          echo "Starting clean population job in detached mode..."
           : > "$REPO_PATH/$LOG_FILE"
-          docker compose -f "$POP_COMPOSE_FILE" run --rm -T clean-population-job < /dev/null 2>&1 | tee "$REPO_PATH/$LOG_FILE"
 
-          echo "Clean population job finished."
+          docker compose -f "$POP_COMPOSE_FILE" run -d -T --name "$POP_CONTAINER" clean-population-job > /tmp/clean-population.cid
 
-          echo "Checkpoint summary:"
-          cat "$REPO_PATH/$CHECKPOINT_FILE" || true
+          if ! docker ps --format '{{.Names}}' | grep -Fxq "$POP_CONTAINER"; then
+            echo "Clean population container failed to start."
+            docker ps -a --format 'table {{.Names}}\t{{.Status}}' | sed -n '1,10p'
+            exit 1
+          fi
 
-          echo "Current destination collection count:"
-          docker exec git-query-mongodb mongosh \
-            "mongodb://${{ secrets.DB_MONGODB_USER || 'admin' }}:${{ secrets.DB_MONGODB_PASSWORD || 'mongopass' }}@localhost:27017/gitquery?authSource=admin" \
-            --quiet --eval 'db.repositories.countDocuments({})' || true
+          echo "Container started: $POP_CONTAINER"
+          echo "Scheduling background watcher for logs and cleanup..."
 
-          echo "Latest EDA report document count:"
-          docker exec git-query-mongodb mongosh \
-            "mongodb://${{ secrets.DB_MONGODB_USER || 'admin' }}:${{ secrets.DB_MONGODB_PASSWORD || 'mongopass' }}@localhost:27017/gitquery?authSource=admin" \
-            --quiet --eval "db.getCollection('${{ github.event.inputs.eda_collection }}').countDocuments({})" || true
+          MONGO_STARTED_BY_WORKFLOW=0
+          if [ "$MONGO_WAS_RUNNING" -eq 0 ]; then
+            MONGO_STARTED_BY_WORKFLOW=1
+          fi
+
+          nohup bash -lc "
+            set -euo pipefail
+            REPO_PATH='$REPO_PATH'
+            POP_CONTAINER='$POP_CONTAINER'
+            LOG_FILE='$REPO_PATH/$LOG_FILE'
+            CHECKPOINT_FILE='$REPO_PATH/$CHECKPOINT_FILE'
+            EDA_FILE='$REPO_PATH/${{ github.event.inputs.eda_output_file }}'
+            EDA_COLLECTION='${{ github.event.inputs.eda_collection }}'
+            MONGO_STARTED_BY_WORKFLOW='$MONGO_STARTED_BY_WORKFLOW'
+
+            docker logs -f \"\$POP_CONTAINER\" >> \"\$LOG_FILE\" 2>&1 || true
+            docker wait \"\$POP_CONTAINER\" >/dev/null 2>&1 || true
+            EXIT_CODE=\"\$(docker inspect \"\$POP_CONTAINER\" --format '{{.State.ExitCode}}' 2>/dev/null || echo 1)\"
+
+            {
+              echo ""
+              echo "[watcher] Container finished: \$POP_CONTAINER"
+              echo "[watcher] Exit code: \$EXIT_CODE"
+              if [ -f \"\$CHECKPOINT_FILE\" ]; then
+                echo "[watcher] Checkpoint present: \$CHECKPOINT_FILE"
+              else
+                echo "[watcher] Checkpoint missing: \$CHECKPOINT_FILE"
+              fi
+              if [ -f \"\$EDA_FILE\" ]; then
+                echo "[watcher] EDA report present: \$EDA_FILE"
+              else
+                echo "[watcher] EDA report missing: \$EDA_FILE"
+              fi
+            } >> \"\$LOG_FILE\"
+
+            docker rm -f \"\$POP_CONTAINER\" >/dev/null 2>&1 || true
+
+            if [ \"\$MONGO_STARTED_BY_WORKFLOW\" = \"1\" ]; then
+              docker compose \
+                -f \"\$REPO_PATH/infrastructure/docker/docker-compose.base.yml\" \
+                -f \"\$REPO_PATH/infrastructure/docker/docker-compose.databases.yml\" \
+                stop mongodb >> \"\$LOG_FILE\" 2>&1 || true
+            fi
+          " >/dev/null 2>&1 &
+
+          echo "Workflow finished after confirming container is running."
+          echo "Use server log for progress: $REPO_PATH/$LOG_FILE"
           ENDSSH
 
-      - name: Show checkpoint state
+      - name: Confirm detached container started
         run: |
           ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
           REPO_PATH="/home/${{ secrets.INFRA_HETZNER_USER }}/git-query"
-          if [ -f "$REPO_PATH/.checkpoints/clean_repositories_population.server.json" ]; then
-            cat "$REPO_PATH/.checkpoints/clean_repositories_population.server.json"
+          if docker ps --format '{{.Names}}' | grep -Fxq git-query-clean-population-job; then
+            echo "Container is running: git-query-clean-population-job"
           else
-            echo "No checkpoint file yet"
-          fi
-          if [ -f "$REPO_PATH/logs/clean_repositories_population.log" ]; then
-            tail -n 30 "$REPO_PATH/logs/clean_repositories_population.log"
-          else
-            echo "No log file yet"
-          fi
-          if [ -f "$REPO_PATH/${{ github.event.inputs.eda_output_file }}" ]; then
-            echo "EDA report preview:"
-            tail -n 50 "$REPO_PATH/${{ github.event.inputs.eda_output_file }}"
-          else
-            echo "No EDA report file yet"
+            echo "Container is not running. Check log: $REPO_PATH/logs/clean_repositories_population.log"
+            exit 1
           fi
           ENDSSH
