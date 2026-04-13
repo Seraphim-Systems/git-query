@@ -14,6 +14,11 @@ on:
         required: false
         type: string
         description: "Optional: specific services to deploy (default: all defined in compose)"
+      force_rebuild_services:
+        required: false
+        type: string
+        default: ""
+        description: "Optional: services to rebuild with --no-cache and force-recreate after main deploy"
       branch:
         required: false
         type: string
@@ -108,6 +113,11 @@ jobs:
           # Ensure the external proxy network exists (used by the gateway service).
           docker network inspect proxy >/dev/null 2>&1 || docker network create proxy >/dev/null
           docker compose ${{ inputs.compose_files }} up -d --build ${{ inputs.services }}
+          if [ -n "${{ inputs.force_rebuild_services }}" ]; then
+            echo "Force rebuilding services: ${{ inputs.force_rebuild_services }}"
+            docker compose ${{ inputs.compose_files }} build --pull --no-cache ${{ inputs.force_rebuild_services }}
+            docker compose ${{ inputs.compose_files }} up -d --force-recreate --no-deps ${{ inputs.force_rebuild_services }}
+          fi
           # Explicitly connect gateway to proxy in case the container was not recreated
           # (compose skips recreation when the image is cached and config hash matches
           # the previous container, so network changes may not be applied automatically).

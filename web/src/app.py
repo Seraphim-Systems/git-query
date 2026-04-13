@@ -38,6 +38,35 @@ SRC_DIR = os.path.join(WEBFRONTEND_DIR, "src")
 PUBLIC_DIR = WEBFRONTEND_DIR
 
 
+def _is_frontend_asset_path(path: str) -> bool:
+    """Return True for routes that should bypass browser cache."""
+    return (
+        path
+        in {
+            "/",
+            "/index.html",
+            "/landing.html",
+            "/login.html",
+            "/register.html",
+            "/home.html",
+        }
+        or path.startswith("/styles/")
+        or path.startswith("/src/")
+    )
+
+
+@app.after_request
+def add_no_cache_headers(response):
+    """Force fresh frontend pages/assets after deployment."""
+    if request.method in ("GET", "HEAD") and _is_frontend_asset_path(request.path):
+        response.headers["Cache-Control"] = (
+            "no-store, no-cache, must-revalidate, max-age=0"
+        )
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
+
 # Serve HTML pages
 @app.route("/")
 @app.route("/index.html")
