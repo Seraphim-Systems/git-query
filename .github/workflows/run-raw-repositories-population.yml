@@ -238,10 +238,11 @@ jobs:
           docker rm -f "$POP_CONTAINER" "$PRECHECK_CONTAINER" >/dev/null 2>&1 || true
 
           echo "Kaggle preflight check..."
-          docker compose -f "$POP_COMPOSE_FILE" run --rm raw-kaggle-precheck
+          docker compose -f "$POP_COMPOSE_FILE" run --rm -T raw-kaggle-precheck < /dev/null
 
           echo "Running raw population job in container..."
-          docker compose -f "$POP_COMPOSE_FILE" run --rm raw-population-job 2>&1 | tee "$REPO_PATH/$LOG_FILE"
+          : > "$REPO_PATH/$LOG_FILE"
+          docker compose -f "$POP_COMPOSE_FILE" run --rm -T raw-population-job < /dev/null 2>&1 | tee "$REPO_PATH/$LOG_FILE"
 
           echo "Population job finished."
 
