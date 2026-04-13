@@ -68,6 +68,16 @@ class RecommendationResponse(BaseModel):
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+_INTERACTION_VALUES: Dict[str, float] = {
+    "view": 0.1,
+    "click": 1.0,
+    "save": 3.0,
+    "thumbs_up": 5.0,
+    "dismiss": -2.0,
+    "thumbs_down": -5.0,
+}
+
+
 class UserInteraction(BaseModel):
     """User interaction event."""
 
@@ -76,10 +86,18 @@ class UserInteraction(BaseModel):
     query: str
     repo_id: str
     interaction_type: InteractionType
+    interaction_value: float = Field(
+        0.0,
+        description="Numeric signal weight for this interaction type (positive = interest, negative = disinterest)",
+    )
     position_in_results: Optional[int] = None
     variant: str = Field("baseline", description="Which variant was shown")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     metadata: Dict[str, Any] = Field(default_factory=dict)
+
+    def model_post_init(self, __context: Any) -> None:
+        if self.interaction_value == 0.0:
+            self.interaction_value = _INTERACTION_VALUES.get(self.interaction_type.value, 0.0)
 
 
 class UserPreferences(BaseModel):

@@ -54,10 +54,23 @@ class UserService:
             "fork": "click",
             "open": "click",
         }
+        self._value_map = {
+            "view": 0.1,
+            "click": 1.0,
+            "save": 3.0,
+            "thumbs_up": 5.0,
+            "dismiss": -2.0,
+            "thumbs_down": -5.0,
+        }
 
     def _to_recommender_interaction_type(self, action: str) -> str:
         """Map gateway feedback actions to recommender interaction types."""
         return self._action_map.get((action or "").lower(), "view")
+
+    def _to_interaction_value(self, action: str) -> float:
+        """Return the numeric signal weight for an action."""
+        interaction_type = self._to_recommender_interaction_type(action)
+        return self._value_map.get(interaction_type, 0.0)
 
     async def get_user_preferences(self, user_id: str) -> UserPreferences:
         """
@@ -178,6 +191,7 @@ class UserService:
             "query": query,
             "repo_id": repo_id,
             "interaction_type": self._to_recommender_interaction_type(action),
+            "interaction_value": self._to_interaction_value(action),
             "position_in_results": position_in_results,
             "variant": variant,
             "timestamp": now,
