@@ -1,8 +1,10 @@
 from flask import Flask, send_from_directory, jsonify, request, make_response
 from flask_cors import CORS
 import os
+import re
 import requests
 import logging
+import time
 
 # Configure logging
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
@@ -36,6 +38,28 @@ PAGES_DIR = os.path.join(WEBFRONTEND_DIR, "pages")
 STYLES_DIR = os.path.join(WEBFRONTEND_DIR, "styles")
 SRC_DIR = os.path.join(WEBFRONTEND_DIR, "src")
 PUBLIC_DIR = WEBFRONTEND_DIR
+ASSET_VERSION = os.environ.get("WEB_ASSET_VERSION", str(int(time.time())))
+
+
+def _inject_asset_version(html: str) -> str:
+    """Append a cache-busting query param to local CSS/JS asset links."""
+
+    def _replace(match):
+        prefix = match.group(1)
+        path = match.group(2)
+        suffix = match.group(3)
+        sep = "&" if "?" in path else "?"
+        return f"{prefix}{path}{sep}v={ASSET_VERSION}{suffix}"
+
+    return re.sub(r'((?:href|src)=["\'])(/(?:styles|src)/[^"\']+)(["\'])', _replace, html)
+
+
+def _render_page(filename: str):
+    """Serve HTML pages with versioned frontend asset URLs."""
+    path = os.path.join(PAGES_DIR, filename)
+    with open(path, encoding="utf-8") as f:
+        html = f.read()
+    return _inject_asset_version(html)
 
 
 def _is_frontend_asset_path(path: str) -> bool:
@@ -71,27 +95,27 @@ def add_no_cache_headers(response):
 @app.route("/")
 @app.route("/index.html")
 def index():
-    return send_from_directory(PAGES_DIR, "landing.html")
+    return _render_page("landing.html")
 
 
 @app.route("/landing.html")
 def landing():
-    return send_from_directory(PAGES_DIR, "landing.html")
+    return _render_page("landing.html")
 
 
 @app.route("/login.html")
 def login():
-    return send_from_directory(PAGES_DIR, "login.html")
+    return _render_page("login.html")
 
 
 @app.route("/register.html")
 def register():
-    return send_from_directory(PAGES_DIR, "register.html")
+    return _render_page("register.html")
 
 
 @app.route("/home.html")
 def home():
-    return send_from_directory(PAGES_DIR, "home.html")
+    return _render_page("home.html")
 
 
 # Serve static files
