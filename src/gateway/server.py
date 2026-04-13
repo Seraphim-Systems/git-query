@@ -1,7 +1,7 @@
 """API Gateway server - main entry point."""
 
-import logging
 from contextlib import asynccontextmanager
+from datetime import datetime
 from argon2 import PasswordHasher
 from fastapi import FastAPI, Request
 from pymongo.errors import DuplicateKeyError
@@ -21,6 +21,7 @@ from src.gateway.middleware.session import SessionMiddleware
 from src.gateway.routers import auth, chat, recommendations, user, health, repos
 from src.gateway.routers import mlflow_proxy
 from src.gateway.middleware.shared import GATEWAY_API_PREFIXES
+from src.shared.logging_config import configure_logging
 
 
 # Include DB routers directly in the Gateway so the Gateway serves DB endpoints
@@ -39,83 +40,8 @@ from src.db.clients import (
     get_mongo_client,
 )
 
-# Configure concise, human-friendly logging for container output
-import sys
-from datetime import datetime
-
-
-class CompactFormatter(logging.Formatter):
-    """Compact log formatter: ISO timestamp, single-letter level, short logger name.
-
-    Examples:
-      2026-02-13T15:04:05 I gateway: Started
-      2026-02-13T15:04:06 W auth: Missing API key
-    """
-
-    LEVEL_MAP = {
-        "DEBUG": "D",
-        "INFO": "I",
-        "WARNING": "W",
-        "ERROR": "E",
-        "CRITICAL": "C",
-    }
-
-    def formatTime(self, record, datefmt=None):
-        return datetime.utcfromtimestamp(record.created).strftime("%Y-%m-%dT%H:%M:%S")
-
-    def format(self, record):
-        level = self.LEVEL_MAP.get(record.levelname, record.levelname[:1])
-        short_name = record.name.split(".")[-1]
-        time = self.formatTime(record)
-        message = record.getMessage()
-
-        if record.exc_info:
-            # Append a one-line exception summary for brevity
-            try:
-                exc_text = self.formatException(record.exc_info).splitlines()[-1]
-                message = f"{message} | {exc_text}"
-            except Exception:
-                pass
-
-        return f"{time} {level} {short_name}: {message}"
-
-
-# Attach compact formatter to root logger so all library logs (uvicorn, etc.) are concise
-root_logger = logging.getLogger()
-# Preserve any existing handlers in interactive/dev modes; replace basic config otherwise
-if not root_logger.handlers:
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(CompactFormatter())
-    root_logger.addHandler(handler)
-else:
-    # Update existing handlers to use compact formatter
-    for h in list(root_logger.handlers):
-        try:
-            h.setFormatter(CompactFormatter())
-        except Exception:
-            pass
-
-root_logger.setLevel(settings.log_level)
-logger = logging.getLogger(__name__)
+logger = configure_logging(service_name="gateway", log_level=settings.log_level)
 password_hasher = PasswordHasher()
-
-# Quiet overly-verbose third-party loggers that flood container output
-NOISY_LOGGERS = [
-    "pymongo",
-    "pymongo.topology",
-    "pymongo.pool",
-    "motor",
-    "motor.motor_asyncio",
-    "urllib3",
-    "asyncio",
-    "qdrant_client",
-]
-
-for name in NOISY_LOGGERS:
-    try:
-        logging.getLogger(name).setLevel(logging.WARNING)
-    except Exception:
-        pass
 
 
 async def _seed_admin_user(user_service) -> None:
@@ -179,7 +105,9 @@ async def _seed_admin_user(user_service) -> None:
                 }
             },
         )
-        logger.info("Admin seed user refreshed after duplicate key: %s (%s)", email, username)
+        logger.info(
+            "Admin seed user refreshed after duplicate key: %s (%s)", email, username
+        )
 
 
 @asynccontextmanager
@@ -209,8 +137,12 @@ async def lifespan(app_instance: FastAPI):
     }
 
     # Initialize services
-    app_instance.state.session_manager = SessionManager(redis_async, ttl=settings.session_ttl)
-    app_instance.state.user_service = UserService(app_instance.state.mongodb, redis_async)
+    app_instance.state.session_manager = SessionManager(
+        redis_async, ttl=settings.session_ttl
+    )
+    app_instance.state.user_service = UserService(
+        app_instance.state.mongodb, redis_async
+    )
     logger.info("Services initialized (gateway async + shared sync clients)")
 
     # Seed admin user if configured (idempotent – skipped if user already exists)
@@ -272,7 +204,9 @@ async def global_exception_handler(_request: Request, exc: Exception):
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     """Return simple JSON for HTTP errors and log details (including 404)."""
     # Log 404s as warnings with request context; log other HTTP errors at info level
-    msg = f"HTTP {exc.status_code} on {request.method} {request.url.path} - {exc.detail}"
+    msg = (
+        f"HTTP {exc.status_code} on {request.method} {request.url.path} - {exc.detail}"
+    )
     if exc.status_code == 404:
         logger.warning(msg)
     else:
@@ -295,7 +229,9 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     # Preserve any headers the original exception carried (e.g., WWW-Authenticate)
     headers = getattr(exc, "headers", None)
     if headers:
-        return JSONResponse(status_code=exc.status_code, content=content, headers=headers)
+        return JSONResponse(
+            status_code=exc.status_code, content=content, headers=headers
+        )
 
     return JSONResponse(status_code=exc.status_code, content=content)
 
@@ -306,8 +242,12 @@ app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(chat.router, prefix="/chat", tags=["Chat"])
 app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
-app.include_router(recommendations.router, prefix="/recommend", tags=["Recommendations"])
-app.include_router(recommendations.router, prefix="/api/recommend", tags=["Recommendations"])
+app.include_router(
+    recommendations.router, prefix="/recommend", tags=["Recommendations"]
+)
+app.include_router(
+    recommendations.router, prefix="/api/recommend", tags=["Recommendations"]
+)
 app.include_router(user.router, prefix="/user", tags=["User"])
 
 # Mount the storage routers under `/api` so DB endpoints are served by the
@@ -363,7 +303,11 @@ async def proxy_frontend(path: str, request: Request):
     target = f"{web_url}{full_path}"
 
     # Forward headers except host (rewritten by httpx to the target host)
-    forward_headers = {k: v for k, v in request.headers.items() if k.lower() not in ("host", "content-length")}
+    forward_headers = {
+        k: v
+        for k, v in request.headers.items()
+        if k.lower() not in ("host", "content-length")
+    }
 
     async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
         try:
@@ -402,4 +346,10 @@ async def proxy_frontend(path: str, request: Request):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host=settings.host, port=settings.port)
+    uvicorn.run(
+        app,
+        host=settings.host,
+        port=settings.port,
+        log_level=settings.log_level.lower(),
+        log_config=None,
+    )
