@@ -9,7 +9,7 @@
 #     -v $(pwd)/drift_reports:/app/drift_reports \
 #     drift-monitor
 
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

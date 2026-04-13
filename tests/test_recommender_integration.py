@@ -42,6 +42,14 @@ load_dotenv(_PROJECT_ROOT / ".env", override=False)
 import pytest
 import pytest_asyncio
 
+pytest.importorskip(
+    "torch", reason="Integration recommender tests require optional torch dependency"
+)
+pytest.importorskip(
+    "sentence_transformers",
+    reason="Integration recommender tests require optional sentence-transformers dependency",
+)
+
 # ---------------------------------------------------------------------------
 # Project imports (env vars are loaded above, so pydantic-settings picks them up)
 # ---------------------------------------------------------------------------
@@ -154,7 +162,11 @@ class GatewayQdrantClient:
         try:
             data = self._get(f"/collections/{name}")
             result = data.get("result", data)
-            count = result.get("points_count") or result.get("vectors_count") or result.get("indexed_vectors_count", 0)
+            count = (
+                result.get("points_count")
+                or result.get("vectors_count")
+                or result.get("indexed_vectors_count", 0)
+            )
             status = result.get("status", "green")
             return _CollectionInfo(points_count=count, dim=EMBEDDING_DIM, status=status)
         except Exception:
@@ -170,10 +182,21 @@ class GatewayQdrantClient:
                 )
         raise KeyError(f"Collection '{name}' not found")
 
-    def search(self, collection_name: str, query_vector: list, limit: int = 10, with_payload: bool = True, **_):
+    def search(
+        self,
+        collection_name: str,
+        query_vector: list,
+        limit: int = 10,
+        with_payload: bool = True,
+        **_,
+    ):
         body = {"vector": query_vector, "limit": limit, "with_payload": with_payload}
         data = self._post(f"/collections/{collection_name}/search", body)
-        hits = data if isinstance(data, list) else data.get("results", data.get("hits", []))
+        hits = (
+            data
+            if isinstance(data, list)
+            else data.get("results", data.get("hits", []))
+        )
         return [_Hit(h.get("id"), h.get("score", 0.0), h.get("payload")) for h in hits]
 
 
@@ -242,9 +265,13 @@ def qdrant_client():
             print(f"\n[fixture] Connected to Qdrant via gateway at {_GATEWAY_URL}")
             return client
         except Exception as exc:
-            pytest.skip(f"Qdrant unreachable natively ({_QDRANT_URL}) and via gateway ({_GATEWAY_URL}): {exc}")
+            pytest.skip(
+                f"Qdrant unreachable natively ({_QDRANT_URL}) and via gateway ({_GATEWAY_URL}): {exc}"
+            )
 
-    pytest.skip(f"Qdrant unreachable at {_QDRANT_URL} and API_BASE_URL not set for gateway fallback")
+    pytest.skip(
+        f"Qdrant unreachable at {_QDRANT_URL} and API_BASE_URL not set for gateway fallback"
+    )
 
 
 @pytest.fixture(scope="module")
@@ -302,9 +329,9 @@ class TestQdrantCollectionHealth:
         """The repositories_embeddings collection must be present in Qdrant."""
         collections = [c.name for c in qdrant_client.get_collections().collections]
         print(f"\n[qdrant_health] Available collections: {collections}")
-        assert COLLECTION_NAME in collections, (
-            f"Expected collection '{COLLECTION_NAME}' not found. Available: {collections}"
-        )
+        assert (
+            COLLECTION_NAME in collections
+        ), f"Expected collection '{COLLECTION_NAME}' not found. Available: {collections}"
 
     def test_collection_has_substantial_data(self, qdrant_client):
         """The collection must contain at least 1 million vectors."""
@@ -317,14 +344,16 @@ class TestQdrantCollectionHealth:
             # data actually exists by checking that a search returns results.
             zero_vec = [0.0] * EMBEDDING_DIM
             hits = qdrant_client.search(COLLECTION_NAME, zero_vec, limit=10)
-            assert len(hits) > 0, (
-                "Gateway reports 0 points and search returned no results — collection appears to be empty"
+            assert (
+                len(hits) > 0
+            ), "Gateway reports 0 points and search returned no results — collection appears to be empty"
+            print(
+                "[qdrant_health] Point count unavailable via gateway — verified non-empty via search"
             )
-            print("[qdrant_health] Point count unavailable via gateway — verified non-empty via search")
         else:
-            assert count is not None and count >= MIN_EXPECTED_POINTS, (
-                f"Expected >= {MIN_EXPECTED_POINTS:,} points, got {count:,}"
-            )
+            assert (
+                count is not None and count >= MIN_EXPECTED_POINTS
+            ), f"Expected >= {MIN_EXPECTED_POINTS:,} points, got {count:,}"
 
     def test_vector_dimension_is_correct(self, qdrant_client):
         """Vectors stored in the collection must be 384-dimensional."""
@@ -345,7 +374,10 @@ class TestQdrantCollectionHealth:
         info = qdrant_client.get_collection(COLLECTION_NAME)
         status = info.status
         print(f"\n[qdrant_health] Collection status: {status}")
-        assert str(status).lower() in ("green", "yellow"), f"Collection status is '{status}', expected green or yellow"
+        assert str(status).lower() in (
+            "green",
+            "yellow",
+        ), f"Collection status is '{status}', expected green or yellow"
 
     def test_basic_vector_search_returns_results(self, qdrant_client):
         """A zero vector search must return at least one hit."""
@@ -374,7 +406,9 @@ class TestEmbeddingQuality:
         vec = embedding_service._embed_sync("python machine learning")
         dim = len(vec)
         print(f"\n[embedding_quality] Embedding dimension: {dim}")
-        assert dim == EMBEDDING_DIM, f"Expected {EMBEDDING_DIM}-dim embedding, got {dim}-dim"
+        assert (
+            dim == EMBEDDING_DIM
+        ), f"Expected {EMBEDDING_DIM}-dim embedding, got {dim}-dim"
 
     def test_embedding_is_not_zero(self, embedding_service):
         """The embedding must not be a zero (or near-zero) vector."""
@@ -395,7 +429,9 @@ class TestEmbeddingQuality:
         v2 = embedding_service._embed_sync(q2).tolist()
         sim = cosine_similarity(v1, v2)
         print(f"\n[embedding_quality] Similarity '{q1}' vs '{q2}': {sim:.4f}")
-        assert sim >= 0.35, f"Expected cosine similarity >= 0.35 for similar queries, got {sim:.4f}"
+        assert (
+            sim >= 0.35
+        ), f"Expected cosine similarity >= 0.35 for similar queries, got {sim:.4f}"
 
     def test_unrelated_queries_have_low_cosine_similarity(self, embedding_service):
         """Semantically unrelated queries must produce dissimilar vectors (<= 0.40)."""
@@ -405,7 +441,9 @@ class TestEmbeddingQuality:
         v2 = embedding_service._embed_sync(q2).tolist()
         sim = cosine_similarity(v1, v2)
         print(f"\n[embedding_quality] Similarity '{q1}' vs '{q2}': {sim:.4f}")
-        assert sim <= 0.40, f"Expected cosine similarity <= 0.40 for unrelated queries, got {sim:.4f}"
+        assert (
+            sim <= 0.40
+        ), f"Expected cosine similarity <= 0.40 for unrelated queries, got {sim:.4f}"
 
     def test_batch_embeddings_match_single_embeddings(self, embedding_service):
         """batch[i] must be approximately equal to single-embed(texts[i])."""
@@ -419,15 +457,21 @@ class TestEmbeddingQuality:
             single_vec = embedding_service._embed_sync(text).tolist()
             sim = cosine_similarity(batch_vecs[i], single_vec)
             print(f"\n[embedding_quality] Batch[{i}] vs single for '{text}': {sim:.6f}")
-            assert sim > 0.9999, f"Batch embedding for '{text}' diverges from single embedding (cosine sim = {sim:.6f})"
+            assert (
+                sim > 0.9999
+            ), f"Batch embedding for '{text}' diverges from single embedding (cosine sim = {sim:.6f})"
 
     def test_different_queries_produce_different_vectors(self, embedding_service):
         """Two clearly different queries must not be nearly identical (<0.99 similarity)."""
         v1 = embedding_service._embed_sync("react frontend javascript").tolist()
         v2 = embedding_service._embed_sync("rust systems programming").tolist()
         sim = cosine_similarity(v1, v2)
-        print(f"\n[embedding_quality] Similarity 'react frontend' vs 'rust systems programming': {sim:.4f}")
-        assert sim < 0.99, f"Expected different vectors for different queries, got similarity {sim:.4f}"
+        print(
+            f"\n[embedding_quality] Similarity 'react frontend' vs 'rust systems programming': {sim:.4f}"
+        )
+        assert (
+            sim < 0.99
+        ), f"Expected different vectors for different queries, got similarity {sim:.4f}"
 
 
 # ---------------------------------------------------------------------------
@@ -440,7 +484,9 @@ class TestEmbeddingQuality:
 class TestSemanticSearchQuality:
     """Validate that Qdrant vector search returns sensible results."""
 
-    def _run_search(self, qdrant_client, embedding_service, query: str, top_k: int = 10):
+    def _run_search(
+        self, qdrant_client, embedding_service, query: str, top_k: int = 10
+    ):
         """Embed query and search Qdrant; returns raw hit list."""
         vec = embedding_service._embed_sync(query).tolist()
         results = qdrant_client.search(
@@ -453,47 +499,69 @@ class TestSemanticSearchQuality:
 
     def test_ml_query_returns_results(self, qdrant_client, embedding_service):
         """ML query must return at least 5 results."""
-        results = self._run_search(qdrant_client, embedding_service, "machine learning python", top_k=10)
+        results = self._run_search(
+            qdrant_client, embedding_service, "machine learning python", top_k=10
+        )
         print(f"\n[search_quality] ML query returned {len(results)} results")
         assert len(results) >= 5, f"Expected >= 5 results, got {len(results)}"
 
     def test_ml_query_scores_are_descending(self, qdrant_client, embedding_service):
         """Scores must be in descending order (Qdrant guarantees this, but verify)."""
-        results = self._run_search(qdrant_client, embedding_service, "machine learning python", top_k=10)
+        results = self._run_search(
+            qdrant_client, embedding_service, "machine learning python", top_k=10
+        )
         scores = [r.score for r in results]
         print(f"\n[search_quality] ML query scores: {[f'{s:.4f}' for s in scores]}")
-        assert scores == sorted(scores, reverse=True), f"Scores are not sorted descending: {scores}"
+        assert scores == sorted(
+            scores, reverse=True
+        ), f"Scores are not sorted descending: {scores}"
 
     def test_ml_query_top_result_has_high_score(self, qdrant_client, embedding_service):
         """The top result must have a cosine similarity score >= 0.5."""
-        results = self._run_search(qdrant_client, embedding_service, "machine learning python", top_k=1)
+        results = self._run_search(
+            qdrant_client, embedding_service, "machine learning python", top_k=1
+        )
         top_score = results[0].score
         print(f"\n[search_quality] ML query top score: {top_score:.4f}")
-        assert top_score >= 0.5, f"Expected top cosine score >= 0.5, got {top_score:.4f}"
+        assert (
+            top_score >= 0.5
+        ), f"Expected top cosine score >= 0.5, got {top_score:.4f}"
 
-    def test_different_queries_return_different_top_results(self, qdrant_client, embedding_service):
+    def test_different_queries_return_different_top_results(
+        self, qdrant_client, embedding_service
+    ):
         """ML and React queries must not share more than 2 of their top-5 results."""
-        ml_results = self._run_search(qdrant_client, embedding_service, "machine learning python", top_k=5)
-        react_results = self._run_search(qdrant_client, embedding_service, "react javascript frontend", top_k=5)
+        ml_results = self._run_search(
+            qdrant_client, embedding_service, "machine learning python", top_k=5
+        )
+        react_results = self._run_search(
+            qdrant_client, embedding_service, "react javascript frontend", top_k=5
+        )
 
         ml_ids = {r.id for r in ml_results}
         react_ids = {r.id for r in react_results}
         overlap = ml_ids & react_ids
 
-        print(f"\n[search_quality] ML top-5 IDs: {ml_ids}\nReact top-5 IDs: {react_ids}\nOverlap: {overlap}")
-        assert len(overlap) < 3, (
-            f"Expected < 3 shared results between ML and React queries, got {len(overlap)} overlap: {overlap}"
+        print(
+            f"\n[search_quality] ML top-5 IDs: {ml_ids}\nReact top-5 IDs: {react_ids}\nOverlap: {overlap}"
         )
+        assert (
+            len(overlap) < 3
+        ), f"Expected < 3 shared results between ML and React queries, got {len(overlap)} overlap: {overlap}"
 
     def test_devops_query_returns_results(self, qdrant_client, embedding_service):
         """A DevOps query must return at least 5 results."""
-        results = self._run_search(qdrant_client, embedding_service, "kubernetes docker devops CI CD", top_k=10)
+        results = self._run_search(
+            qdrant_client, embedding_service, "kubernetes docker devops CI CD", top_k=10
+        )
         print(f"\n[search_quality] DevOps query returned {len(results)} results")
         assert len(results) >= 5, f"Expected >= 5 results, got {len(results)}"
 
     def test_all_results_have_valid_ids(self, qdrant_client, embedding_service):
         """Every returned hit must have a non-null, non-empty ID."""
-        results = self._run_search(qdrant_client, embedding_service, "open source web framework", top_k=10)
+        results = self._run_search(
+            qdrant_client, embedding_service, "open source web framework", top_k=10
+        )
         for r in results:
             assert r.id is not None, f"Hit has null ID: {r}"
             assert str(r.id).strip() != "", f"Hit has empty ID: {r}"
@@ -502,7 +570,9 @@ class TestSemanticSearchQuality:
 
     def test_ml_query_top5_printed(self, qdrant_client, embedding_service):
         """Print top-5 ML results for human inspection (always passes)."""
-        results = self._run_search(qdrant_client, embedding_service, "machine learning python", top_k=5)
+        results = self._run_search(
+            qdrant_client, embedding_service, "machine learning python", top_k=5
+        )
         print("\n[search_quality] Top-5 results for 'machine learning python':")
         for i, r in enumerate(results, 1):
             payload = r.payload or {}
@@ -511,7 +581,9 @@ class TestSemanticSearchQuality:
 
     def test_react_query_top5_printed(self, qdrant_client, embedding_service):
         """Print top-5 React results for human inspection (always passes)."""
-        results = self._run_search(qdrant_client, embedding_service, "react javascript frontend", top_k=5)
+        results = self._run_search(
+            qdrant_client, embedding_service, "react javascript frontend", top_k=5
+        )
         print("\n[search_quality] Top-5 results for 'react javascript frontend':")
         for i, r in enumerate(results, 1):
             payload = r.payload or {}
@@ -543,11 +615,15 @@ class TestFullPipeline:
         request = make_request("machine learning python library", top_k=10)
         results = await hybrid_engine.recommend(request)
         for r in results:
-            assert r.repo_id is not None and str(r.repo_id).strip() != "", f"Result has null/empty repo_id: {r}"
+            assert (
+                r.repo_id is not None and str(r.repo_id).strip() != ""
+            ), f"Result has null/empty repo_id: {r}"
             assert r.score > 0, f"Result has non-positive score {r.score}: {r}"
             assert r.rank > 0, f"Result has non-positive rank {r.rank}: {r}"
 
-        print(f"\n[pipeline] All {len(results)} results have valid repo_id, score > 0, rank > 0")
+        print(
+            f"\n[pipeline] All {len(results)} results have valid repo_id, score > 0, rank > 0"
+        )
 
     @pytest.mark.asyncio
     async def test_hybrid_results_are_ranked_consecutively(self, hybrid_engine):
@@ -568,7 +644,9 @@ class TestFullPipeline:
         assert len(results) >= 1, "Baseline engine returned no results"
 
     @pytest.mark.asyncio
-    async def test_hybrid_and_baseline_return_different_results(self, hybrid_engine, baseline_engine):
+    async def test_hybrid_and_baseline_return_different_results(
+        self, hybrid_engine, baseline_engine
+    ):
         """Hybrid and baseline must not return the identical set of repo IDs."""
         request = make_request("machine learning python", top_k=10)
         hybrid_results = await hybrid_engine.recommend(request)
@@ -581,7 +659,9 @@ class TestFullPipeline:
             f"\n[pipeline] Hybrid IDs (sample): {list(hybrid_ids)[:5]}\nBaseline IDs (sample): {list(baseline_ids)[:5]}"
         )
 
-        assert hybrid_ids != baseline_ids, "Hybrid and baseline engines returned the exact same set of repository IDs"
+        assert (
+            hybrid_ids != baseline_ids
+        ), "Hybrid and baseline engines returned the exact same set of repository IDs"
 
     @pytest.mark.asyncio
     async def test_hybrid_top5_ml_printed(self, hybrid_engine):
@@ -590,16 +670,22 @@ class TestFullPipeline:
         results = await hybrid_engine.recommend(request)
         print("\n[pipeline] Hybrid top-5 for 'machine learning python':")
         for r in results:
-            print(f"  rank={r.rank}  score={r.score:.6f}  name={r.name!r}  lang={r.language}  stars={r.stars}")
+            print(
+                f"  rank={r.rank}  score={r.score:.6f}  name={r.name!r}  lang={r.language}  stars={r.stars}"
+            )
 
     @pytest.mark.asyncio
     async def test_hybrid_top5_devops_printed(self, hybrid_engine):
         """Print top-5 hybrid results for DevOps query (always passes)."""
         request = make_request("kubernetes docker container orchestration", top_k=5)
         results = await hybrid_engine.recommend(request)
-        print("\n[pipeline] Hybrid top-5 for 'kubernetes docker container orchestration':")
+        print(
+            "\n[pipeline] Hybrid top-5 for 'kubernetes docker container orchestration':"
+        )
         for r in results:
-            print(f"  rank={r.rank}  score={r.score:.6f}  name={r.name!r}  lang={r.language}  stars={r.stars}")
+            print(
+                f"  rank={r.rank}  score={r.score:.6f}  name={r.name!r}  lang={r.language}  stars={r.stars}"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -622,7 +708,9 @@ class TestFilterCorrectness:
             + ", ".join(f"{r.name}({r.language})" for r in results[:5])
         )
         for r in results:
-            assert r.language == "Python", f"Language filter violated: repo '{r.name}' has language '{r.language}'"
+            assert (
+                r.language == "Python"
+            ), f"Language filter violated: repo '{r.name}' has language '{r.language}'"
 
     @pytest.mark.asyncio
     async def test_min_stars_filter_applied(self, hybrid_engine):
@@ -634,15 +722,21 @@ class TestFilterCorrectness:
             + ", ".join(f"{r.name}({r.stars}★)" for r in results[:5])
         )
         for r in results:
-            assert r.stars >= 500, f"min_stars filter violated: repo '{r.name}' has {r.stars} stars"
+            assert (
+                r.stars >= 500
+            ), f"min_stars filter violated: repo '{r.name}' has {r.stars} stars"
 
     @pytest.mark.asyncio
     async def test_empty_results_for_impossible_filter(self, hybrid_engine):
         """A physically impossible star threshold must yield zero results."""
         request = make_request("open source", top_k=10, min_stars=10_000_000)
         results = await hybrid_engine.recommend(request)
-        print(f"\n[filters] min_stars=10,000,000 returned {len(results)} results (expected 0)")
-        assert len(results) == 0, f"Expected 0 results for min_stars=10_000_000, got {len(results)}"
+        print(
+            f"\n[filters] min_stars=10,000,000 returned {len(results)} results (expected 0)"
+        )
+        assert (
+            len(results) == 0
+        ), f"Expected 0 results for min_stars=10_000_000, got {len(results)}"
 
 
 # ---------------------------------------------------------------------------
@@ -667,7 +761,9 @@ class TestPerformance:
         )
         elapsed = time.perf_counter() - start
         print(f"\n[performance] First semantic search latency: {elapsed:.3f}s")
-        assert elapsed <= 30.0, f"First semantic search took {elapsed:.3f}s, expected <= 30s"
+        assert (
+            elapsed <= 30.0
+        ), f"First semantic search took {elapsed:.3f}s, expected <= 30s"
 
     def test_subsequent_semantic_search_latency(self, qdrant_client, embedding_service):
         """Subsequent searches (model warm) must complete within 5s."""
@@ -683,7 +779,9 @@ class TestPerformance:
         )
         elapsed = time.perf_counter() - start
         print(f"\n[performance] Subsequent semantic search latency: {elapsed:.3f}s")
-        assert elapsed <= 5.0, f"Subsequent semantic search took {elapsed:.3f}s, expected <= 5s"
+        assert (
+            elapsed <= 5.0
+        ), f"Subsequent semantic search took {elapsed:.3f}s, expected <= 5s"
 
     @pytest.mark.asyncio
     async def test_full_pipeline_latency(self, hybrid_engine):
@@ -694,5 +792,7 @@ class TestPerformance:
         results = await hybrid_engine.recommend(request)
         elapsed = time.perf_counter() - start
 
-        print(f"\n[performance] Full pipeline latency: {elapsed:.3f}s (returned {len(results)} results)")
+        print(
+            f"\n[performance] Full pipeline latency: {elapsed:.3f}s (returned {len(results)} results)"
+        )
         assert elapsed <= 30.0, f"Full pipeline took {elapsed:.3f}s, expected <= 30s"

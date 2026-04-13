@@ -33,7 +33,7 @@ services:
       - N_WORKERS=${N_WORKERS:-6}
 
       # MLflow experiment tracking
-      - MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI:-file:///app/mlruns}
+      - MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI:-http://mlflow:5000}
       - MLFLOW_EXPERIMENT_NAME=${MLFLOW_EXPERIMENT_NAME:-git-query-retrain}
       - ENABLE_LGBM_TRAINING=${ENABLE_LGBM_TRAINING:-true}
       - LGBM_TOP_N_QUERIES=${LGBM_TOP_N_QUERIES:-100}

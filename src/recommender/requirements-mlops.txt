@@ -1,7 +1,7 @@
 # Lightweight requirements for MLOps smoke/unit tests in CI.
 # Does NOT include torch/sentence-transformers (heavy GPU packages).
 mlflow>=2.10.0
-evidently>=0.4.0
+evidently>=0.6.0
 pandas>=2.0.0
 numpy>=1.26.3
 scikit-learn>=1.4.0
