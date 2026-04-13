@@ -13,7 +13,6 @@ services:
     volumes:
       # Persistent storage for experiments and artifacts
       - mlflow-runs:/mlflow
-      - mlflow-artifacts:/mlflow/artifacts
     command: >
       mlflow server
       --backend-store-uri ${MLFLOW_BACKEND_STORE_URI:-sqlite:////mlflow/mlflow.db}
@@ -25,7 +24,6 @@ services:
       - MLFLOW_DEFAULT_ARTIFACT_ROOT=${MLFLOW_DEFAULT_ARTIFACT_ROOT:-/mlflow/artifacts}
     networks:
       - internal-network
-      - proxy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/2.0/mlflow/experiments/list').read()"]
@@ -44,6 +42,3 @@ networks:
   internal-network:
     external: true
     name: git-query-internal-network
-  proxy:
-    external: true
-    name: proxy
