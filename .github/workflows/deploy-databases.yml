@@ -1,4 +1,4 @@
-name: Deploy Infrastructure (Databases)
+name: Deploy Infrastructure (Databases) (Manual)
 
 # Single Responsibility: Deploy only database services
 # Triggered: Manual workflow dispatch
