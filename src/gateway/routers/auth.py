@@ -1,6 +1,5 @@
 """Authentication router."""
 
-import hashlib
 import logging
 from fastapi import APIRouter, HTTPException, status, Request, Response
 from pydantic import BaseModel, EmailStr
@@ -57,18 +56,8 @@ async def login(request: Request, response: Response, credentials: LoginRequest)
     try:
         password_hasher.verify(stored_hash, credentials.password)
     except InvalidHashError:
-        # Legacy SHA-256 migration: old accounts stored an unsalted hex digest.
-        # If verification succeeds, re-hash with argon2 and update the record.
-        sha256_digest = hashlib.sha256(credentials.password.encode()).hexdigest()
-        if stored_hash != sha256_digest:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-        # Password matched — upgrade to argon2 in-place
-        new_hash = password_hasher.hash(credentials.password)
-        await user_service.db.users.update_one(
-            {"_id": user["_id"]},
-            {"$set": {"password_hash": new_hash}},
-        )
-        logger.info("Migrated legacy SHA-256 hash to argon2 for user %s", user["user_id"])
+        # Reject legacy/invalid hash formats; only Argon2 hashes are accepted.
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     except VerifyMismatchError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
