@@ -13,6 +13,7 @@ GATEWAY_API_PREFIXES = (
     "/docs",
     "/openapi.json",
     "/redoc",
+    "/mlflow",
 )
 
 # Public API endpoints that don't require authentication or an API key.
@@ -46,4 +47,5 @@ SESSION_PATHS = [
     "/api/auth",  # Alias used by the browser frontend (e.g. /api/auth/logout)
     "/api/recommend",  # Alias used by the browser frontend
     "/api/chat",  # Alias used by the browser frontend
+    "/mlflow",  # MLFlow UI proxy - admin session required
 ]

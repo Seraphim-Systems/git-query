@@ -19,6 +19,7 @@ from src.gateway.middleware.rate_limit import RateLimitMiddleware
 from src.gateway.middleware.api_key import APIKeyMiddleware
 from src.gateway.middleware.session import SessionMiddleware
 from src.gateway.routers import auth, chat, recommendations, user, health, repos
+from src.gateway.routers import mlflow_proxy
 from src.gateway.middleware.shared import GATEWAY_API_PREFIXES
 
 
@@ -318,6 +319,9 @@ app.include_router(mongodb_router.router, prefix="/api")
 app.include_router(redis_router.router, prefix="/api")
 app.include_router(qdrant_router.router, prefix="/api")
 app.include_router(repos.router, prefix="/api")
+
+# MLFlow UI proxy - admin-only, proxied to internal git-query-mlflow container
+app.include_router(mlflow_proxy.router, prefix="/mlflow", tags=["MLFlow"])
 
 
 # Health check
