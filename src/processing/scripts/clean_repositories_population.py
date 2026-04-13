@@ -19,8 +19,11 @@ from pymongo import MongoClient, UpdateOne
 from pymongo.collection import Collection
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+SRC_ROOT = REPO_ROOT / "src"
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
 
 from processing.pipelines.transformation import DataTransformer  # noqa: E402
 
