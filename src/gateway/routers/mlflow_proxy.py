@@ -50,6 +50,8 @@ _METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 router = APIRouter(tags=["MLFlow"])
 static_router = APIRouter(tags=["MLFlow"])
 
+_CONDITIONAL_CACHE_HEADERS = frozenset({"if-none-match", "if-modified-since"})
+
 
 def _rewrite_mlflow_html(content: bytes, content_type: str | None) -> bytes:
     """Ensure MLflow HTML references static assets under /mlflow for proxy safety."""
@@ -129,6 +131,12 @@ async def _forward_with_fallback(
     if host:
         forward_headers.setdefault("x-forwarded-host", host)
 
+    # Do not forward conditional cache validators for /mlflow requests.
+    # We need a full HTML body so asset URL rewriting can run reliably.
+    if request.url.path.startswith("/mlflow"):
+        for header_name in _CONDITIONAL_CACHE_HEADERS:
+            forward_headers.pop(header_name, None)
+
     body = await request.body()
 
     response: httpx.Response | None = None
@@ -183,6 +191,14 @@ async def _forward_with_fallback(
     resp_headers = {
         k: v for k, v in response.headers.items() if k.lower() not in _HOP_BY_HOP
     }
+
+    if request.url.path.startswith("/mlflow") and content_type:
+        if "text/html" in content_type.lower():
+            # Prevent stale HTML cache serving old /static-files paths.
+            resp_headers["cache-control"] = "no-store, max-age=0"
+            resp_headers.pop("etag", None)
+            resp_headers.pop("last-modified", None)
+
     if content != response.content:
         # Let FastAPI recalculate content length after body rewrite.
         resp_headers.pop("content-length", None)

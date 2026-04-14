@@ -247,3 +247,41 @@ def test_proxy_rewrites_html_static_files_to_mlflow_prefix(monkeypatch):
 
     assert response.status_code == 200
     assert "/mlflow/static-files/static/js/main.js" in response.content.decode("utf-8")
+
+
+def test_proxy_strips_conditional_cache_headers_for_mlflow_html(monkeypatch):
+    monkeypatch.setattr(mlflow_proxy, "require_admin", _allow_admin)
+    monkeypatch.setattr(mlflow_proxy.httpx, "AsyncClient", DummyAsyncClient)
+    monkeypatch.setattr(
+        mlflow_proxy,
+        "MLFLOW_INTERNAL_URLS",
+        ("http://git-query-mlflow:5000",),
+    )
+
+    DummyAsyncClient.requests = []
+    DummyAsyncClient.fail_hosts = set()
+    DummyAsyncClient.status_by_prefix = {}
+    DummyAsyncClient.content_by_prefix = {
+        "http://git-query-mlflow:5000/mlflow": b'<script src="/static-files/static/js/main.js"></script>'
+    }
+    DummyAsyncClient.content_type_by_prefix = {
+        "http://git-query-mlflow:5000/mlflow": "text/html"
+    }
+
+    app = _build_test_app()
+    client = TestClient(app)
+
+    response = client.get(
+        "/mlflow/",
+        headers={"If-None-Match": "abc123", "If-Modified-Since": "yesterday"},
+    )
+
+    assert response.status_code == 200
+    forward_headers = {
+        key.lower(): value
+        for key, value in DummyAsyncClient.requests[0]["headers"].items()
+    }
+    assert "if-none-match" not in forward_headers
+    assert "if-modified-since" not in forward_headers
+    assert response.headers.get("cache-control") == "no-store, max-age=0"
+    assert "/mlflow/static-files/static/js/main.js" in response.content.decode("utf-8")
