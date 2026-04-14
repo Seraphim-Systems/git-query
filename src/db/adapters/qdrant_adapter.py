@@ -133,7 +133,15 @@ class QdrantAdapter(VectorRepository):
         # Try client methods first
         if self.client:
             try:
-                if hasattr(self.client, "search"):
+                if hasattr(self.client, "query_points"):
+                    res = self.client.query_points(
+                        collection_name=collection,
+                        query=vector,
+                        limit=limit,
+                        query_filter=filter or {},
+                        with_payload=True,
+                    ).points
+                elif hasattr(self.client, "search"):
                     res = self.client.search(
                         collection_name=collection,
                         query_vector=vector,
