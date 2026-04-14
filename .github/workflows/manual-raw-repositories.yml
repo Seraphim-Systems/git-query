@@ -1,4 +1,4 @@
-name: Run Raw Repositories Population
+name: "Manual — Run Raw Repositories Population"
 
 # Single Responsibility: run raw repositories population script on server
 # Triggered: Manual workflow dispatch
