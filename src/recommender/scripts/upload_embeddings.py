@@ -1,13 +1,14 @@
 """Upload locally trained embeddings to Qdrant via server API."""
 
 import json
+import logging
 import os
+import time
+from pathlib import Path
+from typing import Dict, List
+
 import numpy as np
 import requests
-from pathlib import Path
-from typing import List, Dict
-import time
-import logging
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -179,7 +180,7 @@ class EmbeddingUploader:
                 logger.error(f"Failed to upload batch: {result.get('error')}")
 
             # Rate limiting
-            time.sleep(0.5)
+            time.sleep(float(os.getenv("UPLOAD_SLEEP", 0.05)))
 
         logger.info("=" * 60)
         logger.info("Upload complete!")
