@@ -49,6 +49,9 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+    depends_on:
+      mlflow:
+        condition: service_healthy
     restart: "no"  # Run once, don't restart
     shm_size: '2gb'
     volumes:
