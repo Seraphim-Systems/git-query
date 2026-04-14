@@ -91,9 +91,8 @@ jobs:
             -e QDRANT_COLLECTION="repositories_embeddings" \
             -e EMBEDDING_MODEL="sentence-transformers/all-MiniLM-L6-v2" \
             -e DRY_RUN="\$DRY_RUN_VAL" \
-            -v "\$REPO_PATH":/repo \
             "\$TRAINING_IMAGE" \
-            /app/.venv/bin/python /repo/src/recommender/scripts/generate_synthetic_interactions.py
+            /app/.venv/bin/python /app/scripts/generate_synthetic_interactions.py
 
           echo "Synthetic interaction generation complete."
 
@@ -108,29 +107,17 @@ jobs:
         env:
           HETZNER_USER: ${{ secrets.INFRA_HETZNER_USER }}
           HETZNER_HOST: ${{ secrets.INFRA_HETZNER_HOST }}
-          DB_USER: ${{ secrets.DB_MONGODB_USER }}
-          DB_PASS: ${{ secrets.DB_MONGODB_PASSWORD }}
         run: |
           ssh "$HETZNER_USER@$HETZNER_HOST" bash -s << ENDSSH
           set -euo pipefail
           REPO_PATH="/home/$HETZNER_USER/git-query"
           cd "\$REPO_PATH"
 
-          TRAINING_IMAGE="git-query-training"
-          RETRAIN_CONTAINER="git-query-lgbm-retrain-job"
-
-          docker rm -f "\$RETRAIN_CONTAINER" >/dev/null 2>&1 || true
-
-          echo "Triggering LGBM retraining..."
-          docker run --rm \
-            --name "\$RETRAIN_CONTAINER" \
-            --network git-query-internal-network \
-            -e MONGODB_URL="mongodb://$DB_USER:$DB_PASS@git-query-mongodb:27017/gitquery?authSource=admin" \
-            -e QDRANT_URL="http://git-query-qdrant:6333" \
-            -v "\$REPO_PATH":/repo \
-            -v git-query-models:/models \
-            "\$TRAINING_IMAGE" \
-            /app/.venv/bin/python /repo/src/recommender/training/retrain_pipeline.py
+          echo "Triggering LGBM retraining via docker-compose..."
+          docker compose \
+            -f infrastructure/docker/docker-compose.base.yml \
+            -f infrastructure/docker/docker-compose.training.yml \
+            run --rm training
 
           echo "Retraining complete."
           ENDSSH
