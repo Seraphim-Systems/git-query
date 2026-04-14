@@ -10,6 +10,8 @@ services:
     container_name: git-query-mlflow
     expose:
       - "5000"
+    ports:
+      - "80:5000"
     volumes:
       # Persistent storage for experiments and artifacts
       - mlflow-runs:/mlflow
