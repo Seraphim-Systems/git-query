@@ -51,6 +51,7 @@ class DummyAsyncClient:
 def _build_test_app():
     app = FastAPI()
     app.include_router(mlflow_proxy.router, prefix="/mlflow")
+    app.include_router(mlflow_proxy.static_router)
     return app
 
 
@@ -159,4 +160,35 @@ def test_proxy_retries_static_files_root_after_prefixed_and_plain_404(monkeypatc
     assert (
         DummyAsyncClient.requests[2]["url"]
         == "http://git-query-mlflow:5000/mlflow/static-files"
+    )
+
+
+def test_static_files_proxy_falls_back_to_prefixed_static_path(monkeypatch):
+    monkeypatch.setattr(mlflow_proxy, "require_admin", _allow_admin)
+    monkeypatch.setattr(mlflow_proxy.httpx, "AsyncClient", DummyAsyncClient)
+    monkeypatch.setattr(
+        mlflow_proxy,
+        "MLFLOW_INTERNAL_URLS",
+        ("http://git-query-mlflow:5000",),
+    )
+
+    DummyAsyncClient.requests = []
+    DummyAsyncClient.fail_hosts = set()
+    DummyAsyncClient.status_by_prefix = {
+        "http://git-query-mlflow:5000/static-files": 404,
+    }
+
+    app = _build_test_app()
+    client = TestClient(app)
+
+    response = client.get("/static-files/static/js/main.js")
+
+    assert response.status_code == 200
+    assert (
+        DummyAsyncClient.requests[0]["url"]
+        == "http://git-query-mlflow:5000/static-files/static/js/main.js"
+    )
+    assert (
+        DummyAsyncClient.requests[1]["url"]
+        == "http://git-query-mlflow:5000/mlflow/static-files/static/js/main.js"
     )

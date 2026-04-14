@@ -263,10 +263,13 @@ app.include_router(repos.router, prefix="/api")
 
 # MLFlow UI proxy - admin-only, proxied to internal git-query-mlflow container
 app.include_router(mlflow_proxy.router, prefix="/mlflow", tags=["MLFlow"])
+app.include_router(mlflow_proxy.static_router, tags=["MLFlow"])
 
 
 # Recommender admin proxy — forward /api/admin/models/* to the recommender service
-@app.api_route("/api/admin/models/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+@app.api_route(
+    "/api/admin/models/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"]
+)
 async def proxy_recommender_admin(path: str, request: Request):
     """Proxy /api/admin/models/* to the recommender service admin endpoints."""
     import httpx
@@ -290,13 +293,22 @@ async def proxy_recommender_admin(path: str, request: Request):
                 content=body,
             )
         except httpx.ConnectError:
-            logger.error("Cannot connect to recommender at %s", settings.recommender_url)
+            logger.error(
+                "Cannot connect to recommender at %s", settings.recommender_url
+            )
             return Response(content=b"Recommender unavailable", status_code=503)
         except httpx.TimeoutException:
             logger.error("Timeout proxying to recommender admin at %s", target)
             return Response(content=b"Recommender timeout", status_code=504)
 
-    excluded = {"transfer-encoding", "connection", "keep-alive", "te", "trailers", "upgrade"}
+    excluded = {
+        "transfer-encoding",
+        "connection",
+        "keep-alive",
+        "te",
+        "trailers",
+        "upgrade",
+    }
     resp_headers = {k: v for k, v in resp.headers.items() if k.lower() not in excluded}
     return Response(
         content=resp.content,

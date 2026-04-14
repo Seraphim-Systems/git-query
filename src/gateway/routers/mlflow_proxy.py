@@ -48,6 +48,7 @@ _HOP_BY_HOP = frozenset(
 _METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 
 router = APIRouter(tags=["MLFlow"])
+static_router = APIRouter(tags=["MLFlow"])
 
 
 def _build_targets(base_url: str, path: str, query: str) -> tuple[str, ...]:
@@ -75,10 +76,34 @@ def _build_targets(base_url: str, path: str, query: str) -> tuple[str, ...]:
     return tuple(targets)
 
 
-async def _proxy(request: Request, path: str) -> Response:
-    """Shared proxy logic: forward request to MLFlow and return its response."""
-    await require_admin(request)
+def _build_static_targets(base_url: str, path: str, query: str) -> tuple[str, ...]:
+    normalized_path = path.lstrip("/")
+    direct_path = (
+        "/static-files" if not normalized_path else f"/static-files/{normalized_path}"
+    )
+    prefixed_path = (
+        "/mlflow/static-files"
+        if not normalized_path
+        else f"/mlflow/static-files/{normalized_path}"
+    )
 
+    candidate_paths = [direct_path]
+    if prefixed_path != direct_path:
+        candidate_paths.append(prefixed_path)
+
+    targets: list[str] = []
+    for upstream_path in candidate_paths:
+        target = f"{base_url}{upstream_path}"
+        if query:
+            target = f"{target}?{query}"
+        targets.append(target)
+    return tuple(targets)
+
+
+async def _forward_with_fallback(
+    request: Request,
+    targets_builder,
+) -> Response:
     forward_headers = {
         k: v
         for k, v in request.headers.items()
@@ -97,7 +122,7 @@ async def _proxy(request: Request, path: str) -> Response:
 
     async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
         for base_url in MLFLOW_INTERNAL_URLS:
-            targets = _build_targets(base_url, path, request.url.query)
+            targets = targets_builder(base_url, request.url.query)
             for index, target in enumerate(targets):
                 try:
                     candidate = await client.request(
@@ -114,9 +139,9 @@ async def _proxy(request: Request, path: str) -> Response:
                     timeout_failures.append(target)
                     break
 
-                if candidate.status_code == 404 and index == 0 and len(targets) > 1:
+                if candidate.status_code == 404 and index < len(targets) - 1:
                     logger.info(
-                        "MLFlow route %s returned 404, retrying without /mlflow prefix",
+                        "MLFlow route %s returned 404, trying fallback route",
                         target,
                     )
                     continue
@@ -148,6 +173,26 @@ async def _proxy(request: Request, path: str) -> Response:
     )
 
 
+async def _proxy(request: Request, path: str) -> Response:
+    """Shared proxy logic: forward request to MLFlow and return its response."""
+    await require_admin(request)
+
+    return await _forward_with_fallback(
+        request,
+        lambda base_url, query: _build_targets(base_url, path, query),
+    )
+
+
+async def _proxy_static(request: Request, path: str) -> Response:
+    """Proxy MLFlow static files for legacy absolute /static-files URLs."""
+    await require_admin(request)
+
+    return await _forward_with_fallback(
+        request,
+        lambda base_url, query: _build_static_targets(base_url, path, query),
+    )
+
+
 @router.api_route("", methods=_METHODS)
 @router.api_route("/", methods=_METHODS)
 async def proxy_mlflow_root(request: Request):
@@ -159,3 +204,16 @@ async def proxy_mlflow_root(request: Request):
 async def proxy_mlflow(path: str, request: Request):
     """Proxy /mlflow/{path} to the MLFlow tracking server."""
     return await _proxy(request, path)
+
+
+@static_router.api_route("/static-files", methods=_METHODS)
+@static_router.api_route("/static-files/", methods=_METHODS)
+async def proxy_mlflow_static_root(request: Request):
+    """Proxy /static-files and /static-files/ to MLFlow static bundle roots."""
+    return await _proxy_static(request, "")
+
+
+@static_router.api_route("/static-files/{path:path}", methods=_METHODS)
+async def proxy_mlflow_static(path: str, request: Request):
+    """Proxy /static-files/{path} to the MLFlow tracking server static files."""
+    return await _proxy_static(request, path)
