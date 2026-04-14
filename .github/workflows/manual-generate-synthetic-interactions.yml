@@ -113,11 +113,21 @@ jobs:
           REPO_PATH="/home/$HETZNER_USER/git-query"
           cd "\$REPO_PATH"
 
+          cat > "\$REPO_PATH/.runtime/docker-compose.training-cpu.yml" << 'EOF'
+          services:
+            training:
+              deploy:
+                resources:
+                  reservations:
+                    devices: []
+          EOF
+
           echo "Triggering LGBM-only retraining via docker-compose..."
           docker compose \
             -f infrastructure/docker/docker-compose.base.yml \
             -f infrastructure/docker/docker-compose.mlflow.yml \
             -f infrastructure/docker/docker-compose.training.yml \
+            -f .runtime/docker-compose.training-cpu.yml \
             --env-file .env \
             run --rm -e ENABLE_EMBEDDING_TRAINING=false training
 
