@@ -29,7 +29,9 @@ class UserPreferences(BaseModel):
 class UserService:
     """Service for managing user data and preferences."""
 
-    def __init__(self, mongodb: AsyncIOMotorDatabase, redis: Redis, cache_ttl: int = 3600):
+    def __init__(
+        self, mongodb: AsyncIOMotorDatabase, redis: Redis, cache_ttl: int = 3600
+    ):
         """
         Initialize user service.
 
@@ -72,6 +74,306 @@ class UserService:
         interaction_type = self._to_recommender_interaction_type(action)
         return self._value_map.get(interaction_type, 0.0)
 
+    @staticmethod
+    def _normalize_chat_message(message: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalize a chat message payload from the frontend."""
+        if not isinstance(message, dict):
+            return {
+                "content": "",
+                "role": "assistant",
+                "timestamp": int(datetime.utcnow().timestamp() * 1000),
+            }
+
+        timestamp = message.get("timestamp")
+        if not isinstance(timestamp, int):
+            timestamp = int(datetime.utcnow().timestamp() * 1000)
+
+        role = message.get("role")
+        if role not in {"user", "assistant"}:
+            role = "assistant"
+
+        return {
+            "content": str(message.get("content", "")),
+            "role": role,
+            "timestamp": timestamp,
+        }
+
+    def _normalize_chat_session(
+        self, session: Dict[str, Any], fallback_idx: int
+    ) -> Dict[str, Any]:
+        """Normalize a chat session payload from the frontend."""
+        session_id = str(session.get("id") or f"chat-{uuid4()}")
+        title = str(session.get("title") or "New Session")
+        timestamp = session.get("timestamp")
+        if not isinstance(timestamp, int):
+            timestamp = int(datetime.utcnow().timestamp() * 1000)
+
+        raw_messages = session.get("messages") or []
+        if not isinstance(raw_messages, list):
+            raw_messages = []
+        messages = [self._normalize_chat_message(m) for m in raw_messages]
+
+        return {
+            "id": session_id,
+            "title": title,
+            "timestamp": timestamp,
+            "messages": messages,
+            "sort_order": int(session.get("sort_order", fallback_idx)),
+        }
+
+    @staticmethod
+    def _normalize_saved_repo(
+        repo: Dict[str, Any], fallback_idx: int
+    ) -> Dict[str, Any]:
+        """Normalize a saved repo payload from the frontend."""
+        return {
+            "id": str(repo.get("id") or f"repo-{uuid4()}"),
+            "name": str(repo.get("name") or "Unknown"),
+            "owner": str(repo.get("owner") or "Unknown"),
+            "description": str(repo.get("description") or "No description available"),
+            "stars": int(repo.get("stars") or 0),
+            "forks": int(repo.get("forks") or 0),
+            "language": str(repo.get("language") or "Unknown"),
+            "url": str(repo.get("url") or ""),
+            "sort_order": int(repo.get("sort_order", fallback_idx)),
+        }
+
+    def _normalize_folder_item(
+        self, item: Dict[str, Any], fallback_idx: int
+    ) -> Dict[str, Any]:
+        """Normalize a folder item payload from the frontend."""
+        if not isinstance(item, dict):
+            return {
+                "id": f"item-{fallback_idx}-{uuid4()}",
+                "name": "Untitled",
+            }
+
+        normalized = dict(item)
+        normalized["id"] = str(normalized.get("id") or f"item-{fallback_idx}-{uuid4()}")
+
+        if "title" in normalized:
+            normalized["title"] = str(normalized.get("title") or "")
+        if "name" in normalized:
+            normalized["name"] = str(normalized.get("name") or "")
+        if "url" in normalized:
+            normalized["url"] = str(normalized.get("url") or "")
+
+        raw_messages = normalized.get("messages")
+        if isinstance(raw_messages, list):
+            normalized["messages"] = [
+                self._normalize_chat_message(msg) for msg in raw_messages
+            ]
+
+        return normalized
+
+    def _normalize_folder(
+        self, folder: Dict[str, Any], fallback_idx: int
+    ) -> Dict[str, Any]:
+        """Normalize a folder payload from the frontend."""
+        raw_items = folder.get("items") or []
+        if not isinstance(raw_items, list):
+            raw_items = []
+
+        return {
+            "id": str(folder.get("id") or f"folder-{uuid4()}"),
+            "name": str(folder.get("name") or "New Folder"),
+            "items": [
+                self._normalize_folder_item(item, idx)
+                for idx, item in enumerate(raw_items)
+            ],
+            "expanded": bool(folder.get("expanded", False)),
+            "sort_order": int(folder.get("sort_order", fallback_idx)),
+        }
+
+    async def get_user_chats(
+        self, user_id: str, limit: int = 100
+    ) -> list[Dict[str, Any]]:
+        """Return persisted chat sessions for a user."""
+        collection = self.db.get_collection("user_chats")
+        cursor = (
+            collection.find(
+                {"user_id": user_id},
+                {
+                    "_id": 0,
+                    "user_id": 0,
+                },
+            )
+            .sort("sort_order", 1)
+            .limit(limit)
+        )
+
+        docs = await cursor.to_list(length=limit)
+        return [
+            {
+                "id": d.get("chat_id"),
+                "title": d.get("title") or "New Session",
+                "timestamp": d.get("timestamp")
+                or int(datetime.utcnow().timestamp() * 1000),
+                "messages": d.get("messages") or [],
+            }
+            for d in docs
+            if d.get("chat_id")
+        ]
+
+    async def replace_user_chats(
+        self, user_id: str, chats: list[Dict[str, Any]]
+    ) -> list[Dict[str, Any]]:
+        """Replace all persisted chat sessions for a user."""
+        collection = self.db.get_collection("user_chats")
+        normalized = [
+            self._normalize_chat_session(chat, idx) for idx, chat in enumerate(chats)
+        ]
+
+        await collection.delete_many({"user_id": user_id})
+        if normalized:
+            now = datetime.utcnow()
+            await collection.insert_many(
+                [
+                    {
+                        "user_id": user_id,
+                        "chat_id": chat["id"],
+                        "title": chat["title"],
+                        "timestamp": chat["timestamp"],
+                        "messages": chat["messages"],
+                        "sort_order": chat["sort_order"],
+                        "updated_at": now,
+                    }
+                    for chat in normalized
+                ]
+            )
+
+        for chat in normalized:
+            chat.pop("sort_order", None)
+        return normalized
+
+    async def get_saved_repos(
+        self, user_id: str, limit: int = 200
+    ) -> list[Dict[str, Any]]:
+        """Return saved repositories for a user."""
+        collection = self.db.get_collection("user_saved_repos")
+        cursor = (
+            collection.find(
+                {"user_id": user_id},
+                {
+                    "_id": 0,
+                    "user_id": 0,
+                },
+            )
+            .sort("sort_order", 1)
+            .limit(limit)
+        )
+
+        docs = await cursor.to_list(length=limit)
+        return [
+            {
+                "id": d.get("repo_id"),
+                "name": d.get("name") or "Unknown",
+                "owner": d.get("owner") or "Unknown",
+                "description": d.get("description") or "No description available",
+                "stars": d.get("stars") or 0,
+                "forks": d.get("forks") or 0,
+                "language": d.get("language") or "Unknown",
+                "url": d.get("url") or "",
+            }
+            for d in docs
+            if d.get("repo_id")
+        ]
+
+    async def replace_saved_repos(
+        self, user_id: str, repos: list[Dict[str, Any]]
+    ) -> list[Dict[str, Any]]:
+        """Replace all saved repositories for a user."""
+        collection = self.db.get_collection("user_saved_repos")
+        normalized = [
+            self._normalize_saved_repo(repo, idx) for idx, repo in enumerate(repos)
+        ]
+
+        await collection.delete_many({"user_id": user_id})
+        if normalized:
+            now = datetime.utcnow()
+            await collection.insert_many(
+                [
+                    {
+                        "user_id": user_id,
+                        "repo_id": repo["id"],
+                        "name": repo["name"],
+                        "owner": repo["owner"],
+                        "description": repo["description"],
+                        "stars": repo["stars"],
+                        "forks": repo["forks"],
+                        "language": repo["language"],
+                        "url": repo["url"],
+                        "sort_order": repo["sort_order"],
+                        "updated_at": now,
+                    }
+                    for repo in normalized
+                ]
+            )
+
+        for repo in normalized:
+            repo.pop("sort_order", None)
+        return normalized
+
+    async def get_user_folders(
+        self, user_id: str, limit: int = 200
+    ) -> list[Dict[str, Any]]:
+        """Return saved folders for a user."""
+        collection = self.db.get_collection("user_folders")
+        cursor = (
+            collection.find(
+                {"user_id": user_id},
+                {
+                    "_id": 0,
+                    "user_id": 0,
+                },
+            )
+            .sort("sort_order", 1)
+            .limit(limit)
+        )
+
+        docs = await cursor.to_list(length=limit)
+        return [
+            {
+                "id": d.get("folder_id"),
+                "name": d.get("name") or "New Folder",
+                "items": d.get("items") or [],
+                "expanded": bool(d.get("expanded", False)),
+            }
+            for d in docs
+            if d.get("folder_id")
+        ]
+
+    async def replace_user_folders(
+        self, user_id: str, folders: list[Dict[str, Any]]
+    ) -> list[Dict[str, Any]]:
+        """Replace all saved folders for a user."""
+        collection = self.db.get_collection("user_folders")
+        normalized = [
+            self._normalize_folder(folder, idx) for idx, folder in enumerate(folders)
+        ]
+
+        await collection.delete_many({"user_id": user_id})
+        if normalized:
+            now = datetime.utcnow()
+            await collection.insert_many(
+                [
+                    {
+                        "user_id": user_id,
+                        "folder_id": folder["id"],
+                        "name": folder["name"],
+                        "items": folder["items"],
+                        "expanded": folder["expanded"],
+                        "sort_order": folder["sort_order"],
+                        "updated_at": now,
+                    }
+                    for folder in normalized
+                ]
+            )
+
+        for folder in normalized:
+            folder.pop("sort_order", None)
+        return normalized
+
     async def get_user_preferences(self, user_id: str) -> UserPreferences:
         """
         Get user preferences with Redis cache.
@@ -113,7 +415,9 @@ class UserService:
 
         return prefs
 
-    async def update_preferences(self, user_id: str, preferences: Dict[str, Any]) -> UserPreferences:
+    async def update_preferences(
+        self, user_id: str, preferences: Dict[str, Any]
+    ) -> UserPreferences:
         """
         Update user preferences.
 
@@ -133,7 +437,9 @@ class UserService:
 
         # Keep recommender's preference store in sync so personalization reads
         # a consistent profile source.
-        lang_scores = {language: 1.0 for language in (preferences.get("languages") or [])}
+        lang_scores = {
+            language: 1.0 for language in (preferences.get("languages") or [])
+        }
         topic_scores = {topic: 1.0 for topic in (preferences.get("topics") or [])}
         existing = await self.db.user_preferences.find_one({"user_id": user_id})
         total_interactions = int((existing or {}).get("total_interactions", 0))
@@ -241,7 +547,9 @@ class UserService:
         )
         await self.redis.ltrim(f"user_interactions:{user_id}", 0, 99)
 
-    async def get_interaction_history(self, user_id: str, limit: int = 100) -> list[Dict[str, Any]]:
+    async def get_interaction_history(
+        self, user_id: str, limit: int = 100
+    ) -> list[Dict[str, Any]]:
         """
         Get user interaction history.
 
@@ -253,7 +561,11 @@ class UserService:
             List of interactions
         """
         # Primary source: canonical recommender interaction collection.
-        cursor = self.db.user_interactions.find({"user_id": user_id}).sort("timestamp", -1).limit(limit)
+        cursor = (
+            self.db.user_interactions.find({"user_id": user_id})
+            .sort("timestamp", -1)
+            .limit(limit)
+        )
         interactions = await cursor.to_list(length=limit)
         if interactions:
             for item in interactions:
@@ -261,7 +573,9 @@ class UserService:
             return interactions
 
         # Backward-compatible fallback.
-        user = await self.db.users.find_one({"user_id": user_id}, {"interaction_history": {"$slice": -limit}})
+        user = await self.db.users.find_one(
+            {"user_id": user_id}, {"interaction_history": {"$slice": -limit}}
+        )
 
         if not user or "interaction_history" not in user:
             return []

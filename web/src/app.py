@@ -336,6 +336,30 @@ def api_user_preferences():
     return _proxy_to_gateway("/user/preferences")
 
 
+@app.route("/api/user/chats", methods=["GET", "PUT", "OPTIONS"])
+def api_user_chats():
+    """Proxy user chat sessions to the gateway."""
+    if request.method == "OPTIONS":
+        return "", 204
+    return _proxy_to_gateway("/user/chats")
+
+
+@app.route("/api/user/saved-repos", methods=["GET", "PUT", "OPTIONS"])
+def api_user_saved_repos():
+    """Proxy user saved repositories to the gateway."""
+    if request.method == "OPTIONS":
+        return "", 204
+    return _proxy_to_gateway("/user/saved-repos")
+
+
+@app.route("/api/user/folders", methods=["GET", "PUT", "OPTIONS"])
+def api_user_folders():
+    """Proxy user folders to the gateway."""
+    if request.method == "OPTIONS":
+        return "", 204
+    return _proxy_to_gateway("/user/folders")
+
+
 # ── Health endpoints ──────────────────────────────────────────────────────────
 
 

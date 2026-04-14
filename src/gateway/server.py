@@ -249,6 +249,7 @@ app.include_router(
     recommendations.router, prefix="/api/recommend", tags=["Recommendations"]
 )
 app.include_router(user.router, prefix="/user", tags=["User"])
+app.include_router(user.router, prefix="/api/user", tags=["User"])
 
 # Mount the storage routers under `/api` so DB endpoints are served by the
 # Gateway process itself (previously provided by the db-query-api service).

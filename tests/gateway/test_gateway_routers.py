@@ -30,9 +30,42 @@ class DummyUserService:
     def __init__(self):
         self.updated_preferences_calls = []
         self.record_interaction_calls = []
+        self.replace_user_chats_calls = []
+        self.replace_saved_repos_calls = []
+        self.replace_user_folders_calls = []
         self.interaction_history = [
             {"repo_id": "r1", "action": "click"},
             {"repo_id": "r2", "action": "save"},
+        ]
+        self.chats = [
+            {
+                "id": "chat-1",
+                "title": "First session",
+                "timestamp": 1710000000000,
+                "messages": [
+                    {"content": "hello", "role": "user", "timestamp": 1710000000000}
+                ],
+            }
+        ]
+        self.saved_repos = [
+            {
+                "id": "owner/repo",
+                "name": "repo",
+                "owner": "owner",
+                "description": "desc",
+                "stars": 1,
+                "forks": 0,
+                "language": "Python",
+                "url": "https://github.com/owner/repo",
+            }
+        ]
+        self.folders = [
+            {
+                "id": "folder-1",
+                "name": "Pinned",
+                "items": [{"id": "owner/repo", "name": "repo"}],
+                "expanded": True,
+            }
         ]
         self.user = {
             "_id": "mongo-id",
@@ -51,6 +84,30 @@ class DummyUserService:
 
     async def get_interaction_history(self, user_id, limit):
         return self.interaction_history[:limit]
+
+    async def get_user_chats(self, user_id, limit):
+        return self.chats[:limit]
+
+    async def replace_user_chats(self, user_id, chats):
+        self.replace_user_chats_calls.append((user_id, chats))
+        self.chats = list(chats)
+        return self.chats
+
+    async def get_saved_repos(self, user_id, limit):
+        return self.saved_repos[:limit]
+
+    async def replace_saved_repos(self, user_id, repos):
+        self.replace_saved_repos_calls.append((user_id, repos))
+        self.saved_repos = list(repos)
+        return self.saved_repos
+
+    async def get_user_folders(self, user_id, limit):
+        return self.folders[:limit]
+
+    async def replace_user_folders(self, user_id, folders):
+        self.replace_user_folders_calls.append((user_id, folders))
+        self.folders = list(folders)
+        return self.folders
 
     async def get_user(self, user_id):
         if self.user is None:
@@ -109,9 +166,7 @@ class DummyAsyncClient:
         return False
 
     async def post(self, url, json=None, timeout=None):
-        self.__class__.requests.append(
-            {"url": url, "json": json, "timeout": timeout}
-        )
+        self.__class__.requests.append({"url": url, "json": json, "timeout": timeout})
         return self.__class__.next_post_response
 
 
@@ -130,13 +185,15 @@ def build_app():
     app.include_router(user_router.router, prefix="/user")
 
     app.dependency_overrides[chat_router.get_current_user] = override_current_user
-    app.dependency_overrides[chat_router.get_user_preferences] = override_user_preferences
-    app.dependency_overrides[
-        recommendations_router.get_current_user
-    ] = override_current_user
-    app.dependency_overrides[
-        recommendations_router.get_user_preferences
-    ] = override_user_preferences
+    app.dependency_overrides[chat_router.get_user_preferences] = (
+        override_user_preferences
+    )
+    app.dependency_overrides[recommendations_router.get_current_user] = (
+        override_current_user
+    )
+    app.dependency_overrides[recommendations_router.get_user_preferences] = (
+        override_user_preferences
+    )
     app.dependency_overrides[user_router.get_current_user] = override_current_user
 
     app.state.user_service = DummyUserService()
@@ -429,6 +486,132 @@ def test_get_interactions_returns_count():
     assert body["interactions"] == [{"repo_id": "r1", "action": "click"}]
 
 
+def test_get_user_chats_returns_count():
+    app = build_app()
+    client = TestClient(app)
+
+    response = client.get("/user/chats?limit=10")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 1
+    assert body["chats"][0]["id"] == "chat-1"
+
+
+def test_put_user_chats_replaces_collection():
+    app = build_app()
+    client = TestClient(app)
+
+    payload = {
+        "chats": [
+            {
+                "id": "chat-new",
+                "title": "New Chat",
+                "timestamp": 1710000001000,
+                "messages": [
+                    {"content": "yo", "role": "user", "timestamp": 1710000001000}
+                ],
+            }
+        ]
+    }
+
+    response = client.put("/user/chats", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 1
+    assert body["chats"][0]["id"] == "chat-new"
+
+    calls = client.app.state.user_service.replace_user_chats_calls
+    assert len(calls) == 1
+    assert calls[0][0] == "user-123"
+    assert calls[0][1][0]["title"] == "New Chat"
+
+
+def test_get_saved_repos_returns_count():
+    app = build_app()
+    client = TestClient(app)
+
+    response = client.get("/user/saved-repos")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 1
+    assert body["repos"][0]["id"] == "owner/repo"
+
+
+def test_put_saved_repos_replaces_collection():
+    app = build_app()
+    client = TestClient(app)
+
+    payload = {
+        "repos": [
+            {
+                "id": "foo/bar",
+                "name": "bar",
+                "owner": "foo",
+                "description": "example",
+                "stars": 10,
+                "forks": 2,
+                "language": "TypeScript",
+                "url": "https://github.com/foo/bar",
+            }
+        ]
+    }
+
+    response = client.put("/user/saved-repos", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 1
+    assert body["repos"][0]["id"] == "foo/bar"
+
+    calls = client.app.state.user_service.replace_saved_repos_calls
+    assert len(calls) == 1
+    assert calls[0][0] == "user-123"
+    assert calls[0][1][0]["name"] == "bar"
+
+
+def test_get_user_folders_returns_count():
+    app = build_app()
+    client = TestClient(app)
+
+    response = client.get("/user/folders")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 1
+    assert body["folders"][0]["id"] == "folder-1"
+
+
+def test_put_user_folders_replaces_collection():
+    app = build_app()
+    client = TestClient(app)
+
+    payload = {
+        "folders": [
+            {
+                "id": "folder-2",
+                "name": "Work",
+                "items": [{"id": "chat-1", "title": "Session"}],
+                "expanded": False,
+            }
+        ]
+    }
+
+    response = client.put("/user/folders", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 1
+    assert body["folders"][0]["id"] == "folder-2"
+
+    calls = client.app.state.user_service.replace_user_folders_calls
+    assert len(calls) == 1
+    assert calls[0][0] == "user-123"
+    assert calls[0][1][0]["name"] == "Work"
+
+
 def test_get_profile_returns_error_when_user_missing():
     app = build_app()
     app.state.user_service.user = None
@@ -449,6 +632,7 @@ def test_get_profile_returns_error_when_user_missing():
 
     assert response.status_code == 200
     assert response.json() == {"error": "User not found"}
+
 
 def test_recommendations_missing_query_returns_200_with_fallback_shape():
     app = build_app()
@@ -463,6 +647,7 @@ def test_recommendations_missing_query_returns_200_with_fallback_shape():
     assert "user_id" in body
     assert isinstance(body["recommendations"], list)
 
+
 def test_user_profile_endpoint_exists():
     app = build_app()
     client = TestClient(app)
@@ -470,6 +655,7 @@ def test_user_profile_endpoint_exists():
     response = client.get("/user/profile")
 
     assert response.status_code in (200, 422)
+
 
 def test_unknown_route_returns_404():
     app = build_app()
