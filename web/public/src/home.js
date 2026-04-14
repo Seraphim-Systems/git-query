@@ -44,11 +44,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const repoSearchInput = document.getElementById('repoSearchInput');
     const closeRepoBtn = document.getElementById('closeRepoView');
     const loadExamplesBtn = document.getElementById('loadExamplesBtn');
-    
+
     // Sidebar elements
     const sidebar = document.querySelector('.sidebar');
     const resizeHandle = document.querySelector('.sidebar-resize-handle');
-    
+
     // Modal elements
     const modalOverlay = document.getElementById('modalOverlay');
     const modalTitle = document.getElementById('modalTitle');
@@ -58,7 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const modalClose = document.getElementById('modalClose');
     const modalCancel = document.getElementById('modalCancel');
     const modalConfirm = document.getElementById('modalConfirm');
-    
+
     let currentChatId = null;
     let chats = [];
     let favorites = [];
@@ -68,7 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let lastQuery = '';       // last search/chat query — attached to all feedback events
     let lastVariant = 'hybrid'; // last recommendation variant returned by the API
     let typingIndicatorEl = null; // reference to the AI typing bubble
-    
+
     // Check authentication
     const token = localStorage.getItem('token') || localStorage.getItem('sessionId');
     const userId = localStorage.getItem('userId');
@@ -108,7 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 variant,
                 position_in_results: position,
             }),
-        }).catch(() => {});
+        }).catch(() => { });
     }
 
     // Show animated typing dots while waiting for AI response
@@ -143,14 +143,14 @@ document.addEventListener('DOMContentLoaded', () => {
     loadFolders();
     initializeTheme();
     initializeSidebarResize();
-    
+
     // Auto-resize textarea
     messageInput.addEventListener('input', () => {
         messageInput.style.height = 'auto';
         messageInput.style.height = messageInput.scrollHeight + 'px';
         sendBtn.disabled = messageInput.value.trim() === '';
     });
-    
+
     // Handle Enter key (Shift+Enter for new line)
     messageInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -160,27 +160,27 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     });
-    
+
     // Send button click
     sendBtn.addEventListener('click', () => {
         sendMessage();
     });
-    
+
     // New chat button
     newChatBtn.addEventListener('click', () => {
         createNewChat();
     });
-    
+
     // New folder button
     newFolderBtn.addEventListener('click', () => {
         createNewFolder();
     });
-    
+
     // Place repo button
     placeRepoBtn.addEventListener('click', () => {
         placeRepoDirectly();
     });
-    
+
     // Repo search - auto search as you type
     repoSearchInput.addEventListener('input', () => {
         clearTimeout(searchTimeout);
@@ -191,7 +191,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }, 300); // Debounce 300ms
         }
     });
-    
+
     repoSearchInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -199,12 +199,12 @@ document.addEventListener('DOMContentLoaded', () => {
             searchRepos();
         }
     });
-    
+
     // Theme toggle
     themeToggle.addEventListener('click', () => {
         toggleTheme();
     });
-    
+
     // Close repo view button
     closeRepoBtn.addEventListener('click', () => {
         backToWelcome();
@@ -221,22 +221,22 @@ document.addEventListener('DOMContentLoaded', () => {
             displayRepos(EXAMPLE_REPOS);
         });
     }
-    
+
     // Modal events
     modalClose.addEventListener('click', () => {
         closeModal();
     });
-    
+
     modalCancel.addEventListener('click', () => {
         closeModal();
     });
-    
+
     modalOverlay.addEventListener('click', (e) => {
         if (e.target === modalOverlay) {
             closeModal();
         }
     });
-    
+
     // Suggestion cards click
     document.querySelectorAll('.suggestion-card').forEach(card => {
         card.addEventListener('click', () => {
@@ -246,7 +246,7 @@ document.addEventListener('DOMContentLoaded', () => {
             messageInput.focus();
         });
     });
-    
+
     // User info click (logout)
     document.querySelector('.user-info').addEventListener('click', async () => {
         const confirmed = await showConfirm('Logout', 'Are you sure you want to log out?');
@@ -256,7 +256,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 method: 'POST',
                 headers: authHeaders(),
                 credentials: 'include',
-            }).catch(() => {});
+            }).catch(() => { });
             localStorage.removeItem('token');
             localStorage.removeItem('sessionId');
             localStorage.removeItem('userId');
@@ -265,7 +265,7 @@ document.addEventListener('DOMContentLoaded', () => {
             window.location.href = '/login.html';
         }
     });
-    
+
     // Initialize user info
     async function initializeUser() {
         try {
@@ -283,7 +283,7 @@ document.addEventListener('DOMContentLoaded', () => {
             userAvatarDisplay.textContent = 'U';
         }
     }
-    
+
     // Create new chat
     function createNewChat() {
         // Auto-save current chat if it has messages and hasn't been saved yet
@@ -297,7 +297,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     timestamp: Date.now(),
                     messages: []
                 };
-                
+
                 // Get all messages from the DOM
                 const messageElements = messagesContainer.querySelectorAll('.message');
                 messageElements.forEach(msgEl => {
@@ -305,19 +305,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     const content = msgEl.querySelector('.message-content').textContent;
                     chat.messages.push({ content, role, timestamp: Date.now() });
                 });
-                
+
                 // Use first AI response as title
                 const firstAIMessage = chat.messages.find(m => m.role === 'assistant');
                 if (firstAIMessage) {
                     chat.title = firstAIMessage.content.substring(0, 30) + (firstAIMessage.content.length > 30 ? '...' : '');
                 }
-                
+
                 chats.unshift(chat);
                 localStorage.setItem('chats', JSON.stringify(chats));
                 renderChatHistory();
             }
         }
-        
+
         // Create new chat
         currentChatId = Date.now().toString();
         messagesContainer.innerHTML = '';
@@ -330,7 +330,7 @@ document.addEventListener('DOMContentLoaded', () => {
         messageInput.style.height = 'auto';
         sendBtn.disabled = true;
     }
-    
+
     // Detect if a message is asking for repo recommendations
     function isRecommendationRequest(message) {
         const lower = message.toLowerCase();
@@ -353,7 +353,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Text part
         const textEl = document.createElement('div');
-        textEl.textContent = text;
+        if (typeof marked !== 'undefined') {
+            textEl.innerHTML = marked.parse(text);
+        } else {
+            textEl.textContent = text;
+        }
         contentWrapper.appendChild(textEl);
 
         // Top-3 repo cards
@@ -409,13 +413,13 @@ document.addEventListener('DOMContentLoaded', () => {
     async function sendMessage() {
         const message = messageInput.value.trim();
         if (message === '') return;
-        
+
         // Switch to chat view
         welcomeScreen.style.display = 'none';
         repoRecommendations.style.display = 'none';
         messagesContainer.style.display = 'block';
         currentView = 'chat';
-        
+
         // Add user message to UI
         addMessageToUI(message, 'user');
         showTypingIndicator();
@@ -424,14 +428,14 @@ document.addEventListener('DOMContentLoaded', () => {
         messageInput.value = '';
         messageInput.style.height = 'auto';
         sendBtn.disabled = true;
-        
+
         // Create new chat if needed
         if (!currentChatId) {
             currentChatId = Date.now().toString();
         }
 
         const isRecoRequest = isRecommendationRequest(message);
-        
+
         try {
             if (isRecoRequest) {
                 // Fire chat + recommendation APIs in parallel
@@ -497,37 +501,41 @@ document.addEventListener('DOMContentLoaded', () => {
             removeTypingIndicator();
             addMessageToUI('Sorry, I encountered an error. Please try again.', 'assistant');
         }
-        
+
         // Scroll to bottom
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
-    
+
     // Add message to UI
     function addMessageToUI(text, type) {
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${type}`;
-        
+
         const avatar = document.createElement('div');
         avatar.className = 'message-avatar';
         avatar.textContent = type === 'user' ? userAvatarDisplay.textContent : 'AI';
-        
+
         const content = document.createElement('div');
         content.className = 'message-content';
-        content.textContent = text;
-        
+        if (type === 'assistant' && typeof marked !== 'undefined') {
+            content.innerHTML = marked.parse(text);
+        } else {
+            content.textContent = text;
+        }
+
         messageDiv.appendChild(avatar);
         messageDiv.appendChild(content);
         messagesContainer.appendChild(messageDiv);
-        
+
         // Save message to chat history
         if (currentChatId) {
             saveChatMessage(currentChatId, text, type);
         }
-        
+
         // Scroll to bottom
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
-    
+
     // Save chat message
     function saveChatMessage(chatId, text, type) {
         const chat = chats.find(c => c.id === chatId);
@@ -539,7 +547,7 @@ document.addEventListener('DOMContentLoaded', () => {
             localStorage.setItem('chats', JSON.stringify(chats));
         }
     }
-    
+
     // Load chat history
     async function loadChatHistory() {
         try {
@@ -550,7 +558,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Error loading chat history:', error);
         }
     }
-    
+
     // Render chat history
     function renderChatHistory() {
         chatHistory.innerHTML = '';
@@ -572,28 +580,28 @@ document.addEventListener('DOMContentLoaded', () => {
                     </button>
                 </div>
             `;
-            
+
             const folderBtn = chatItem.querySelector('.item-action-btn:first-child');
             const deleteBtn = chatItem.querySelector('.item-action-btn:last-child');
-            
+
             folderBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 showFolderSelection(chat);
             });
-            
+
             deleteBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 deleteChat(chat.id);
             });
-            
+
             chatItem.addEventListener('click', () => {
                 loadChat(chat.id);
             });
-            
+
             chatHistory.appendChild(chatItem);
         });
     }
-    
+
     // Update chat history
     function updateChatHistory(chatId, firstMessage) {
         const existingChat = chats.find(c => c.id === chatId);
@@ -609,17 +617,17 @@ document.addEventListener('DOMContentLoaded', () => {
             renderChatHistory();
         }
     }
-    
+
     // Delete chat
     async function deleteChat(chatId) {
         const confirmed = await showConfirm('Delete Chat', 'Are you sure you want to delete this chat? This cannot be undone.');
         if (!confirmed) return;
-        
+
         // Remove from chats array
         chats = chats.filter(c => c.id !== chatId);
         localStorage.setItem('chats', JSON.stringify(chats));
         renderChatHistory();
-        
+
         // If the deleted chat is currently open, clear it
         if (currentChatId === chatId) {
             currentChatId = null;
@@ -630,7 +638,7 @@ document.addEventListener('DOMContentLoaded', () => {
             closeRepoBtn.style.display = 'none';
             currentView = 'welcome';
         }
-        
+
         // Also remove from any folders
         folders.forEach(folder => {
             folder.items = folder.items.filter(item => item.id !== chatId);
@@ -638,34 +646,38 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem('folders', JSON.stringify(folders));
         renderFolders();
     }
-    
+
     // Load specific chat
     async function loadChat(chatId) {
         try {
             const chat = chats.find(c => c.id === chatId);
             if (!chat) return;
-            
+
             currentChatId = chatId;
             messagesContainer.innerHTML = '';
             welcomeScreen.style.display = 'none';
             repoRecommendations.style.display = 'none';
             messagesContainer.style.display = 'block';
             currentView = 'chat';
-            
+
             // Load messages from saved chat
             if (chat.messages && chat.messages.length > 0) {
                 chat.messages.forEach(msg => {
                     const messageDiv = document.createElement('div');
                     messageDiv.className = `message ${msg.role}`;
-                    
+
                     const avatar = document.createElement('div');
                     avatar.className = 'message-avatar';
                     avatar.textContent = msg.role === 'user' ? userAvatarDisplay.textContent : 'AI';
-                    
+
                     const content = document.createElement('div');
                     content.className = 'message-content';
-                    content.textContent = msg.content;
-                    
+                    if (msg.role === 'assistant' && typeof marked !== 'undefined') {
+                        content.innerHTML = marked.parse(msg.content);
+                    } else {
+                        content.textContent = msg.content;
+                    }
+
                     messageDiv.appendChild(avatar);
                     messageDiv.appendChild(content);
                     messagesContainer.appendChild(messageDiv);
@@ -675,10 +687,10 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Error loading chat:', error);
         }
     }
-    
+
     // Theme Management
     const ICON_MOON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>`;
-    const ICON_SUN  = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
+    const ICON_SUN = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
 
     function initializeTheme() {
         const savedTheme = localStorage.getItem('theme') || 'dark';
@@ -695,19 +707,19 @@ document.addEventListener('DOMContentLoaded', () => {
         themeToggle.querySelector('.theme-icon').innerHTML = isLight ? ICON_SUN : ICON_MOON;
         localStorage.setItem('theme', isLight ? 'light' : 'dark');
     }
-    
+
     // Sidebar Resize
     function initializeSidebarResize() {
         let isResizing = false;
         let startX = 0;
         let startWidth = 0;
-        
+
         // Load saved width
         const savedWidth = localStorage.getItem('sidebarWidth');
         if (savedWidth) {
             sidebar.style.width = savedWidth + 'px';
         }
-        
+
         resizeHandle.addEventListener('mousedown', (e) => {
             isResizing = true;
             startX = e.clientX;
@@ -716,34 +728,34 @@ document.addEventListener('DOMContentLoaded', () => {
             document.body.style.cursor = 'ew-resize';
             document.body.style.userSelect = 'none';
         });
-        
+
         document.addEventListener('mousemove', (e) => {
             if (!isResizing) return;
-            
+
             const diff = e.clientX - startX;
             const newWidth = startWidth + diff;
-            
+
             // Constrain width between min and max
             const minWidth = 200;
             const maxWidth = 500;
             const constrainedWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
-            
+
             sidebar.style.width = constrainedWidth + 'px';
         });
-        
+
         document.addEventListener('mouseup', () => {
             if (isResizing) {
                 isResizing = false;
                 resizeHandle.classList.remove('resizing');
                 document.body.style.cursor = '';
                 document.body.style.userSelect = '';
-                
+
                 // Save width
                 localStorage.setItem('sidebarWidth', sidebar.offsetWidth);
             }
         });
     }
-    
+
     // Modal Utilities
     function showModal(title, placeholder = '') {
         return new Promise((resolve) => {
@@ -752,24 +764,24 @@ document.addEventListener('DOMContentLoaded', () => {
             modalList.style.display = 'none';
             modalMessage.style.display = 'none';
             modalConfirm.style.display = 'inline-block';
-            
+
             modalTitle.textContent = title;
             modalInput.placeholder = placeholder;
             modalInput.value = '';
             modalOverlay.style.display = 'flex';
             modalInput.focus();
-            
+
             const handleConfirm = () => {
                 const value = modalInput.value.trim();
                 cleanup();
                 resolve(value);
             };
-            
+
             const handleCancel = () => {
                 cleanup();
                 resolve(null);
             };
-            
+
             const handleKeydown = (e) => {
                 if (e.key === 'Enter') {
                     e.preventDefault();
@@ -778,18 +790,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     handleCancel();
                 }
             };
-            
+
             const cleanup = () => {
                 modalOverlay.style.display = 'none';
                 modalConfirm.removeEventListener('click', handleConfirm);
                 modalInput.removeEventListener('keydown', handleKeydown);
             };
-            
+
             modalConfirm.addEventListener('click', handleConfirm);
             modalInput.addEventListener('keydown', handleKeydown);
         });
     }
-    
+
     function showAlert(title, message) {
         return new Promise((resolve) => {
             // Reset all modal content
@@ -797,36 +809,36 @@ document.addEventListener('DOMContentLoaded', () => {
             modalList.style.display = 'none';
             modalMessage.style.display = 'block';
             modalConfirm.style.display = 'none';
-            
+
             modalTitle.textContent = title;
             modalMessage.textContent = message;
             modalOverlay.style.display = 'flex';
             modalCancel.textContent = 'OK';
             modalCancel.focus();
-            
+
             const handleOk = () => {
                 cleanup();
                 resolve();
             };
-            
+
             const handleKeydown = (e) => {
                 if (e.key === 'Enter' || e.key === 'Escape') {
                     e.preventDefault();
                     handleOk();
                 }
             };
-            
+
             const cleanup = () => {
                 modalOverlay.style.display = 'none';
                 modalCancel.textContent = 'Cancel';
                 document.removeEventListener('keydown', handleKeydown);
             };
-            
+
             modalCancel.addEventListener('click', handleOk, { once: true });
             document.addEventListener('keydown', handleKeydown);
         });
     }
-    
+
     function showConfirm(title, message) {
         return new Promise((resolve) => {
             // Reset all modal content
@@ -834,23 +846,23 @@ document.addEventListener('DOMContentLoaded', () => {
             modalList.style.display = 'none';
             modalMessage.style.display = 'block';
             modalConfirm.style.display = 'inline-block';
-            
+
             modalTitle.textContent = title;
             modalMessage.textContent = message;
             modalOverlay.style.display = 'flex';
             modalConfirm.textContent = 'Confirm';
             modalConfirm.focus();
-            
+
             const handleConfirm = () => {
                 cleanup();
                 resolve(true);
             };
-            
+
             const handleCancel = () => {
                 cleanup();
                 resolve(false);
             };
-            
+
             const handleKeydown = (e) => {
                 if (e.key === 'Enter') {
                     e.preventDefault();
@@ -859,19 +871,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     handleCancel();
                 }
             };
-            
+
             const cleanup = () => {
                 modalOverlay.style.display = 'none';
                 modalConfirm.textContent = 'Confirm';
                 modalConfirm.removeEventListener('click', handleConfirm);
                 document.removeEventListener('keydown', handleKeydown);
             };
-            
+
             modalConfirm.addEventListener('click', handleConfirm);
             document.addEventListener('keydown', handleKeydown);
         });
     }
-    
+
     function showListSelection(title, items) {
         return new Promise((resolve) => {
             // Reset all modal content
@@ -879,49 +891,49 @@ document.addEventListener('DOMContentLoaded', () => {
             modalList.style.display = 'block';
             modalMessage.style.display = 'none';
             modalConfirm.style.display = 'none';
-            
+
             modalTitle.textContent = title;
             modalList.innerHTML = '';
             modalOverlay.style.display = 'flex';
-            
+
             items.forEach(item => {
                 const listItem = document.createElement('div');
                 listItem.className = 'modal-list-item';
                 listItem.innerHTML = `<span>${item.icon || ''}</span><span>${item.name}</span>`;
-                
+
                 listItem.addEventListener('click', () => {
                     cleanup();
                     resolve(item);
                 });
-                
+
                 modalList.appendChild(listItem);
             });
-            
+
             const handleKeydown = (e) => {
                 if (e.key === 'Escape') {
                     handleCancel();
                 }
             };
-            
+
             const handleCancel = () => {
                 cleanup();
                 resolve(null);
             };
-            
+
             const cleanup = () => {
                 modalOverlay.style.display = 'none';
                 document.removeEventListener('keydown', handleKeydown);
             };
-            
+
             modalCancel.addEventListener('click', handleCancel, { once: true });
             document.addEventListener('keydown', handleKeydown);
         });
     }
-    
+
     function closeModal() {
         modalOverlay.style.display = 'none';
     }
-    
+
     function backToWelcome() {
         welcomeScreen.style.display = 'flex';
         repoRecommendations.style.display = 'none';
@@ -930,7 +942,7 @@ document.addEventListener('DOMContentLoaded', () => {
         closeRepoBtn.style.display = 'none';
         repoSearchInput.value = '';
     }
-    
+
     // Repo Search
     // Fetch repo_ids from raw_{recommend} result, look them up in MongoDB,
     // and return fully-normalised repo objects ready for createRepoCard().
@@ -968,17 +980,17 @@ document.addEventListener('DOMContentLoaded', () => {
     async function searchRepos() {
         const query = repoSearchInput.value.trim();
         if (!query) return;
-        
+
         // Show loading state
         welcomeScreen.style.display = 'none';
         messagesContainer.style.display = 'none';
         repoRecommendations.style.display = 'block';
         closeRepoBtn.style.display = 'flex';
         currentView = 'repos';
-        
+
         // Show loading indicator
         repoGrid.innerHTML = '<div style="padding: 16px; color: var(--text-secondary); text-align: center;">Searching repositories...</div>';
-        
+
         try {
             const response = await fetch(`${API_BASE}/recommend/`, {
                 method: 'POST',
@@ -991,7 +1003,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     enable_personalization: true,
                 })
             });
-            
+
             if (response.ok) {
                 const data = await response.json();
                 console.debug('[search] /api/recommend raw response:', data);
@@ -1000,7 +1012,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 lastQuery = query;
                 lastVariant = data.variant || 'hybrid';
-                
+
                 if (repos.length > 0) {
                     displayRepos(repos, query, lastVariant);
                 } else {
@@ -1015,7 +1027,7 @@ document.addEventListener('DOMContentLoaded', () => {
             repoGrid.innerHTML = '<div style="padding: 16px; color: var(--text-secondary); text-align: center;">An error occurred. Please try again.</div>';
         }
     }
-    
+
     function displayRepos(repos, query = '', variant = 'hybrid') {
         repoGrid.innerHTML = '';
         repos.forEach((repo, index) => {
@@ -1023,11 +1035,11 @@ document.addEventListener('DOMContentLoaded', () => {
             repoGrid.appendChild(repoCard);
         });
     }
-    
+
     function createRepoCard(repo, position = null, query = '', variant = 'hybrid') {
         const card = document.createElement('div');
         card.className = 'repo-card';
-        
+
         const isFavorite = favorites.some(f => f.id === repo.id);
 
         const starSvg = `<svg viewBox="0 0 24 24" fill="${isFavorite ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
@@ -1037,7 +1049,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const thumbsUpSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>`;
         const thumbsDownSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></svg>`;
         const dismissSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
-        
+
         card.innerHTML = `
             <div class="repo-card-header">
                 <div>
@@ -1070,13 +1082,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             </div>
         `;
-        
+
         // Add event listeners
         const starBtn = card.querySelector('.star-btn');
         const folderBtn = card.querySelector('.folder-btn');
         const thumbsUpBtn = card.querySelector('.thumbs-up-btn');
         const thumbsDownBtn = card.querySelector('.thumbs-down-btn');
-        
+
         starBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             const wasFavorite = favorites.some(f => f.id === repo.id);
@@ -1084,7 +1096,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Unstarring an already-saved repo counts as a dismiss signal
             if (wasFavorite) sendFeedback(repo.id, 'dismiss', position, query, variant);
         });
-        
+
         folderBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             showFolderSelection(repo);
@@ -1105,29 +1117,29 @@ document.addEventListener('DOMContentLoaded', () => {
             thumbsUpBtn.classList.remove('active');
             if (nowActive) sendFeedback(repo.id, 'thumbs_down', position, query, variant);
         });
-        
+
         card.addEventListener('click', () => {
             sendFeedback(repo.id, 'click', position, query, variant);
             window.open(repo.url, '_blank');
         });
-        
+
         return card;
     }
-    
+
     function formatNumber(num) {
         if (num >= 1000) {
             return (num / 1000).toFixed(1) + 'k';
         }
         return num.toString();
     }
-    
+
     // Favorites Management
     function loadFavoriteRepos() {
         const saved = localStorage.getItem('favoriteRepos');
         favorites = saved ? JSON.parse(saved) : [];
         renderFavoriteRepos();
     }
-    
+
     function renderFavoriteRepos() {
         favoriteRepos.innerHTML = '';
         if (favorites.length === 0) {
@@ -1148,28 +1160,28 @@ document.addEventListener('DOMContentLoaded', () => {
                     </button>
                 </div>
             `;
-            
+
             const folderBtn = repoItem.querySelector('.item-action-btn:first-child');
             const removeBtn = repoItem.querySelector('.item-action-btn:last-child');
-            
+
             folderBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 showFolderSelection(repo);
             });
-            
+
             removeBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 removeFavorite(repo.id);
             });
-            
+
             repoItem.addEventListener('click', () => {
                 window.open(repo.url, '_blank');
             });
-            
+
             favoriteRepos.appendChild(repoItem);
         });
     }
-    
+
     function toggleFavorite(repo) {
         const index = favorites.findIndex(f => f.id === repo.id);
         if (index >= 0) {
@@ -1181,33 +1193,33 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         localStorage.setItem('favoriteRepos', JSON.stringify(favorites));
         renderFavoriteRepos();
-        
+
         // Update the star button in the grid
         const starBtn = document.querySelector(`.star-btn[data-repo-id="${repo.id}"]`);
         if (starBtn) {
             starBtn.classList.toggle('active', index < 0);
         }
     }
-    
+
     function removeFavorite(repoId) {
         favorites = favorites.filter(f => f.id !== repoId);
         localStorage.setItem('favoriteRepos', JSON.stringify(favorites));
         renderFavoriteRepos();
-        
+
         // Update the star button in the grid
         const starBtn = document.querySelector(`.star-btn[data-repo-id="${repoId}"]`);
         if (starBtn) {
             starBtn.classList.remove('active');
         }
     }
-    
+
     // Folders Management
     function loadFolders() {
         const saved = localStorage.getItem('folders');
         folders = saved ? JSON.parse(saved) : [];
         renderFolders();
     }
-    
+
     function renderFolders() {
         foldersList.innerHTML = '';
         if (folders.length === 0) {
@@ -1217,10 +1229,10 @@ document.addEventListener('DOMContentLoaded', () => {
         folders.forEach(folder => {
             const folderItem = document.createElement('div');
             folderItem.className = 'folder-item';
-            
+
             // Check if folder is expanded
             const isExpanded = folder.expanded || false;
-            
+
             folderItem.innerHTML = `
                 <div class="folder-header">
                     <div class="folder-info">
@@ -1238,12 +1250,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <div class="folder-content ${isExpanded ? 'expanded' : ''}"></div>
             `;
-            
+
             const folderHeader = folderItem.querySelector('.folder-header');
             const folderContent = folderItem.querySelector('.folder-content');
             const folderIcon = folderItem.querySelector('.folder-icon');
             const deleteBtn = folderItem.querySelector('.item-action-btn');
-            
+
             // Toggle folder expansion
             folderHeader.addEventListener('click', (e) => {
                 if (e.target === deleteBtn || e.target.closest('.item-action-btn')) return;
@@ -1251,48 +1263,48 @@ document.addEventListener('DOMContentLoaded', () => {
                 folderIcon.classList.toggle('expanded');
                 folderContent.classList.toggle('expanded');
                 localStorage.setItem('folders', JSON.stringify(folders));
-                
+
                 // Render folder contents if expanded
                 if (folder.expanded) {
                     renderFolderContents(folderContent, folder);
                 }
             });
-            
+
             deleteBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 deleteFolder(folder.id);
             });
-            
+
             // Render contents if already expanded
             if (isExpanded) {
                 renderFolderContents(folderContent, folder);
             }
-            
+
             foldersList.appendChild(folderItem);
         });
     }
-    
+
     function renderFolderContents(container, folder) {
         container.innerHTML = '';
         if (folder.items.length === 0) {
             container.innerHTML = '<div class="folder-child-item" style="color: var(--text-secondary); cursor: default;">Empty folder</div>';
             return;
         }
-        
+
         folder.items.forEach(item => {
             const childItem = document.createElement('div');
             childItem.className = 'folder-child-item';
             childItem.style.display = 'flex';
             childItem.style.justifyContent = 'space-between';
             childItem.style.alignItems = 'center';
-            
+
             // Determine item type and icon
             const isChat = item.title || item.messages;
             const iconSvg = isChat
                 ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13" style="flex-shrink:0;opacity:0.7"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>`
                 : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13" style="flex-shrink:0;opacity:0.7"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg>`;
             const name = item.title || item.name || 'Untitled';
-            
+
             const itemContent = document.createElement('span');
             itemContent.style.display = 'flex';
             itemContent.style.alignItems = 'center';
@@ -1300,13 +1312,13 @@ document.addEventListener('DOMContentLoaded', () => {
             itemContent.innerHTML = `${iconSvg}<span>${name}</span>`;
             itemContent.style.flex = '1';
             itemContent.style.cursor = 'pointer';
-            
+
             const removeBtn = document.createElement('button');
             removeBtn.className = 'item-action-btn';
             removeBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
             removeBtn.title = 'Remove from collection';
             removeBtn.style.opacity = '0.7';
-            
+
             itemContent.addEventListener('click', (e) => {
                 e.stopPropagation();
                 if (isChat) {
@@ -1315,22 +1327,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     window.open(item.url, '_blank');
                 }
             });
-            
+
             removeBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 removeFromFolder(folder.id, item.id);
             });
-            
+
             childItem.appendChild(itemContent);
             childItem.appendChild(removeBtn);
             container.appendChild(childItem);
         });
     }
-    
+
     async function createNewFolder() {
         const name = await showModal('Create New Folder', 'Enter folder name');
         if (!name || !name.trim()) return;
-        
+
         const newFolder = {
             id: `folder-${Date.now()}`,
             name: name.trim(),
@@ -1340,7 +1352,7 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem('folders', JSON.stringify(folders));
         renderFolders();
     }
-    
+
     async function deleteFolder(folderId) {
         const confirmed = await showConfirm('Delete Folder', 'Are you sure you want to delete this folder?');
         if (!confirmed) return;
@@ -1348,39 +1360,39 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem('folders', JSON.stringify(folders));
         renderFolders();
     }
-    
+
     function removeFromFolder(folderId, itemId) {
         const folder = folders.find(f => f.id === folderId);
         if (!folder) return;
-        
+
         folder.items = folder.items.filter(i => i.id !== itemId);
         localStorage.setItem('folders', JSON.stringify(folders));
         renderFolders();
     }
-    
+
     async function showFolderSelection(item) {
         if (folders.length === 0) {
             await showAlert('No Folders', 'Please create a folder first!');
             return;
         }
-        
+
         const folderItems = folders.map(f => ({
             id: f.id,
             name: f.name,
             icon: ''
         }));
-        
+
         const selectedFolder = await showListSelection('Add to Folder', folderItems);
-        
+
         if (!selectedFolder) return;
-        
+
         addToFolder(selectedFolder.id, item);
     }
-    
+
     function addToFolder(folderId, item) {
         const folder = folders.find(f => f.id === folderId);
         if (!folder) return;
-        
+
         // Check if item already exists
         if (!folder.items.some(i => i.id === item.id)) {
             folder.items.push(item);
@@ -1391,19 +1403,19 @@ document.addEventListener('DOMContentLoaded', () => {
             showAlert('Duplicate', 'Item already in this folder');
         }
     }
-    
+
     // Place Repo Directly
     async function placeRepoDirectly() {
         const url = await showModal('Add Repository', 'Enter GitHub repository URL');
         if (!url || !url.trim()) return;
-        
+
         // Extract repo info from URL
         const match = url.match(/github\.com\/([^\/]+)\/([^\/]+)/);
         if (!match) {
             await showAlert('Invalid URL', 'Invalid GitHub URL. Please enter a valid GitHub repository URL.');
             return;
         }
-        
+
         const [, owner, repoName] = match;
         const repo = {
             id: `repo-${Date.now()}`,
@@ -1415,7 +1427,7 @@ document.addEventListener('DOMContentLoaded', () => {
             language: 'Unknown',
             url: url.trim()
         };
-        
+
         favorites.push(repo);
         localStorage.setItem('favoriteRepos', JSON.stringify(favorites));
         renderFavoriteRepos();
