@@ -9,12 +9,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const messageDiv = document.getElementById('message');
     const passwordToggle = document.getElementById('passwordToggle');
     
+    const EYE_OPEN = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+    const EYE_OFF  = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
     // Password toggle
     if (passwordToggle) {
         passwordToggle.addEventListener('click', () => {
             const type = passwordInput.type === 'password' ? 'text' : 'password';
             passwordInput.type = type;
-            passwordToggle.textContent = type === 'password' ? '👁️' : '🙈';
+            passwordToggle.innerHTML = type === 'password' ? EYE_OPEN : EYE_OFF;
         });
     }
     
@@ -44,6 +47,16 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     // Handle form submission
+    const toBoolean = (value) => {
+        if (typeof value === 'boolean') return value;
+        if (typeof value === 'string') {
+            const normalized = value.trim().toLowerCase();
+            return normalized === 'true' || normalized === '1' || normalized === 'yes';
+        }
+        if (typeof value === 'number') return value === 1;
+        return false;
+    };
+
     loginForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         
@@ -77,7 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 localStorage.setItem('sessionId', data.session_id || ('session_' + Date.now()));
                 localStorage.setItem('userId', data.user_id || emailInput.value.trim());
                 localStorage.setItem('username', data.username || emailInput.value.trim().split('@')[0]);
-                localStorage.setItem('isAdmin', data.is_admin ? 'true' : 'false');
+                localStorage.setItem('isAdmin', String(toBoolean(data.is_admin)));
                 // Redirect to home page
                 setTimeout(() => {
                     window.location.href = '/home.html';

@@ -1,4 +1,4 @@
-name: Drift Monitoring
+name: "Scheduled — Drift Monitoring"
 
 permissions:
   contents: read

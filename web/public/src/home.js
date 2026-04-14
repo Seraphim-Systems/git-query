@@ -85,6 +85,45 @@ document.addEventListener('DOMContentLoaded', () => {
         return headers;
     }
 
+    async function persistChatsToBackend() {
+        try {
+            await fetch(`${API_BASE}/user/chats`, {
+                method: 'PUT',
+                headers: authHeaders(),
+                credentials: 'include',
+                body: JSON.stringify({ chats }),
+            });
+        } catch (error) {
+            console.error('Error persisting chats:', error);
+        }
+    }
+
+    async function persistFavoritesToBackend() {
+        try {
+            await fetch(`${API_BASE}/user/saved-repos`, {
+                method: 'PUT',
+                headers: authHeaders(),
+                credentials: 'include',
+                body: JSON.stringify({ repos: favorites }),
+            });
+        } catch (error) {
+            console.error('Error persisting saved repos:', error);
+        }
+    }
+
+    async function persistFoldersToBackend() {
+        try {
+            await fetch(`${API_BASE}/user/folders`, {
+                method: 'PUT',
+                headers: authHeaders(),
+                credentials: 'include',
+                body: JSON.stringify({ folders }),
+            });
+        } catch (error) {
+            console.error('Error persisting folders:', error);
+        }
+    }
+
     // Per-(repo,action) cooldown to prevent feedback spam skewing the model.
     // Stores the last timestamp a given action was sent for a given repo.
     const _feedbackCooldowns = {};
@@ -137,12 +176,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Initialize
-    initializeUser();
-    loadChatHistory();
-    loadFavoriteRepos();
-    loadFolders();
-    initializeTheme();
-    initializeSidebarResize();
+    async function initializeApp() {
+        await initializeUser();
+        await Promise.all([loadChatHistory(), loadFavoriteRepos(), loadFolders()]);
+        initializeTheme();
+        initializeSidebarResize();
+    }
+
+    void initializeApp();
     
     // Auto-resize textarea
     messageInput.addEventListener('input', () => {
@@ -313,7 +354,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 
                 chats.unshift(chat);
-                localStorage.setItem('chats', JSON.stringify(chats));
+                void persistChatsToBackend();
                 renderChatHistory();
             }
         }
@@ -536,18 +577,43 @@ document.addEventListener('DOMContentLoaded', () => {
                 chat.messages = [];
             }
             chat.messages.push({ content: text, role: type, timestamp: Date.now() });
-            localStorage.setItem('chats', JSON.stringify(chats));
+            void persistChatsToBackend();
         }
     }
     
     // Load chat history
     async function loadChatHistory() {
         try {
-            const saved = localStorage.getItem('chats');
-            chats = saved ? JSON.parse(saved) : [];
+            const response = await fetch(`${API_BASE}/user/chats`, {
+                method: 'GET',
+                headers: authHeaders(),
+                credentials: 'include',
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                chats = Array.isArray(data.chats) ? data.chats : [];
+            } else {
+                chats = [];
+            }
+
+            // One-time migration path from legacy browser cache.
+            if (chats.length === 0) {
+                const saved = localStorage.getItem('chats');
+                if (saved) {
+                    chats = JSON.parse(saved) || [];
+                    if (Array.isArray(chats) && chats.length > 0) {
+                        await persistChatsToBackend();
+                    }
+                    localStorage.removeItem('chats');
+                }
+            }
+
             renderChatHistory();
         } catch (error) {
             console.error('Error loading chat history:', error);
+            chats = [];
+            renderChatHistory();
         }
     }
     
@@ -605,7 +671,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 messages: []
             };
             chats.unshift(newChat);
-            localStorage.setItem('chats', JSON.stringify(chats));
+            void persistChatsToBackend();
             renderChatHistory();
         }
     }
@@ -617,7 +683,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Remove from chats array
         chats = chats.filter(c => c.id !== chatId);
-        localStorage.setItem('chats', JSON.stringify(chats));
+        void persistChatsToBackend();
         renderChatHistory();
         
         // If the deleted chat is currently open, clear it
@@ -635,7 +701,7 @@ document.addEventListener('DOMContentLoaded', () => {
         folders.forEach(folder => {
             folder.items = folder.items.filter(item => item.id !== chatId);
         });
-        localStorage.setItem('folders', JSON.stringify(folders));
+        void persistFoldersToBackend();
         renderFolders();
     }
     
@@ -1122,10 +1188,39 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // Favorites Management
-    function loadFavoriteRepos() {
-        const saved = localStorage.getItem('favoriteRepos');
-        favorites = saved ? JSON.parse(saved) : [];
-        renderFavoriteRepos();
+    async function loadFavoriteRepos() {
+        try {
+            const response = await fetch(`${API_BASE}/user/saved-repos`, {
+                method: 'GET',
+                headers: authHeaders(),
+                credentials: 'include',
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                favorites = Array.isArray(data.repos) ? data.repos : [];
+            } else {
+                favorites = [];
+            }
+
+            // One-time migration path from legacy browser cache.
+            if (favorites.length === 0) {
+                const saved = localStorage.getItem('favoriteRepos');
+                if (saved) {
+                    favorites = JSON.parse(saved) || [];
+                    if (Array.isArray(favorites) && favorites.length > 0) {
+                        await persistFavoritesToBackend();
+                    }
+                    localStorage.removeItem('favoriteRepos');
+                }
+            }
+
+            renderFavoriteRepos();
+        } catch (error) {
+            console.error('Error loading saved repos:', error);
+            favorites = [];
+            renderFavoriteRepos();
+        }
     }
     
     function renderFavoriteRepos() {
@@ -1179,7 +1274,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Record save interaction with recommender
             sendFeedback(repo.id, 'save', null, lastQuery, lastVariant);
         }
-        localStorage.setItem('favoriteRepos', JSON.stringify(favorites));
+        void persistFavoritesToBackend();
         renderFavoriteRepos();
         
         // Update the star button in the grid
@@ -1191,7 +1286,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function removeFavorite(repoId) {
         favorites = favorites.filter(f => f.id !== repoId);
-        localStorage.setItem('favoriteRepos', JSON.stringify(favorites));
+        void persistFavoritesToBackend();
         renderFavoriteRepos();
         
         // Update the star button in the grid
@@ -1202,10 +1297,39 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // Folders Management
-    function loadFolders() {
-        const saved = localStorage.getItem('folders');
-        folders = saved ? JSON.parse(saved) : [];
-        renderFolders();
+    async function loadFolders() {
+        try {
+            const response = await fetch(`${API_BASE}/user/folders`, {
+                method: 'GET',
+                headers: authHeaders(),
+                credentials: 'include',
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                folders = Array.isArray(data.folders) ? data.folders : [];
+            } else {
+                folders = [];
+            }
+
+            // One-time migration path from legacy browser cache.
+            if (folders.length === 0) {
+                const saved = localStorage.getItem('folders');
+                if (saved) {
+                    folders = JSON.parse(saved) || [];
+                    if (Array.isArray(folders) && folders.length > 0) {
+                        await persistFoldersToBackend();
+                    }
+                    localStorage.removeItem('folders');
+                }
+            }
+
+            renderFolders();
+        } catch (error) {
+            console.error('Error loading folders:', error);
+            folders = [];
+            renderFolders();
+        }
     }
     
     function renderFolders() {
@@ -1250,7 +1374,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 folder.expanded = !folder.expanded;
                 folderIcon.classList.toggle('expanded');
                 folderContent.classList.toggle('expanded');
-                localStorage.setItem('folders', JSON.stringify(folders));
+                void persistFoldersToBackend();
                 
                 // Render folder contents if expanded
                 if (folder.expanded) {
@@ -1337,7 +1461,7 @@ document.addEventListener('DOMContentLoaded', () => {
             items: []
         };
         folders.push(newFolder);
-        localStorage.setItem('folders', JSON.stringify(folders));
+        await persistFoldersToBackend();
         renderFolders();
     }
     
@@ -1345,7 +1469,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const confirmed = await showConfirm('Delete Folder', 'Are you sure you want to delete this folder?');
         if (!confirmed) return;
         folders = folders.filter(f => f.id !== folderId);
-        localStorage.setItem('folders', JSON.stringify(folders));
+        await persistFoldersToBackend();
         renderFolders();
     }
     
@@ -1354,7 +1478,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!folder) return;
         
         folder.items = folder.items.filter(i => i.id !== itemId);
-        localStorage.setItem('folders', JSON.stringify(folders));
+        void persistFoldersToBackend();
         renderFolders();
     }
     
@@ -1384,7 +1508,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Check if item already exists
         if (!folder.items.some(i => i.id === item.id)) {
             folder.items.push(item);
-            localStorage.setItem('folders', JSON.stringify(folders));
+            void persistFoldersToBackend();
             renderFolders();
             showAlert('Success', `Added to folder: ${folder.name}`);
         } else {
@@ -1417,7 +1541,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         
         favorites.push(repo);
-        localStorage.setItem('favoriteRepos', JSON.stringify(favorites));
+        await persistFavoritesToBackend();
         renderFavoriteRepos();
         await showAlert('Success', 'Repository added to favorites!');
     }

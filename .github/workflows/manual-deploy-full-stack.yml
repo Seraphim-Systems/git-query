@@ -1,4 +1,4 @@
-name: Deploy Full Stack (Manual)
+name: "Manual — Deploy Full Stack"
 
 # Single Responsibility: Deploy full stack manually from selected branch
 # Triggered: Manual workflow dispatch

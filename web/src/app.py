@@ -25,6 +25,7 @@ CORS(
     allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
     expose_headers=["Set-Cookie"],
     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_private_network=False,
 )
 
 # Configuration from environment variables
@@ -37,6 +38,7 @@ WEBFRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "public")
 PAGES_DIR = os.path.join(WEBFRONTEND_DIR, "pages")
 STYLES_DIR = os.path.join(WEBFRONTEND_DIR, "styles")
 SRC_DIR = os.path.join(WEBFRONTEND_DIR, "src")
+ASSETS_DIR = os.path.join(WEBFRONTEND_DIR, "assets")
 PUBLIC_DIR = WEBFRONTEND_DIR
 ASSET_VERSION = os.environ.get("WEB_ASSET_VERSION", str(int(time.time())))
 
@@ -75,6 +77,13 @@ def _is_frontend_asset_path(path: str) -> bool:
             "/login.html",
             "/register.html",
             "/home.html",
+            "/favicon.ico",
+            "/favicon-16x16.png",
+            "/favicon-32x32.png",
+            "/apple-touch-icon.png",
+            "/android-chrome-192x192.png",
+            "/android-chrome-512x512.png",
+            "/site.webmanifest",
         }
         or path.startswith("/styles/")
         or path.startswith("/src/")
@@ -133,11 +142,37 @@ def serve_src(filename):
 
 @app.route("/favicon.ico")
 def favicon():
-    return (
-        send_from_directory(PUBLIC_DIR, "favicon.ico")
-        if os.path.exists(os.path.join(PUBLIC_DIR, "favicon.ico"))
-        else ("", 204)
-    )
+    return send_from_directory(ASSETS_DIR, "favicon.ico")
+
+
+@app.route("/favicon-16x16.png")
+def favicon_16():
+    return send_from_directory(ASSETS_DIR, "favicon-16x16.png")
+
+
+@app.route("/favicon-32x32.png")
+def favicon_32():
+    return send_from_directory(ASSETS_DIR, "favicon-32x32.png")
+
+
+@app.route("/apple-touch-icon.png")
+def apple_touch_icon():
+    return send_from_directory(ASSETS_DIR, "apple-touch-icon.png")
+
+
+@app.route("/android-chrome-192x192.png")
+def android_chrome_192():
+    return send_from_directory(ASSETS_DIR, "android-chrome-192x192.png")
+
+
+@app.route("/android-chrome-512x512.png")
+def android_chrome_512():
+    return send_from_directory(ASSETS_DIR, "android-chrome-512x512.png")
+
+
+@app.route("/site.webmanifest")
+def site_webmanifest():
+    return send_from_directory(ASSETS_DIR, "site.webmanifest")
 
 
 def _proxy_to_gateway(gateway_path, method=None, forward_cookies=True):
@@ -299,6 +334,30 @@ def api_user_preferences():
     if request.method == "OPTIONS":
         return "", 204
     return _proxy_to_gateway("/user/preferences")
+
+
+@app.route("/api/user/chats", methods=["GET", "PUT", "OPTIONS"])
+def api_user_chats():
+    """Proxy user chat sessions to the gateway."""
+    if request.method == "OPTIONS":
+        return "", 204
+    return _proxy_to_gateway("/user/chats")
+
+
+@app.route("/api/user/saved-repos", methods=["GET", "PUT", "OPTIONS"])
+def api_user_saved_repos():
+    """Proxy user saved repositories to the gateway."""
+    if request.method == "OPTIONS":
+        return "", 204
+    return _proxy_to_gateway("/user/saved-repos")
+
+
+@app.route("/api/user/folders", methods=["GET", "PUT", "OPTIONS"])
+def api_user_folders():
+    """Proxy user folders to the gateway."""
+    if request.method == "OPTIONS":
+        return "", 204
+    return _proxy_to_gateway("/user/folders")
 
 
 # ── Health endpoints ──────────────────────────────────────────────────────────

@@ -48,14 +48,21 @@ async def test_get_interaction_history_prefers_canonical_collection():
     cursor = SimpleNamespace(to_list=AsyncMock(return_value=docs))
     limit_chain = MagicMock(return_value=cursor)
     sort_chain = MagicMock(return_value=SimpleNamespace(limit=limit_chain))
-    user_interactions = SimpleNamespace(find=MagicMock(return_value=SimpleNamespace(sort=sort_chain)))
+    user_interactions = SimpleNamespace(
+        find=MagicMock(return_value=SimpleNamespace(sort=sort_chain))
+    )
     users = SimpleNamespace(find_one=AsyncMock(return_value=None))
     db = SimpleNamespace(
         user_interactions=user_interactions,
         users=users,
         user_preferences=SimpleNamespace(),
     )
-    redis = SimpleNamespace(get=AsyncMock(return_value=None), setex=AsyncMock(), lpush=AsyncMock(), ltrim=AsyncMock())
+    redis = SimpleNamespace(
+        get=AsyncMock(return_value=None),
+        setex=AsyncMock(),
+        lpush=AsyncMock(),
+        ltrim=AsyncMock(),
+    )
 
     service = UserService(db, redis)
 
@@ -70,7 +77,8 @@ async def test_get_interaction_history_prefers_canonical_collection():
 async def test_update_preferences_syncs_recommender_collection():
     users = SimpleNamespace(update_one=AsyncMock())
     user_preferences = SimpleNamespace(
-        find_one=AsyncMock(return_value={"total_interactions": 7}), update_one=AsyncMock()
+        find_one=AsyncMock(return_value={"total_interactions": 7}),
+        update_one=AsyncMock(),
     )
     db = SimpleNamespace(users=users, user_preferences=user_preferences)
     redis = SimpleNamespace(delete=AsyncMock())
@@ -90,3 +98,134 @@ async def test_update_preferences_syncs_recommender_collection():
     payload = user_preferences.update_one.await_args.args[1]
     assert payload["$set"]["language_preferences"]["Python"] == 1.0
     assert payload["$set"]["topic_preferences"]["ai"] == 1.0
+
+
+@pytest.mark.asyncio
+async def test_replace_user_chats_rewrites_collection():
+    chats_collection = SimpleNamespace(delete_many=AsyncMock(), insert_many=AsyncMock())
+    db = SimpleNamespace(get_collection=MagicMock(return_value=chats_collection))
+    redis = SimpleNamespace()
+    service = UserService(db, redis)
+
+    chats = [
+        {
+            "id": "chat-1",
+            "title": "Session",
+            "timestamp": 1710000000000,
+            "messages": [
+                {"content": "hello", "role": "user", "timestamp": 1710000000000}
+            ],
+        }
+    ]
+
+    result = await service.replace_user_chats("u1", chats)
+
+    assert db.get_collection.call_args.args[0] == "user_chats"
+    assert chats_collection.delete_many.await_args.args[0] == {"user_id": "u1"}
+    assert chats_collection.insert_many.await_count == 1
+    assert result[0]["id"] == "chat-1"
+    assert "sort_order" not in result[0]
+
+
+@pytest.mark.asyncio
+async def test_get_saved_repos_reads_ordered_docs():
+    docs = [
+        {
+            "repo_id": "owner/repo",
+            "name": "repo",
+            "owner": "owner",
+            "description": "desc",
+            "stars": 5,
+            "forks": 1,
+            "language": "Python",
+            "url": "https://github.com/owner/repo",
+        }
+    ]
+    cursor = SimpleNamespace(to_list=AsyncMock(return_value=docs))
+    limit_chain = MagicMock(return_value=cursor)
+    sort_chain = MagicMock(return_value=SimpleNamespace(limit=limit_chain))
+    saved_collection = SimpleNamespace(
+        find=MagicMock(return_value=SimpleNamespace(sort=sort_chain))
+    )
+
+    db = SimpleNamespace(get_collection=MagicMock(return_value=saved_collection))
+    redis = SimpleNamespace()
+    service = UserService(db, redis)
+
+    repos = await service.get_saved_repos("u1", limit=10)
+
+    assert db.get_collection.call_args.args[0] == "user_saved_repos"
+    assert repos == [
+        {
+            "id": "owner/repo",
+            "name": "repo",
+            "owner": "owner",
+            "description": "desc",
+            "stars": 5,
+            "forks": 1,
+            "language": "Python",
+            "url": "https://github.com/owner/repo",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_replace_user_folders_rewrites_collection():
+    folders_collection = SimpleNamespace(
+        delete_many=AsyncMock(), insert_many=AsyncMock()
+    )
+    db = SimpleNamespace(get_collection=MagicMock(return_value=folders_collection))
+    redis = SimpleNamespace()
+    service = UserService(db, redis)
+
+    folders = [
+        {
+            "id": "folder-1",
+            "name": "Pinned",
+            "items": [{"id": "owner/repo", "name": "repo"}],
+            "expanded": True,
+        }
+    ]
+
+    result = await service.replace_user_folders("u1", folders)
+
+    assert db.get_collection.call_args.args[0] == "user_folders"
+    assert folders_collection.delete_many.await_args.args[0] == {"user_id": "u1"}
+    assert folders_collection.insert_many.await_count == 1
+    assert result[0]["id"] == "folder-1"
+    assert result[0]["expanded"] is True
+    assert "sort_order" not in result[0]
+
+
+@pytest.mark.asyncio
+async def test_get_user_folders_reads_ordered_docs():
+    docs = [
+        {
+            "folder_id": "folder-1",
+            "name": "Pinned",
+            "items": [{"id": "owner/repo", "name": "repo"}],
+            "expanded": False,
+        }
+    ]
+    cursor = SimpleNamespace(to_list=AsyncMock(return_value=docs))
+    limit_chain = MagicMock(return_value=cursor)
+    sort_chain = MagicMock(return_value=SimpleNamespace(limit=limit_chain))
+    folders_collection = SimpleNamespace(
+        find=MagicMock(return_value=SimpleNamespace(sort=sort_chain))
+    )
+
+    db = SimpleNamespace(get_collection=MagicMock(return_value=folders_collection))
+    redis = SimpleNamespace()
+    service = UserService(db, redis)
+
+    folders = await service.get_user_folders("u1", limit=10)
+
+    assert db.get_collection.call_args.args[0] == "user_folders"
+    assert folders == [
+        {
+            "id": "folder-1",
+            "name": "Pinned",
+            "items": [{"id": "owner/repo", "name": "repo"}],
+            "expanded": False,
+        }
+    ]

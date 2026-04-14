@@ -105,12 +105,9 @@ class QdrantAdapter(VectorRepository):
         r = httpx.post(url, json={"points": pts}, timeout=30.0)
         # If server complains about missing legacy fields, try legacy payload
         if r.status_code == 400 and r.text and "missing field `ids`" in r.text:
-            ids = [p.get("id") for p in pts]
-            vectors = [p.get("vector") for p in pts]
-            payloads = [p.get("payload") for p in pts]
             r = httpx.post(
                 url,
-                json={"ids": ids, "vectors": vectors, "payloads": payloads},
+                json={"points": [{"id": p["id"], "vector": p["vector"], "payload": p.get("payload", {})} for p in pts]},
                 timeout=30.0,
             )
 
@@ -169,7 +166,7 @@ class QdrantAdapter(VectorRepository):
                 pass
 
         # HTTP fallback: try search endpoint(s)
-        body = {"vector": vector, "top": limit}
+        body = {"vector": vector, "top": limit, "with_payload": True}
         if filter:
             body["filter"] = filter
 

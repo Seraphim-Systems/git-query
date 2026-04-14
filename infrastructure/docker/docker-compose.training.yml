@@ -64,6 +64,8 @@ services:
       - internal-network
 
 volumes:
+  model-artifacts:
+    name: git-query-model-artifacts
   training-data:
     name: git-query-training-data
   training-logs:
