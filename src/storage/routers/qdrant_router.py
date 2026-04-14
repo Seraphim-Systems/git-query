@@ -92,17 +92,17 @@ async def list_qdrant_collections():
         collections = qdrant_client.get_collections()
         items = []
         for col in getattr(collections, "collections", []):
+            name = getattr(col, "name", None) or getattr(col, "collection_name", "") or str(col)
             try:
-                items.append(serialize_collection_description(col))
+                info = qdrant_client.get_collection(name)
+                vectors_count = getattr(info, "vectors_count", None) or 0
+                points_count = getattr(info, "points_count", None) or 0
+                items.append({"name": name, "vectors_count": vectors_count, "points_count": points_count})
             except Exception:
-                # Ensure a best-effort fallback so a single unexpected item
-                # doesn't cause the entire endpoint to fail.
-                items.append({"name": str(col), "vectors_count": 0, "points_count": 0})
+                items.append({"name": name, "vectors_count": 0, "points_count": 0})
 
         return {"collections": items}
     except Exception as e:
-        # Provide a clearer error message while avoiding leaking internal
-        # client types/structures in the response.
         raise HTTPException(status_code=500, detail=f"Failed to list collections: {str(e)}")
 
 
