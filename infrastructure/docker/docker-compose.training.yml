@@ -41,6 +41,14 @@ services:
       - LGBM_NUM_BOOST_ROUNDS=${LGBM_NUM_BOOST_ROUNDS:-300}
 
     # Training can run on CPU-only hosts used by CI/deploy runners.
+    # GPU support: requires NVIDIA Container Toolkit on the host.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     restart: "no"  # Run once, don't restart
     shm_size: '2gb'
     volumes:
