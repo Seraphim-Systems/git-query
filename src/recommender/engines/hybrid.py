@@ -3,11 +3,14 @@
 import asyncio
 import hashlib
 import json
+import logging
 from typing import List, Dict, Any, Set
 from ..models import RecommendationRequest, RepositoryResult
 from ..database import db_manager
 from ..config import settings
 from .base import RecommendationEngine
+
+logger = logging.getLogger(__name__)
 
 
 class HybridRetrievalEngine(RecommendationEngine):
@@ -63,7 +66,7 @@ class HybridRetrievalEngine(RecommendationEngine):
                     top_k=settings.rerank_top_k,
                 )
                 filtered_results = reranked + filtered_results[settings.hybrid_search_top_k :]
-            except RuntimeError as e:
+            except Exception as e:
                 logger.warning("Reranker unavailable, skipping rerank step: %s", e)
 
         # Step 5: Return top K
