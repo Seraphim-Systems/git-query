@@ -45,6 +45,7 @@ SESSION_PATHS = [
     "/chat",  # AI chat - requires session
     "/recommend",  # Repository search - requires session
     "/user",  # User profile/preferences - requires session
+    "/api/user",  # Alias used by the browser frontend
     "/api/auth",  # Alias used by the browser frontend (e.g. /api/auth/logout)
     "/api/recommend",  # Alias used by the browser frontend
     "/api/chat",  # Alias used by the browser frontend

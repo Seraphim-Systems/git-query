@@ -7,6 +7,7 @@ import src.gateway.routers.mlflow_proxy as mlflow_proxy
 class DummyAsyncClient:
     requests = []
     fail_hosts = set()
+    status_by_prefix = {}
 
     def __init__(self, *args, **kwargs):
         self.args = args
@@ -33,8 +34,15 @@ class DummyAsyncClient:
                     "connect failed",
                     request=mlflow_proxy.httpx.Request(method=method, url=url),
                 )
+
+        status_code = 200
+        for prefix, override_status in self.__class__.status_by_prefix.items():
+            if str(url).startswith(prefix):
+                status_code = override_status
+                break
+
         return mlflow_proxy.httpx.Response(
-            status_code=200,
+            status_code=status_code,
             content=b"ok",
             headers={"content-type": "text/plain"},
         )
@@ -61,6 +69,7 @@ def test_proxy_preserves_mlflow_prefix(monkeypatch):
 
     DummyAsyncClient.requests = []
     DummyAsyncClient.fail_hosts = set()
+    DummyAsyncClient.status_by_prefix = {}
 
     app = _build_test_app()
     client = TestClient(app)
@@ -82,6 +91,7 @@ def test_proxy_falls_back_to_second_upstream_on_connect_error(monkeypatch):
 
     DummyAsyncClient.requests = []
     DummyAsyncClient.fail_hosts = {"http://git-query-mlflow:5000"}
+    DummyAsyncClient.status_by_prefix = {}
 
     app = _build_test_app()
     client = TestClient(app)
@@ -97,3 +107,26 @@ def test_proxy_falls_back_to_second_upstream_on_connect_error(monkeypatch):
         DummyAsyncClient.requests[1]["url"]
         == "http://mlflow:5000/mlflow/api/2.0/mlflow/experiments/list"
     )
+
+
+def test_proxy_retries_without_prefix_after_prefixed_404(monkeypatch):
+    monkeypatch.setattr(mlflow_proxy, "require_admin", _allow_admin)
+    monkeypatch.setattr(mlflow_proxy.httpx, "AsyncClient", DummyAsyncClient)
+    monkeypatch.setattr(
+        mlflow_proxy,
+        "MLFLOW_INTERNAL_URLS",
+        ("http://git-query-mlflow:5000",),
+    )
+
+    DummyAsyncClient.requests = []
+    DummyAsyncClient.fail_hosts = set()
+    DummyAsyncClient.status_by_prefix = {"http://git-query-mlflow:5000/mlflow": 404}
+
+    app = _build_test_app()
+    client = TestClient(app)
+
+    response = client.get("/mlflow/")
+
+    assert response.status_code == 200
+    assert DummyAsyncClient.requests[0]["url"] == "http://git-query-mlflow:5000/mlflow"
+    assert DummyAsyncClient.requests[1]["url"] == "http://git-query-mlflow:5000/"

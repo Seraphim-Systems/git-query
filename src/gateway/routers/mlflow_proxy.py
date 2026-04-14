@@ -50,13 +50,24 @@ _METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 router = APIRouter(tags=["MLFlow"])
 
 
-def _build_target(base_url: str, path: str, query: str) -> str:
+def _build_targets(base_url: str, path: str, query: str) -> tuple[str, ...]:
     normalized_path = path.lstrip("/")
-    upstream_path = "/mlflow" if not normalized_path else f"/mlflow/{normalized_path}"
-    target = f"{base_url}{upstream_path}"
-    if query:
-        target = f"{target}?{query}"
-    return target
+    prefixed_path = "/mlflow" if not normalized_path else f"/mlflow/{normalized_path}"
+    plain_path = "/" if not normalized_path else f"/{normalized_path}"
+
+    # Prefer prefixed routing first (for servers configured behind /mlflow),
+    # then fall back to plain routing for older MLflow versions.
+    candidate_paths = [prefixed_path]
+    if plain_path != prefixed_path:
+        candidate_paths.append(plain_path)
+
+    targets: list[str] = []
+    for upstream_path in candidate_paths:
+        target = f"{base_url}{upstream_path}"
+        if query:
+            target = f"{target}?{query}"
+        targets.append(target)
+    return tuple(targets)
 
 
 async def _proxy(request: Request, path: str) -> Response:
@@ -77,26 +88,39 @@ async def _proxy(request: Request, path: str) -> Response:
     body = await request.body()
 
     response: httpx.Response | None = None
-    connect_failures: list[str] = []
     timeout_failures: list[str] = []
 
     async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
         for base_url in MLFLOW_INTERNAL_URLS:
-            target = _build_target(base_url, path, request.url.query)
-            try:
-                response = await client.request(
-                    method=request.method,
-                    url=target,
-                    headers=forward_headers,
-                    content=body,
-                )
+            targets = _build_targets(base_url, path, request.url.query)
+            for index, target in enumerate(targets):
+                try:
+                    candidate = await client.request(
+                        method=request.method,
+                        url=target,
+                        headers=forward_headers,
+                        content=body,
+                    )
+                except httpx.ConnectError as exc:
+                    logger.warning("Cannot connect to MLFlow at %s (%s)", base_url, exc)
+                    break
+                except httpx.TimeoutException as exc:
+                    logger.warning("Timeout proxying to MLFlow at %s (%s)", target, exc)
+                    timeout_failures.append(target)
+                    break
+
+                if candidate.status_code == 404 and index == 0 and len(targets) > 1:
+                    logger.info(
+                        "MLFlow route %s returned 404, retrying without /mlflow prefix",
+                        target,
+                    )
+                    continue
+
+                response = candidate
                 break
-            except httpx.ConnectError as exc:
-                logger.warning("Cannot connect to MLFlow at %s (%s)", base_url, exc)
-                connect_failures.append(base_url)
-            except httpx.TimeoutException as exc:
-                logger.warning("Timeout proxying to MLFlow at %s (%s)", target, exc)
-                timeout_failures.append(target)
+
+            if response is not None:
+                break
 
     if response is None:
         if timeout_failures:
