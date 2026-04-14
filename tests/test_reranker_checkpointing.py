@@ -3,6 +3,14 @@ from unittest.mock import MagicMock, patch, ANY, AsyncMock
 import os
 import shutil
 
+pytest.importorskip(
+    "torch", reason="Reranker checkpointing test requires optional torch dependency"
+)
+pytest.importorskip(
+    "sentence_transformers",
+    reason="Reranker checkpointing test requires optional sentence-transformers dependency",
+)
+
 # We need to mock settings before importing RerankerTrainer if it uses settings at module level,
 # but it uses it inside methods or init, so patching where it is imported is enough.
 # However, RerankerTrainer imports settings from ..config.
@@ -15,18 +23,24 @@ from src.recommender.training.trainers.reranker_cross_encoder_trainer import (
 @pytest.mark.asyncio
 async def test_reranker_checkpointing():
     # Mock settings
-    with patch("src.recommender.training.trainers.reranker_cross_encoder_trainer.settings") as mock_settings:
+    with patch(
+        "src.recommender.training.trainers.reranker_cross_encoder_trainer.settings"
+    ) as mock_settings:
         mock_settings.model_path = "/tmp/models"
         mock_settings.checkpoint_path = "/tmp/models/checkpoints"
         mock_settings.cross_encoder_model_name = "test-model"
 
         # Mock CrossEncoder
-        with patch("src.recommender.training.trainers.reranker_cross_encoder_trainer.CrossEncoder") as MockCrossEncoder:
+        with patch(
+            "src.recommender.training.trainers.reranker_cross_encoder_trainer.CrossEncoder"
+        ) as MockCrossEncoder:
             mock_model = MagicMock()
             MockCrossEncoder.return_value = mock_model
 
             # Mock ModelRegistryService
-            with patch("src.recommender.services.registry_service.ModelRegistryService") as MockRegistry:
+            with patch(
+                "src.recommender.services.registry_service.ModelRegistryService"
+            ) as MockRegistry:
                 mock_registry = AsyncMock()
                 MockRegistry.return_value = mock_registry
 
@@ -53,17 +67,34 @@ async def test_reranker_checkpointing():
                                     "src.recommender.training.trainers.reranker_cross_encoder_trainer.glob.glob"
                                 ) as mock_glob:
                                     # Instantiate trainer
-                                    trainer = RerankerTrainer(base_model="test-base", checkpoint_save_total_limit=2)
+                                    trainer = RerankerTrainer(
+                                        base_model="test-base",
+                                        checkpoint_save_total_limit=2,
+                                    )
 
                                     # Create dummy data
                                     training_data = {
                                         "queries": ["q1"],
-                                        "positive_repos": [{"name": "p1", "description": "d1", "language": "l1"}],
-                                        "negative_repos": [{"name": "n1", "description": "d2", "language": "l2"}],
+                                        "positive_repos": [
+                                            {
+                                                "name": "p1",
+                                                "description": "d1",
+                                                "language": "l1",
+                                            }
+                                        ],
+                                        "negative_repos": [
+                                            {
+                                                "name": "n1",
+                                                "description": "d2",
+                                                "language": "l2",
+                                            }
+                                        ],
                                     }
 
                                     # Run train
-                                    result = await trainer.train(training_data, variant="test_v1", epochs=2)
+                                    result = await trainer.train(
+                                        training_data, variant="test_v1", epochs=2
+                                    )
 
                                     # Verify fit called
                                     assert mock_model.fit.called
@@ -107,7 +138,9 @@ async def test_reranker_checkpointing():
                                     # Limit is 2. We have 3.
                                     # epoch_1 is the oldest (1 < 2 < 3)
 
-                                    mock_rmtree.assert_called_with("/tmp/models/checkpoints/test_v1/epoch_1")
+                                    mock_rmtree.assert_called_with(
+                                        "/tmp/models/checkpoints/test_v1/epoch_1"
+                                    )
 
                                     # Verify registry was called to register the model
                                     mock_registry.register_model.assert_awaited_once()

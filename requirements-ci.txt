@@ -1,0 +1,56 @@
+# CI-only requirements: everything needed for lint and unit tests.
+# Excludes only non-essential extras for CI runtime/cost, e.g. kagglehub, ijson,
+#           pyarrow, fastparquet, matplotlib, ipykernel
+
+# Web Framework & API
+fastapi>=0.115.0
+uvicorn>=0.31.0
+python-multipart>=0.0.9
+starlette>=0.45.0
+
+# AI & LLM
+pydantic-ai>=1.62.0
+openai>=2.11.0
+
+# Data Models & Validation
+pydantic>=2.6.0
+pydantic-settings>=2.5.0
+
+# HTTP Client
+httpx>=0.27.2
+
+# Database Drivers
+pymongo>=4.6.0
+motor>=3.3.0
+redis>=5.0.0
+hiredis>=2.3.0
+qdrant-client>=1.7.0
+
+# Authentication
+PyJWT>=2.8.0
+argon2-cffi==25.1.0
+
+# Configuration
+python-dotenv>=1.0.0
+
+# CLI
+rich>=13.7.0
+
+# Data science (lightweight)
+pandas>=2.0.0
+numpy>=1.26.3
+scikit-learn>=1.4.0
+lightgbm>=4.0.0
+torch>=2.2.0
+sentence-transformers>=2.3.1
+
+# MLOps
+mlflow>=2.10.0
+evidently>=0.6.0
+
+# Testing
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+pytest-mock>=3.12.0
+ruff>=0.1.0

@@ -77,7 +77,7 @@ class SessionMiddleware(BaseHTTPMiddleware):
             request.state.user_id = session.user_id
             request.state.session_id = token
             request.state.ip_address = session.ip_address
-            request.state.is_admin = False
+            request.state.is_admin = session.is_admin
 
         # Fetch and attach user preferences
         try:

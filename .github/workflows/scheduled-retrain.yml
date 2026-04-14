@@ -9,31 +9,14 @@ on:
   schedule:
     - cron: '0 2 1,15 * *'
 
-  # Allow manual trigger with parameters
+  # Allow manual trigger
   workflow_dispatch:
     inputs:
       force_retrain:
-        description: 'Force retraining even if no new data'
+        description: 'Force issue creation even if no new data'
         required: false
         default: false
         type: boolean
-      epochs:
-        description: 'Number of training epochs'
-        required: false
-        default: '10'
-      batch_size:
-        description: 'Training batch size'
-        required: false
-        default: '64'
-      skip_evaluation:
-        description: 'Skip shadow evaluation'
-        required: false
-        default: false
-        type: boolean
-      max_repos:
-        description: 'Max repos to fetch (leave empty for all)'
-        required: false
-        default: ''
 
 env:
   RETRAIN_REASON: ${{ github.event_name == 'schedule' && 'scheduled' || 'manual' }}
@@ -114,228 +97,58 @@ jobs:
             echo "⏭ Skipping retraining - no new data"
           fi
 
-  retrain:
-    name: Run Retraining Pipeline
+  notify:
+    name: Notify Retraining Needed
     runs-on: ubuntu-latest
     needs: check-prerequisites
-    if: needs.check-prerequisites.outputs.should_retrain == 'true'
-    outputs:
-      training_success: ${{ steps.train.outputs.success }}
-      model_version: ${{ steps.train.outputs.model_version }}
-    steps:
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts
-
-      - name: Configure Environment
-        run: |
-          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << ENDSSH
-          set -e
-
-          cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query
-
-          cat > .env << EOF
-          DB_MONGODB_USER=${{ secrets.DB_MONGODB_USER }}
-          DB_MONGODB_PASSWORD=${{ secrets.DB_MONGODB_PASSWORD }}
-          DB_MONGODB_DATABASE=${{ secrets.DB_MONGODB_DATABASE }}
-          DB_QDRANT_API_KEY=${{ secrets.DB_QDRANT_API_KEY }}
-          SVC_LOG_LEVEL=${{ secrets.SVC_LOG_LEVEL }}
-          TRAINING_BATCH_SIZE=${{ github.event.inputs.batch_size || '64' }}
-          EPOCHS=${{ github.event.inputs.epochs || '10' }}
-          SKIP_IF_NO_NEW_DATA=${{ github.event.inputs.force_retrain == 'true' && 'false' || 'true' }}
-          ENABLE_MLFLOW=true
-          MLFLOW_TRACKING_URI=file:///app/mlruns
-          MLFLOW_EXPERIMENT_NAME=git-query-scheduled-retrain
-          ENABLE_LGBM_TRAINING=true
-          LGBM_NUM_BOOST_ROUNDS=300
-          MAX_REPOS=${{ github.event.inputs.max_repos }}
-          EOF
-
-          cp .env infrastructure/docker/.env
-          echo "✅ Environment configured for retraining"
-          ENDSSH
-
-      - name: Run Training
-        id: train
-        run: |
-          RESULT=$(ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
-          set -e
-
-          cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query
-          git pull origin ${{ github.ref_name }}
-
-          cd infrastructure/docker
-
-          echo "🚀 Starting scheduled retraining..."
-          echo "Trigger: ${{ env.RETRAIN_REASON }}"
-          echo "New data count: ${{ needs.check-prerequisites.outputs.new_data_count }}"
-
-          # Remove old training container
-          docker-compose -f docker-compose.base.yml -f docker-compose.training.yml down 2>/dev/null || true
-
-          # Run training
-          docker-compose -f docker-compose.base.yml -f docker-compose.training.yml up --build
-
-          # Check exit code
-          EXIT_CODE=$(docker inspect git-query-training --format='{{.State.ExitCode}}' 2>/dev/null || echo "1")
-
-          if [ "$EXIT_CODE" -eq 0 ]; then
-            echo "success=true"
-            # Get model version from metadata
-            MODEL_VERSION=$(docker exec git-query-training cat /app/models/metadata/training_metadata_latest.json 2>/dev/null | grep -o '"timestamp":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
-            echo "model_version=$MODEL_VERSION"
-          else
-            echo "success=false"
-            echo "model_version=failed"
-          fi
-          ENDSSH
-          )
-
-          SUCCESS=$(echo "$RESULT" | grep "success=" | cut -d= -f2)
-          VERSION=$(echo "$RESULT" | grep "model_version=" | cut -d= -f2)
-
-          echo "success=${SUCCESS:-false}" >> $GITHUB_OUTPUT
-          echo "model_version=${VERSION:-unknown}" >> $GITHUB_OUTPUT
-
-  evaluate:
-    name: Offline Evaluation
-    runs-on: ubuntu-latest
-    needs: retrain
-    if: needs.retrain.outputs.training_success == 'true' && github.event.inputs.skip_evaluation != 'true'
-    outputs:
-      evaluation_passed: ${{ steps.evaluate.outputs.passed }}
-    steps:
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts
-
-      - name: Run Offline Evaluator
-        id: evaluate
-        run: |
-          RESULT=$(ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
-          set -e
-
-          cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query
-
-          if docker ps | grep -q "git-query-training"; then
-            docker exec \
-              -e API_BASE_URL="${API_BASE_URL}" \
-              -e APIKEY_MONGODB="${APIKEY_MONGODB}" \
-              -e MLFLOW_TRACKING_URI="${MLFLOW_TRACKING_URI:-file:///app/mlruns}" \
-              -e MLFLOW_EXPERIMENT_NAME="${MLFLOW_EXPERIMENT_NAME:-git-query-retrain}" \
-              -e REGRESSION_THRESHOLD="0.10" \
-              git-query-training \
-              python -m mlops.offline_evaluator
-            EXIT=$?
-          else
-            echo "Training container not running — skipping offline evaluation"
-            EXIT=0
-          fi
-
-          if [ "$EXIT" = "0" ]; then
-            echo "passed=true"
-          else
-            echo "passed=false"
-          fi
-          ENDSSH
-          )
-
-          PASSED=$(echo "$RESULT" | grep "passed=" | cut -d= -f2)
-          echo "passed=${PASSED:-true}" >> $GITHUB_OUTPUT
-
-  promote:
-    name: Promote Model
-    runs-on: ubuntu-latest
-    needs: [retrain, evaluate]
-    # Run when training succeeded AND evaluation either passed or was skipped.
-    # evaluation_passed='false' means the offline evaluator detected a regression — block promotion.
-    # evaluation_passed='' means the evaluate job was skipped (skip_evaluation=true) — allow promotion.
-    if: always() && needs.retrain.outputs.training_success == 'true' && needs.evaluate.outputs.evaluation_passed != 'false'
-    steps:
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts
-
-      - name: Promote New Model
-        run: |
-          ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
-          set -e
-
-          cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query
-
-          echo "Champion/challenger promotion was handled by ModelPromoter inside the training pipeline."
-          echo "ModelPromoter compares mean_ndcg_at_10 against the current MLflow Production model."
-          echo "If the candidate improved, it was already promoted via /admin/models/promote and hot-reloaded."
-          echo "If not, the previous production model remains active."
-
-          # Fallback restart only if recommender is unhealthy after training
-          if docker ps | grep -q "git-query-recommender"; then
-            STATUS=$(docker inspect git-query-recommender --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
-            if [ "$STATUS" = "unhealthy" ]; then
-              echo "Recommender is unhealthy — restarting as fallback..."
-              docker restart git-query-recommender
-            else
-              echo "Recommender is healthy — no restart needed."
-            fi
-          fi
-
-          echo "✅ Promotion step complete"
-          echo "Version: ${{ needs.retrain.outputs.model_version }}"
-          ENDSSH
-
-  notify:
-    name: Send Notification
-    runs-on: ubuntu-latest
-    needs: [check-prerequisites, retrain, evaluate, promote]
     if: always()
     steps:
       - name: Create Summary
         run: |
-          echo "## 🤖 Scheduled Retraining Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## Scheduled Retraining Check" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Trigger:** ${{ env.RETRAIN_REASON }}" >> $GITHUB_STEP_SUMMARY
           echo "**New Data:** ${{ needs.check-prerequisites.outputs.new_data_count }} repositories" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-
           if [ "${{ needs.check-prerequisites.outputs.should_retrain }}" == "false" ]; then
-            echo "⏭ **Status:** Skipped (no new data)" >> $GITHUB_STEP_SUMMARY
-          elif [ "${{ needs.retrain.outputs.training_success }}" == "true" ]; then
-            echo "✅ **Status:** Success" >> $GITHUB_STEP_SUMMARY
-            echo "**Model Version:** ${{ needs.retrain.outputs.model_version }}" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### MLflow Experiment" >> $GITHUB_STEP_SUMMARY
-            echo "**Experiment:** git-query-scheduled-retrain" >> $GITHUB_STEP_SUMMARY
-            echo "**Tracking URI:** file:///app/mlruns (inside training container)" >> $GITHUB_STEP_SUMMARY
+            echo "**Status:** Skipped (no new data)" >> $GITHUB_STEP_SUMMARY
           else
-            echo "❌ **Status:** Failed" >> $GITHUB_STEP_SUMMARY
+            echo "**Status:** Retraining needed — issue created" >> $GITHUB_STEP_SUMMARY
           fi
 
-      - name: Create Issue on Failure
-        if: failure()
+      - name: Create Issue When Retraining Needed
+        if: needs.check-prerequisites.outputs.should_retrain == 'true'
         uses: actions/github-script@v7
         with:
           script: |
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: '❌ Scheduled Retraining Failed',
-              body: `
-            ## Retraining Pipeline Failed
+              title: 'Retraining needed: ${{ needs.check-prerequisites.outputs.new_data_count }} new repositories detected',
+              body: `## Retraining Required
 
-            **Run ID:** ${context.runId}
             **Trigger:** ${{ env.RETRAIN_REASON }}
+            **New repositories:** ${{ needs.check-prerequisites.outputs.new_data_count }}
             **Time:** ${new Date().toISOString()}
 
-            Please check the [workflow logs](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}) for details.
-              `,
-              labels: ['retraining-failure', 'mlops']
+            ### Steps to retrain
+
+            1. Train locally with the remote MLflow server:
+            \`\`\`bash
+            MLFLOW_TRACKING_URI=http://<server-ip>:5000 \\
+            API_BASE_URL=https://gitquery.davidhoerz.com \\
+            RECOMMENDER_URL=http://<server-ip>:8095 \\
+            python -m recommender.training.retrain_pipeline
+            \`\`\`
+
+            2. Copy the trained model to the server:
+            \`\`\`bash
+            scp <model.pkl> user@<server>:~/git-query/volumes/training/models/lgbm/
+            \`\`\`
+
+            3. ModelPromoter will call \`/admin/models/promote\` and \`/admin/models/reload\` automatically at the end of training.
+
+            **MLflow UI:** http://<server-ip>:5000
+            `,
+              labels: ['retraining-needed', 'mlops']
             });

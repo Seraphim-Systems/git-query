@@ -10,7 +10,7 @@ on:
         description: "Branch to run from on server"
         required: false
         type: string
-        default: "dev"
+        default: ""
       dataset:
         description: "Kaggle dataset slug"
         required: false
@@ -56,6 +56,10 @@ jobs:
           ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
           set -euo pipefail
           REPO_PATH="/home/${{ secrets.INFRA_HETZNER_USER }}/git-query"
+          TARGET_BRANCH="${{ github.event.inputs.branch }}"
+          if [ -z "$TARGET_BRANCH" ]; then
+            TARGET_BRANCH="${{ github.ref_name }}"
+          fi
           PROCESSING_IMAGE="git-query-processing:raw-population"
           POP_CONTAINER="git-query-raw-population-job"
           PRECHECK_CONTAINER="git-query-raw-kaggle-precheck"
@@ -79,11 +83,22 @@ jobs:
           if [ -d "$REPO_PATH/.git" ]; then
             cd "$REPO_PATH"
             git fetch origin
-            git reset --hard origin/${{ github.event.inputs.branch }}
+            echo "Using target branch: $TARGET_BRANCH"
+            git reset --hard origin/$TARGET_BRANCH
           else
             git clone https://github.com/Seraphim-Systems/git-query.git "$REPO_PATH"
             cd "$REPO_PATH"
-            git checkout ${{ github.event.inputs.branch }}
+            git checkout "$TARGET_BRANCH"
+          fi
+
+          echo "Server repo commit: $(git rev-parse --short HEAD)"
+          echo "Workflow file commit context check:" 
+          git log --oneline -n 1 -- .github/workflows/run-raw-repositories-population.yml || true
+          echo "Raw script capability check..."
+          if ! grep -q -- "--dataset-dir" src/processing/scripts/raw_repositories_population.py; then
+            echo "Stale server code detected: raw_repositories_population.py missing --dataset-dir support."
+            echo "Make sure you dispatch this workflow from the branch containing the latest script changes."
+            exit 1
           fi
 
           mkdir -p "$REPO_PATH/logs" "$REPO_PATH/.checkpoints"
@@ -134,6 +149,10 @@ jobs:
           KAGGLE_KEY=${{ secrets.KAGGLE_KEY }}
           KAGGLE_CONFIG_DIR=/root/.kaggle
           PYTHONPATH=/repo
+          DATASET=${{ github.event.inputs.dataset }}
+          DATASET_FILE=${{ github.event.inputs.dataset_file }}
+          BATCH_SIZE=${{ github.event.inputs.batch_size }}
+          CHECKPOINT_FILE=$CHECKPOINT_FILE
           RESUME_FLAG=$RESUME_FLAG
           RESET_FLAG=$RESET_FLAG
           EOF
@@ -150,11 +169,12 @@ jobs:
                 - ../:/repo
                 - ../.kaggle:/root/.kaggle:ro
               command:
-                - python
+                - /app/.venv/bin/python
                 - -c
                 - |
-                  import sys, kagglehub
+                  import os, sys, kagglehub
                   public_ds = "uciml/iris"
+                  target_ds = os.environ.get("DATASET", "")
                   try:
                       kagglehub.dataset_download(public_ds)
                       print(f"Kaggle auth check OK on public dataset: {public_ds}")
@@ -162,6 +182,13 @@ jobs:
                       print("Kaggle auth check FAILED on public dataset. Credentials are likely invalid/mismatched.")
                       print(e)
                       sys.exit(2)
+                  try:
+                      kagglehub.dataset_download(target_ds)
+                      print(f"Kaggle target dataset access OK: {target_ds}")
+                  except Exception as e:
+                      print("Kaggle target dataset access FAILED.")
+                      print(e)
+                      sys.exit(3)
 
             raw-population-job:
               image: git-query-processing:raw-population
@@ -178,16 +205,22 @@ jobs:
                 - -lc
                 - |
                   set -euo pipefail
-                  python -c "import os, pathlib; print('Kaggle env present:', bool(os.getenv('KAGGLE_USERNAME')), bool(os.getenv('KAGGLE_KEY'))); print('kaggle.json exists:', pathlib.Path('/root/.kaggle/kaggle.json').exists())"
-                  python /repo/src/processing/scripts/raw_repositories_population.py \
-                    --dataset "${DATASET}" \
-                    --file "${DATASET_FILE}" \
+                  /app/.venv/bin/python -c "import os, pathlib; print('Kaggle env present:', bool(os.getenv('KAGGLE_USERNAME')), bool(os.getenv('KAGGLE_KEY'))); print('kaggle.json exists:', pathlib.Path('/root/.kaggle/kaggle.json').exists())"
+                  TARGET_DATASET_DIR="$$(/app/.venv/bin/python -c "import os, kagglehub; print(kagglehub.dataset_download(os.environ['DATASET']))" | tail -n 1 | tr -d '\r')"
+                  echo "Resolved dataset directory: $$TARGET_DATASET_DIR"
+                  if [ -z "$$TARGET_DATASET_DIR" ] || [ ! -d "$$TARGET_DATASET_DIR" ]; then
+                    echo "Resolved dataset directory is empty or missing: $$TARGET_DATASET_DIR"
+                    exit 10
+                  fi
+                  /app/.venv/bin/python /repo/src/processing/scripts/raw_repositories_population.py \
+                    --dataset-dir "$$TARGET_DATASET_DIR" \
+                    --file "$$DATASET_FILE" \
                     --collection raw_repositories \
                     --target mongodb \
-                    --batch-size "${BATCH_SIZE}" \
-                    --checkpoint-file "${CHECKPOINT_FILE}" \
-                    ${RESUME_FLAG} \
-                    ${RESET_FLAG}
+                    --batch-size "$$BATCH_SIZE" \
+                    --checkpoint-file "$$CHECKPOINT_FILE" \
+                    $$RESUME_FLAG \
+                    $$RESET_FLAG
 
           networks:
             internal-network:
@@ -205,10 +238,11 @@ jobs:
           docker rm -f "$POP_CONTAINER" "$PRECHECK_CONTAINER" >/dev/null 2>&1 || true
 
           echo "Kaggle preflight check..."
-          docker compose -f "$POP_COMPOSE_FILE" run --rm raw-kaggle-precheck
+          docker compose -f "$POP_COMPOSE_FILE" run --rm -T raw-kaggle-precheck < /dev/null
 
           echo "Running raw population job in container..."
-          docker compose -f "$POP_COMPOSE_FILE" run --rm raw-population-job 2>&1 | tee "$REPO_PATH/$LOG_FILE"
+          : > "$REPO_PATH/$LOG_FILE"
+          docker compose -f "$POP_COMPOSE_FILE" run --rm -T raw-population-job < /dev/null 2>&1 | tee "$REPO_PATH/$LOG_FILE"
 
           echo "Population job finished."
 

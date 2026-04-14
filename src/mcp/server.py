@@ -1,6 +1,5 @@
 """MCP Server implementation."""
 
-import logging
 import os
 from contextlib import asynccontextmanager
 from typing import Any, Optional
@@ -12,13 +11,9 @@ from pydantic import BaseModel
 from src.mcp.config import settings
 from src.mcp.models import ToolExecuteRequest, ToolExecuteResponse, HealthResponse
 from src.mcp.tools import get_tool, list_tools
+from src.shared.logging_config import configure_logging
 
-# Configure logging
-logging.basicConfig(
-    level=settings.log_level,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
-logger = logging.getLogger(__name__)
+logger = configure_logging(service_name="mcp", log_level=settings.log_level)
 
 
 @asynccontextmanager
@@ -82,12 +77,16 @@ async def list_available_tools():
 @app.post("/tools/execute", response_model=ToolExecuteResponse)
 async def execute_tool(request: ToolExecuteRequest):
     """Execute a specific tool."""
-    logger.info(f"Executing tool: {request.tool_name} with params: {request.parameters}")
+    logger.info(
+        f"Executing tool: {request.tool_name} with params: {request.parameters}"
+    )
 
     # Get the tool
     tool = get_tool(request.tool_name)
     if not tool:
-        raise HTTPException(status_code=404, detail=f"Tool '{request.tool_name}' not found")
+        raise HTTPException(
+            status_code=404, detail=f"Tool '{request.tool_name}' not found"
+        )
 
     try:
         # Execute the tool
@@ -132,21 +131,36 @@ async def chat_endpoint(request: ChatRequest):
         from src.client.bot import chat as bot_chat
 
         # Call the agent with user message and ID
-        response_text, tool_calls = await bot_chat(message=request.message, user_id=request.user_id)
+        response_text, tool_calls = await bot_chat(
+            message=request.message, user_id=request.user_id
+        )
 
-        logger.info(f"Chat processed for user {request.user_id}: {len(tool_calls)} tool calls made")
+        logger.info(
+            f"Chat processed for user {request.user_id}: {len(tool_calls)} tool calls made"
+        )
 
         return ChatResponse(response=response_text)
 
     except ImportError as e:
         logger.error(f"Failed to import bot agent: {e}")
-        return ChatResponse(response="The AI agent is not available. Please check the deployment configuration.")
+        return ChatResponse(
+            response="The AI agent is not available. Please check the deployment configuration."
+        )
     except Exception as e:
         logger.error(f"Chat error: {e}", exc_info=True)
-        return ChatResponse(response="I encountered an error processing your request. Please try again.")
+        return ChatResponse(
+            response="I encountered an error processing your request. Please try again."
+        )
 
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("server:app", host=settings.mcp_host, port=settings.mcp_port, reload=True)
+    uvicorn.run(
+        "server:app",
+        host=settings.mcp_host,
+        port=settings.mcp_port,
+        reload=True,
+        log_level=settings.log_level.lower(),
+        log_config=None,
+    )

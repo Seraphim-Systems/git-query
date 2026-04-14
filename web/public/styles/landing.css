@@ -111,7 +111,7 @@ nav {
     text-decoration: none;
 }
 
-.nav-logo svg { color: var(--accent-color); }
+.nav-logo img { border-radius: 6px; }
 
 .nav-logo-version {
     font-family: var(--mono);
