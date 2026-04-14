@@ -146,7 +146,7 @@ def test_proxy_falls_back_to_second_upstream_on_connect_error(monkeypatch):
     )
 
 
-def test_proxy_retries_without_prefix_after_prefixed_404(monkeypatch):
+def test_proxy_returns_404_when_prefixed_route_missing(monkeypatch):
     monkeypatch.setattr(mlflow_proxy, "require_admin", _allow_admin)
     monkeypatch.setattr(mlflow_proxy.httpx, "AsyncClient", DummyAsyncClient)
     monkeypatch.setattr(
@@ -167,12 +167,12 @@ def test_proxy_retries_without_prefix_after_prefixed_404(monkeypatch):
 
     response = client.get("/mlflow/")
 
-    assert response.status_code == 200
+    assert response.status_code == 404
     assert DummyAsyncClient.requests[0]["url"] == "http://git-query-mlflow:5000/mlflow"
-    assert DummyAsyncClient.requests[1]["url"] == "http://git-query-mlflow:5000/"
+    assert len(DummyAsyncClient.requests) == 1
 
 
-def test_proxy_retries_static_files_root_after_prefixed_and_plain_404(monkeypatch):
+def test_proxy_root_does_not_fallback_to_legacy_paths(monkeypatch):
     monkeypatch.setattr(mlflow_proxy, "require_admin", _allow_admin)
     monkeypatch.setattr(mlflow_proxy.httpx, "AsyncClient", DummyAsyncClient)
     monkeypatch.setattr(
@@ -183,10 +183,7 @@ def test_proxy_retries_static_files_root_after_prefixed_and_plain_404(monkeypatc
 
     DummyAsyncClient.requests = []
     DummyAsyncClient.fail_hosts = set()
-    DummyAsyncClient.status_by_prefix = {
-        "http://git-query-mlflow:5000/mlflow": 404,
-        "http://git-query-mlflow:5000/": 404,
-    }
+    DummyAsyncClient.status_by_prefix = {"http://git-query-mlflow:5000/mlflow": 404}
     DummyAsyncClient.content_by_prefix = {}
     DummyAsyncClient.content_type_by_prefix = {}
     DummyAsyncClient.response_headers_by_prefix = {}
@@ -198,14 +195,10 @@ def test_proxy_retries_static_files_root_after_prefixed_and_plain_404(monkeypatc
 
     assert response.status_code == 404
     assert DummyAsyncClient.requests[0]["url"] == "http://git-query-mlflow:5000/mlflow"
-    assert DummyAsyncClient.requests[1]["url"] == "http://git-query-mlflow:5000/"
-    assert (
-        DummyAsyncClient.requests[2]["url"]
-        == "http://git-query-mlflow:5000/mlflow/static-files"
-    )
+    assert len(DummyAsyncClient.requests) == 1
 
 
-def test_static_files_proxy_falls_back_to_prefixed_static_path(monkeypatch):
+def test_static_files_proxy_uses_prefixed_static_path(monkeypatch):
     monkeypatch.setattr(mlflow_proxy, "require_admin", _allow_admin)
     monkeypatch.setattr(mlflow_proxy.httpx, "AsyncClient", DummyAsyncClient)
     monkeypatch.setattr(
@@ -216,9 +209,7 @@ def test_static_files_proxy_falls_back_to_prefixed_static_path(monkeypatch):
 
     DummyAsyncClient.requests = []
     DummyAsyncClient.fail_hosts = set()
-    DummyAsyncClient.status_by_prefix = {
-        "http://git-query-mlflow:5000/static-files": 404,
-    }
+    DummyAsyncClient.status_by_prefix = {}
     DummyAsyncClient.content_by_prefix = {}
     DummyAsyncClient.content_type_by_prefix = {}
     DummyAsyncClient.response_headers_by_prefix = {}
@@ -231,12 +222,9 @@ def test_static_files_proxy_falls_back_to_prefixed_static_path(monkeypatch):
     assert response.status_code == 200
     assert (
         DummyAsyncClient.requests[0]["url"]
-        == "http://git-query-mlflow:5000/static-files/static/js/main.js"
-    )
-    assert (
-        DummyAsyncClient.requests[1]["url"]
         == "http://git-query-mlflow:5000/mlflow/static-files/static/js/main.js"
     )
+    assert len(DummyAsyncClient.requests) == 1
 
 
 def test_proxy_rewrites_html_static_files_to_mlflow_prefix(monkeypatch):
@@ -320,13 +308,13 @@ def test_proxy_response_drops_representation_headers(monkeypatch):
     DummyAsyncClient.fail_hosts = set()
     DummyAsyncClient.status_by_prefix = {}
     DummyAsyncClient.content_by_prefix = {
-        "http://git-query-mlflow:5000/static-files": gzip.compress(b"console.log('ok');")
+        "http://git-query-mlflow:5000/mlflow/static-files": b"console.log('ok');"
     }
     DummyAsyncClient.content_type_by_prefix = {
-        "http://git-query-mlflow:5000/static-files": "application/javascript"
+        "http://git-query-mlflow:5000/mlflow/static-files": "application/javascript"
     }
     DummyAsyncClient.response_headers_by_prefix = {
-        "http://git-query-mlflow:5000/static-files": {
+        "http://git-query-mlflow:5000/mlflow/static-files": {
             "content-encoding": "gzip",
             "content-length": "9",
         }
@@ -372,11 +360,11 @@ def test_ajax_api_proxy_routes_to_mlflow(monkeypatch):
     assert response.status_code == 200
     assert (
         DummyAsyncClient.requests[0]["url"]
-        == "http://git-query-mlflow:5000/ajax-api/2.0/mlflow/experiments/search?max_results=20000"
+        == "http://git-query-mlflow:5000/mlflow/ajax-api/2.0/mlflow/experiments/search?max_results=20000"
     )
 
 
-def test_ajax_api_proxy_falls_back_to_prefixed_route(monkeypatch):
+def test_ajax_api_proxy_does_not_fallback_to_plain_route(monkeypatch):
     monkeypatch.setattr(mlflow_proxy, "require_admin", _allow_admin)
     monkeypatch.setattr(mlflow_proxy.httpx, "AsyncClient", DummyAsyncClient)
     monkeypatch.setattr(
@@ -388,7 +376,7 @@ def test_ajax_api_proxy_falls_back_to_prefixed_route(monkeypatch):
     DummyAsyncClient.requests = []
     DummyAsyncClient.fail_hosts = set()
     DummyAsyncClient.status_by_prefix = {
-        "http://git-query-mlflow:5000/ajax-api": 404,
+        "http://git-query-mlflow:5000/mlflow/ajax-api": 404,
     }
     DummyAsyncClient.content_by_prefix = {}
     DummyAsyncClient.content_type_by_prefix = {}
@@ -399,12 +387,9 @@ def test_ajax_api_proxy_falls_back_to_prefixed_route(monkeypatch):
 
     response = client.get("/ajax-api/2.0/mlflow/experiments/search")
 
-    assert response.status_code == 200
+    assert response.status_code == 404
     assert (
         DummyAsyncClient.requests[0]["url"]
-        == "http://git-query-mlflow:5000/ajax-api/2.0/mlflow/experiments/search"
-    )
-    assert (
-        DummyAsyncClient.requests[1]["url"]
         == "http://git-query-mlflow:5000/mlflow/ajax-api/2.0/mlflow/experiments/search"
     )
+    assert len(DummyAsyncClient.requests) == 1

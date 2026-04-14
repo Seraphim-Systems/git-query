@@ -75,72 +75,36 @@ def _rewrite_mlflow_html(content: bytes, content_type: str | None) -> bytes:
 def _build_targets(base_url: str, path: str, query: str) -> tuple[str, ...]:
     normalized_path = path.lstrip("/")
     prefixed_path = "/mlflow" if not normalized_path else f"/mlflow/{normalized_path}"
-    plain_path = "/" if not normalized_path else f"/{normalized_path}"
-
-    # Prefer prefixed routing first (for servers configured behind /mlflow),
-    # then fall back to plain routing for older MLflow versions.
-    candidate_paths = [prefixed_path]
-    if plain_path != prefixed_path:
-        candidate_paths.append(plain_path)
-
-    # Compatibility fallback for older/misconfigured deployments where MLflow
-    # UI root is served under /mlflow/static-files.
-    if not normalized_path:
-        candidate_paths.append("/mlflow/static-files")
-
-    targets: list[str] = []
-    for upstream_path in candidate_paths:
-        target = f"{base_url}{upstream_path}"
-        if query:
-            target = f"{target}?{query}"
-        targets.append(target)
-    return tuple(targets)
+    target = f"{base_url}{prefixed_path}"
+    if query:
+        target = f"{target}?{query}"
+    return (target,)
 
 
 def _build_static_targets(base_url: str, path: str, query: str) -> tuple[str, ...]:
     normalized_path = path.lstrip("/")
-    direct_path = (
-        "/static-files" if not normalized_path else f"/static-files/{normalized_path}"
-    )
     prefixed_path = (
         "/mlflow/static-files"
         if not normalized_path
         else f"/mlflow/static-files/{normalized_path}"
     )
-
-    candidate_paths = [direct_path]
-    if prefixed_path != direct_path:
-        candidate_paths.append(prefixed_path)
-
-    targets: list[str] = []
-    for upstream_path in candidate_paths:
-        target = f"{base_url}{upstream_path}"
-        if query:
-            target = f"{target}?{query}"
-        targets.append(target)
-    return tuple(targets)
+    target = f"{base_url}{prefixed_path}"
+    if query:
+        target = f"{target}?{query}"
+    return (target,)
 
 
 def _build_ajax_targets(base_url: str, path: str, query: str) -> tuple[str, ...]:
     normalized_path = path.lstrip("/")
-    direct_path = "/ajax-api" if not normalized_path else f"/ajax-api/{normalized_path}"
     prefixed_path = (
         "/mlflow/ajax-api"
         if not normalized_path
         else f"/mlflow/ajax-api/{normalized_path}"
     )
-
-    candidate_paths = [direct_path]
-    if prefixed_path != direct_path:
-        candidate_paths.append(prefixed_path)
-
-    targets: list[str] = []
-    for upstream_path in candidate_paths:
-        target = f"{base_url}{upstream_path}"
-        if query:
-            target = f"{target}?{query}"
-        targets.append(target)
-    return tuple(targets)
+    target = f"{base_url}{prefixed_path}"
+    if query:
+        target = f"{target}?{query}"
+    return (target,)
 
 
 async def _forward_with_fallback(
