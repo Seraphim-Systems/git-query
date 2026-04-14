@@ -20,6 +20,7 @@ services:
       mlflow server
       --backend-store-uri ${MLFLOW_BACKEND_STORE_URI:-sqlite:////mlflow/mlflow.db}
       --default-artifact-root ${MLFLOW_DEFAULT_ARTIFACT_ROOT:-/mlflow/artifacts}
+      --static-prefix /mlflow
       --host 0.0.0.0
       --port 5000
     environment:

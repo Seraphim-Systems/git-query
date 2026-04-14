@@ -14,6 +14,8 @@ GATEWAY_API_PREFIXES = (
     "/openapi.json",
     "/redoc",
     "/mlflow",
+    "/static-files",
+    "/ajax-api",
     "/admin",
 )
 
@@ -45,8 +47,11 @@ SESSION_PATHS = [
     "/chat",  # AI chat - requires session
     "/recommend",  # Repository search - requires session
     "/user",  # User profile/preferences - requires session
+    "/api/user",  # Alias used by the browser frontend
     "/api/auth",  # Alias used by the browser frontend (e.g. /api/auth/logout)
     "/api/recommend",  # Alias used by the browser frontend
     "/api/chat",  # Alias used by the browser frontend
     "/mlflow",  # MLFlow UI proxy - admin session required
+    "/static-files",  # MLFlow static bundle fallback paths
+    "/ajax-api",  # MLFlow AJAX API paths used by frontend UI
 ]
