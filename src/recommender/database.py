@@ -199,16 +199,28 @@ class DatabaseManager:
         to keep the event loop unblocked.
         """
         loop = asyncio.get_running_loop()
-        results = await loop.run_in_executor(
-            None,
-            lambda: self.qdrant_client.search(
-                collection_name=settings.qdrant_repos_collection,
-                query_vector=query_vector,
-                limit=top_k,
-                query_filter=filter_conditions,
-                with_payload=True,
-            ),
-        )
+        if hasattr(self.qdrant_client, "query_points"):
+            results = await loop.run_in_executor(
+                None,
+                lambda: self.qdrant_client.query_points(
+                    collection_name=settings.qdrant_repos_collection,
+                    query=query_vector,
+                    limit=top_k,
+                    query_filter=filter_conditions,
+                    with_payload=True,
+                ).points,
+            )
+        else:
+            results = await loop.run_in_executor(
+                None,
+                lambda: self.qdrant_client.search(
+                    collection_name=settings.qdrant_repos_collection,
+                    query_vector=query_vector,
+                    limit=top_k,
+                    query_filter=filter_conditions,
+                    with_payload=True,
+                ),
+            )
         return [
             {
                 "repo_id": hit.id,
