@@ -1,0 +1,136 @@
+name: "Manual — Generate Synthetic Interactions"
+
+# Single Responsibility: Generate synthetic training interactions and retrain LGBM
+# Triggered: Manual workflow dispatch
+# Services: training container (needs running MongoDB + Qdrant)
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to run from on server"
+        required: false
+        type: string
+        default: ""
+      dry_run:
+        description: "Dry run (print interactions, do not write to MongoDB)"
+        required: false
+        type: boolean
+        default: false
+      retrain:
+        description: "Trigger LGBM retraining after generation"
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  generate:
+    name: Generate synthetic interactions on server
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Run generator in training container
+        env:
+          INPUT_BRANCH: ${{ github.event.inputs.branch }}
+          INPUT_DRY_RUN: ${{ github.event.inputs.dry_run }}
+          HETZNER_USER: ${{ secrets.INFRA_HETZNER_USER }}
+          HETZNER_HOST: ${{ secrets.INFRA_HETZNER_HOST }}
+          DB_USER: ${{ secrets.DB_MONGODB_USER }}
+          DB_PASS: ${{ secrets.DB_MONGODB_PASSWORD }}
+          DEFAULT_BRANCH: ${{ github.ref_name }}
+        run: |
+          ssh "$HETZNER_USER@$HETZNER_HOST" bash -s << ENDSSH
+          set -euo pipefail
+          REPO_PATH="/home/$HETZNER_USER/git-query"
+          TARGET_BRANCH="$INPUT_BRANCH"
+          if [ -z "\$TARGET_BRANCH" ]; then
+            TARGET_BRANCH="$DEFAULT_BRANCH"
+          fi
+
+          if [ -d "\$REPO_PATH/.git" ]; then
+            cd "\$REPO_PATH"
+            git fetch origin
+            git reset --hard "origin/\$TARGET_BRANCH"
+          else
+            git clone https://github.com/Seraphim-Systems/git-query.git "\$REPO_PATH"
+            cd "\$REPO_PATH"
+            git checkout "\$TARGET_BRANCH"
+          fi
+
+          echo "Server repo commit: \$(git rev-parse --short HEAD)"
+
+          cd "\$REPO_PATH"
+
+          TRAINING_IMAGE="git-query-training"
+          JOB_CONTAINER="git-query-synthetic-interactions-job"
+
+          docker rm -f "\$JOB_CONTAINER" >/dev/null 2>&1 || true
+
+          echo "Building training image..."
+          docker build -f infrastructure/docker/Dockerfile.training -t "\$TRAINING_IMAGE" .
+
+          DRY_RUN_VAL="0"
+          if [ "$INPUT_DRY_RUN" = "true" ]; then
+            DRY_RUN_VAL="1"
+          fi
+
+          echo "Running synthetic interaction generator..."
+          docker run --rm \
+            --name "\$JOB_CONTAINER" \
+            --network git-query-internal-network \
+            -e MONGODB_URL="mongodb://$DB_USER:$DB_PASS@git-query-mongodb:27017/gitquery?authSource=admin" \
+            -e QDRANT_URL="http://git-query-qdrant:6333" \
+            -e QDRANT_COLLECTION="repositories_embeddings" \
+            -e EMBEDDING_MODEL="sentence-transformers/all-MiniLM-L6-v2" \
+            -e DRY_RUN="\$DRY_RUN_VAL" \
+            -v "\$REPO_PATH":/repo \
+            "\$TRAINING_IMAGE" \
+            /app/.venv/bin/python /repo/src/recommender/scripts/generate_synthetic_interactions.py
+
+          echo "Synthetic interaction generation complete."
+
+          echo "Interaction count (synthetic source):"
+          docker exec git-query-mongodb mongosh \
+            "mongodb://$DB_USER:$DB_PASS@localhost:27017/gitquery?authSource=admin" \
+            --quiet --eval 'db.user_interactions.countDocuments({"metadata.source": "synthetic"})' || true
+          ENDSSH
+
+      - name: Trigger LGBM retraining
+        if: ${{ github.event.inputs.retrain == 'true' }}
+        env:
+          HETZNER_USER: ${{ secrets.INFRA_HETZNER_USER }}
+          HETZNER_HOST: ${{ secrets.INFRA_HETZNER_HOST }}
+          DB_USER: ${{ secrets.DB_MONGODB_USER }}
+          DB_PASS: ${{ secrets.DB_MONGODB_PASSWORD }}
+        run: |
+          ssh "$HETZNER_USER@$HETZNER_HOST" bash -s << ENDSSH
+          set -euo pipefail
+          REPO_PATH="/home/$HETZNER_USER/git-query"
+          cd "\$REPO_PATH"
+
+          TRAINING_IMAGE="git-query-training"
+          RETRAIN_CONTAINER="git-query-lgbm-retrain-job"
+
+          docker rm -f "\$RETRAIN_CONTAINER" >/dev/null 2>&1 || true
+
+          echo "Triggering LGBM retraining..."
+          docker run --rm \
+            --name "\$RETRAIN_CONTAINER" \
+            --network git-query-internal-network \
+            -e MONGODB_URL="mongodb://$DB_USER:$DB_PASS@git-query-mongodb:27017/gitquery?authSource=admin" \
+            -e QDRANT_URL="http://git-query-qdrant:6333" \
+            -v "\$REPO_PATH":/repo \
+            -v git-query-models:/models \
+            "\$TRAINING_IMAGE" \
+            /app/.venv/bin/python /repo/src/recommender/training/retrain_pipeline.py
+
+          echo "Retraining complete."
+          ENDSSH
