@@ -14,7 +14,7 @@ from src.gateway.middleware.session import require_admin
 
 logger = logging.getLogger(__name__)
 
-MLFLOW_INTERNAL_URL = "http://mlflow:5000"
+MLFLOW_INTERNAL_URL = "http://git-query-mlflow:5000"
 
 # Hop-by-hop headers that must not be forwarded
 _HOP_BY_HOP = frozenset(
