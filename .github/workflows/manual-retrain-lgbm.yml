@@ -36,7 +36,7 @@ jobs:
           APIKEY_MONGODB: ${{ secrets.APIKEY_MONGODB }}
           APIKEY_QDRANT: ${{ secrets.APIKEY_QDRANT }}
         run: |
-          ssh "$HETZNER_USER@$HETZNER_HOST" bash -s << ENDSSH
+          ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=20 "$HETZNER_USER@$HETZNER_HOST" bash -s << ENDSSH
           set -euo pipefail
           REPO_PATH="/home/$HETZNER_USER/git-query"
           TARGET_BRANCH="$INPUT_BRANCH"
