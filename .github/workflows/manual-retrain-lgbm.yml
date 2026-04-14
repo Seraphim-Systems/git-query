@@ -33,6 +33,8 @@ jobs:
           HETZNER_USER: ${{ secrets.INFRA_HETZNER_USER }}
           HETZNER_HOST: ${{ secrets.INFRA_HETZNER_HOST }}
           DEFAULT_BRANCH: ${{ github.ref_name }}
+          APIKEY_MONGODB: ${{ secrets.APIKEY_MONGODB }}
+          APIKEY_QDRANT: ${{ secrets.APIKEY_QDRANT }}
         run: |
           ssh "$HETZNER_USER@$HETZNER_HOST" bash -s << ENDSSH
           set -euo pipefail
@@ -64,7 +66,11 @@ jobs:
             -f infrastructure/docker/docker-compose.mlflow.yml \
             -f infrastructure/docker/docker-compose.training.yml \
             --env-file .env \
-            run --rm -e ENABLE_EMBEDDING_TRAINING=false training
+            run --rm \
+            -e ENABLE_EMBEDDING_TRAINING=false \
+            -e APIKEY_MONGODB="$APIKEY_MONGODB" \
+            -e APIKEY_QDRANT="$APIKEY_QDRANT" \
+            training
 
           echo "Retraining complete."
           ENDSSH
