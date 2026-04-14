@@ -95,8 +95,8 @@ async def list_qdrant_collections():
             name = getattr(col, "name", None) or getattr(col, "collection_name", "") or str(col)
             try:
                 info = qdrant_client.get_collection(name)
-                vectors_count = getattr(info, "vectors_count", None) or 0
                 points_count = getattr(info, "points_count", None) or 0
+                vectors_count = points_count
                 items.append({"name": name, "vectors_count": vectors_count, "points_count": points_count})
             except Exception:
                 items.append({"name": name, "vectors_count": 0, "points_count": 0})
