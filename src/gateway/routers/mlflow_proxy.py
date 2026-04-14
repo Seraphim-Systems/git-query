@@ -5,6 +5,7 @@ Docker network.  Admin session authentication is required.
 """
 
 import logging
+import os
 
 import httpx
 from fastapi import APIRouter, Request
@@ -14,7 +15,21 @@ from src.gateway.middleware.session import require_admin
 
 logger = logging.getLogger(__name__)
 
-MLFLOW_INTERNAL_URL = "http://git-query-mlflow:5000"
+
+def _load_internal_urls() -> tuple[str, ...]:
+    raw_urls = os.getenv(
+        "MLFLOW_INTERNAL_URLS",
+        "http://git-query-mlflow:5000,http://mlflow:5000",
+    )
+    parsed = tuple(
+        url.strip().rstrip("/") for url in raw_urls.split(",") if url.strip()
+    )
+    if parsed:
+        return parsed
+    return ("http://git-query-mlflow:5000", "http://mlflow:5000")
+
+
+MLFLOW_INTERNAL_URLS = _load_internal_urls()
 
 # Hop-by-hop headers that must not be forwarded
 _HOP_BY_HOP = frozenset(
@@ -35,44 +50,72 @@ _METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 router = APIRouter(tags=["MLFlow"])
 
 
+def _build_target(base_url: str, path: str, query: str) -> str:
+    normalized_path = path.lstrip("/")
+    upstream_path = "/mlflow" if not normalized_path else f"/mlflow/{normalized_path}"
+    target = f"{base_url}{upstream_path}"
+    if query:
+        target = f"{target}?{query}"
+    return target
+
+
 async def _proxy(request: Request, path: str) -> Response:
     """Shared proxy logic: forward request to MLFlow and return its response."""
     await require_admin(request)
-
-    target = f"{MLFLOW_INTERNAL_URL}/{path}"
-    if request.url.query:
-        target = f"{target}?{request.url.query}"
 
     forward_headers = {
         k: v
         for k, v in request.headers.items()
         if k.lower() not in ("host", "content-length") and k.lower() not in _HOP_BY_HOP
     }
+    forward_headers.setdefault("x-forwarded-prefix", "/mlflow")
+    forward_headers.setdefault("x-forwarded-proto", request.url.scheme)
+    host = request.headers.get("host")
+    if host:
+        forward_headers.setdefault("x-forwarded-host", host)
 
     body = await request.body()
 
-    async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
-        try:
-            resp = await client.request(
-                method=request.method,
-                url=target,
-                headers=forward_headers,
-                content=body,
-            )
-        except httpx.ConnectError:
-            logger.error("Cannot connect to MLFlow at %s", MLFLOW_INTERNAL_URL)
-            return Response(content=b"MLFlow unavailable", status_code=503)
-        except httpx.TimeoutException:
-            logger.error("Timeout proxying to MLFlow at %s", target)
-            return Response(content=b"MLFlow timeout", status_code=504)
+    response: httpx.Response | None = None
+    connect_failures: list[str] = []
+    timeout_failures: list[str] = []
 
-    resp_headers = {k: v for k, v in resp.headers.items() if k.lower() not in _HOP_BY_HOP}
+    async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
+        for base_url in MLFLOW_INTERNAL_URLS:
+            target = _build_target(base_url, path, request.url.query)
+            try:
+                response = await client.request(
+                    method=request.method,
+                    url=target,
+                    headers=forward_headers,
+                    content=body,
+                )
+                break
+            except httpx.ConnectError:
+                logger.warning("Cannot connect to MLFlow at %s", base_url)
+                connect_failures.append(base_url)
+            except httpx.TimeoutException:
+                logger.warning("Timeout proxying to MLFlow at %s", target)
+                timeout_failures.append(target)
+
+    if response is None:
+        if timeout_failures:
+            logger.error("MLFlow timeout via all upstreams: %s", MLFLOW_INTERNAL_URLS)
+            return Response(content=b"MLFlow timeout", status_code=504)
+        logger.error(
+            "Cannot connect to MLFlow via any upstream %s", MLFLOW_INTERNAL_URLS
+        )
+        return Response(content=b"MLFlow unavailable", status_code=503)
+
+    resp_headers = {
+        k: v for k, v in response.headers.items() if k.lower() not in _HOP_BY_HOP
+    }
 
     return Response(
-        content=resp.content,
-        status_code=resp.status_code,
+        content=response.content,
+        status_code=response.status_code,
         headers=resp_headers,
-        media_type=resp.headers.get("content-type"),
+        media_type=response.headers.get("content-type"),
     )
 
 
