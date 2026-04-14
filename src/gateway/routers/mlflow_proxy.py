@@ -51,6 +51,20 @@ router = APIRouter(tags=["MLFlow"])
 static_router = APIRouter(tags=["MLFlow"])
 
 
+def _rewrite_mlflow_html(content: bytes, content_type: str | None) -> bytes:
+    """Ensure MLflow HTML references static assets under /mlflow for proxy safety."""
+    if not content or not content_type or "text/html" not in content_type.lower():
+        return content
+
+    text = content.decode("utf-8", errors="ignore")
+    rewritten = text.replace('"/static-files/', '"/mlflow/static-files/')
+    rewritten = rewritten.replace("'/static-files/", "'/mlflow/static-files/")
+
+    if rewritten == text:
+        return content
+    return rewritten.encode("utf-8")
+
+
 def _build_targets(base_url: str, path: str, query: str) -> tuple[str, ...]:
     normalized_path = path.lstrip("/")
     prefixed_path = "/mlflow" if not normalized_path else f"/mlflow/{normalized_path}"
@@ -161,15 +175,23 @@ async def _forward_with_fallback(
         )
         return Response(content=b"MLFlow unavailable", status_code=503)
 
+    content = response.content
+    content_type = response.headers.get("content-type")
+    if request.url.path.startswith("/mlflow"):
+        content = _rewrite_mlflow_html(content, content_type)
+
     resp_headers = {
         k: v for k, v in response.headers.items() if k.lower() not in _HOP_BY_HOP
     }
+    if content != response.content:
+        # Let FastAPI recalculate content length after body rewrite.
+        resp_headers.pop("content-length", None)
 
     return Response(
-        content=response.content,
+        content=content,
         status_code=response.status_code,
         headers=resp_headers,
-        media_type=response.headers.get("content-type"),
+        media_type=content_type,
     )
 
 
