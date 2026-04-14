@@ -168,6 +168,7 @@ class LGBMRanker:
         self.params: dict[str, Any] = {**DEFAULT_PARAMS, **(params or {})}
         self.model = None
         self.feature_cols: list[str] | None = None
+        self.language_vocab: list[str] | None = None
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -329,6 +330,7 @@ class LGBMRanker:
         # Build full feature matrix to discover feature columns
         X_all, y_all, groups_all = self._build_rank_data(grouped_df, feature_extractor)
         self.feature_cols = X_all.columns.tolist()
+        self.language_vocab = [c[len("lang_"):] for c in self.feature_cols if c.startswith("lang_") and c != "lang_other"]
 
         unique_qids = np.array(sorted(grouped_df["query_id"].unique()))
 
@@ -471,7 +473,7 @@ class LGBMRanker:
 
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {"model": self.model, "feature_cols": self.feature_cols, "params": self.params}
+        payload = {"model": self.model, "feature_cols": self.feature_cols, "language_vocab": self.language_vocab, "params": self.params}
         joblib.dump(payload, path)
         logger.info("LGBMRanker saved to %s", path)
         return str(path)
@@ -490,6 +492,7 @@ class LGBMRanker:
         ranker = cls(params=payload.get("params"))
         ranker.model = payload["model"]
         ranker.feature_cols = payload["feature_cols"]
+        ranker.language_vocab = payload.get("language_vocab")
         logger.info("LGBMRanker loaded from %s (%d features)", path, len(ranker.feature_cols))
         return ranker
 

@@ -115,7 +115,15 @@ class RerankerService:
             raise RuntimeError("Reranker adapter is unavailable after lazy load attempt")
 
         loop = asyncio.get_running_loop()
-        scores = await loop.run_in_executor(None, self._adapter.score, query, candidates)
+        try:
+            scores = await loop.run_in_executor(None, self._adapter.score, query, candidates)
+        except Exception as e:
+            if self._loaded_path != self.model_name:
+                logger.warning("Primary reranker failed (%s), falling back to cross-encoder: %s", self._loaded_path, e)
+                fallback_adapter = await loop.run_in_executor(None, self.load_model, self.model_name)
+                scores = await loop.run_in_executor(None, fallback_adapter.score, query, candidates)
+            else:
+                raise
 
         for candidate, score in zip(candidates, scores):
             candidate.explanation = candidate.explanation or {}

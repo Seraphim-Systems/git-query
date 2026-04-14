@@ -285,13 +285,17 @@ class FeatureExtractor:
     def language_encoded(
         df: pd.DataFrame,
         top_n: int = TOP_N_LANGUAGES,
+        fixed_languages: Optional[List[str]] = None,
     ) -> pd.DataFrame:
         """One-hot encode the primary language column.
 
-        The *top_n* most frequent languages each get their own binary column
-        (``lang_python``, ``lang_javascript``, ...).  All remaining languages
-        are grouped into ``lang_other``.  Missing values map to
-        ``lang_other``.
+        If *fixed_languages* is provided (e.g. the vocabulary saved at training
+        time), it is used directly instead of computing top-N from *df*.  This
+        ensures training and inference produce identical columns.
+
+        Otherwise the *top_n* most frequent languages in *df* each get their
+        own binary column.  All remaining languages are grouped into
+        ``lang_other``.  Missing values map to ``lang_other``.
 
         Returns:
             DataFrame with up to ``top_n + 1`` boolean (int) columns.
@@ -300,13 +304,15 @@ class FeatureExtractor:
 
         lang = df["language"].fillna("other").astype(str).str.strip().str.lower()
 
-        top_languages = lang.value_counts().head(top_n).index.tolist()
-        lang = lang.where(lang.isin(top_languages), other="other")
+        if fixed_languages is not None:
+            known = set(fixed_languages)
+        else:
+            known = set(lang.value_counts().head(top_n).index.tolist())
+
+        lang = lang.where(lang.isin(known), other="other")
 
         dummies = _pd.get_dummies(lang, prefix="lang", dtype=int)
 
-        # Ensure ``lang_other`` always exists even if every repo has a
-        # top-N language.
         if "lang_other" not in dummies.columns:
             dummies["lang_other"] = 0
 
@@ -392,6 +398,7 @@ class FeatureExtractor:
         self,
         df: pd.DataFrame,
         query: Optional[str] = None,
+        fixed_languages: Optional[List[str]] = None,
     ) -> pd.DataFrame:
         """Extract all numeric features into a single DataFrame.
 
@@ -420,7 +427,7 @@ class FeatureExtractor:
             self.description_length(df),
             self.has_license(df),
             self.is_permissive_license(df),
-            self.language_encoded(df),
+            self.language_encoded(df, fixed_languages=fixed_languages),
         ]
 
         if query:
