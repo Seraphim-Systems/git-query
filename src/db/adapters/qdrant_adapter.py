@@ -3,11 +3,14 @@ from typing import Dict, Any, List, Optional
 import os
 import httpx
 import uuid
+import logging
+
+from qdrant_client.models import PointStruct
 
 from src.db.adapters.interfaces import VectorRepository
 from src.db.clients import get_qdrant_client
-import logging
 
+logger = logging.getLogger(__name__)
 
 DEFAULT_QDRANT_HOST = os.environ.get("QDRANT_HOST", "qdrant")
 DEFAULT_QDRANT_PORT = int(os.environ.get("QDRANT_HTTP_PORT", "6333"))
@@ -80,15 +83,22 @@ class QdrantAdapter(VectorRepository):
         # Try client upsert where available
         if self.client:
             try:
-                # Newer clients accept wait kwarg
+                point_structs = [
+                    PointStruct(
+                        id=p["id"],
+                        vector=p["vector"],
+                        payload=p.get("payload", {}) or {},
+                    )
+                    for p in pts
+                ]
                 try:
-                    self.client.upsert(collection_name=collection, points=pts, wait=wait)
+                    self.client.upsert(collection_name=collection, points=point_structs, wait=wait)
                 except TypeError:
-                    self.client.upsert(collection_name=collection, points=pts)
+                    self.client.upsert(collection_name=collection, points=point_structs)
                 return {"collection": collection, "upserted": len(pts)}
-            except Exception:
+            except Exception as e:
+                logger.warning("Qdrant client upsert failed, falling back to HTTP: %s", e)
                 # Fall through to HTTP fallback
-                pass
 
         # HTTP fallback: POST /collections/{collection}/points
         url = _http_url(f"/collections/{collection}/points?wait={str(wait).lower()}")
