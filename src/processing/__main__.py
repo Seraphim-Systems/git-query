@@ -4,19 +4,28 @@ Handles data cleaning, transformation, and vectorization
 """
 
 import asyncio
-import logging
 import uvicorn
 from multiprocessing import Process
 from processing.processor import DataProcessor
 from processing.config import settings
 
-logging.basicConfig(level=settings.log_level, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+try:
+    from src.shared.logging_config import configure_logging
+except ImportError:
+    from shared.logging_config import configure_logging
+
+logger = configure_logging(service_name="processing", log_level=settings.log_level)
 
 
 def run_health_server():
     """Run health check server in separate process"""
-    uvicorn.run("processing.server:app", host="0.0.0.0", port=8090, log_level=settings.log_level.lower())
+    uvicorn.run(
+        "processing.server:app",
+        host="0.0.0.0",
+        port=8090,
+        log_level=settings.log_level.lower(),
+        log_config=None,
+    )
 
 
 async def main():

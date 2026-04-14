@@ -97,7 +97,7 @@ body {
     margin-bottom: 24px;
     transition: color 0.2s var(--ease);
 }
-.auth-logo svg { color: var(--accent-color); }
+.auth-logo img { border-radius: 6px; }
 .auth-logo:hover { color: var(--accent-color); }
 
 .auth-container {

@@ -15,6 +15,7 @@ class SessionData(BaseModel):
     last_active: datetime
     ip_address: str
     user_agent: str
+    is_admin: bool = False
 
 
 class SessionManager:
@@ -31,7 +32,7 @@ class SessionManager:
         self.redis = redis
         self.session_ttl = ttl
 
-    async def create_session(self, user_id: str, ip_address: str, user_agent: str) -> str:
+    async def create_session(self, user_id: str, ip_address: str, user_agent: str, is_admin: bool = False) -> str:
         """
         Create a new session.
 
@@ -51,6 +52,7 @@ class SessionManager:
             last_active=datetime.utcnow(),
             ip_address=ip_address,
             user_agent=user_agent,
+            is_admin=is_admin,
         )
 
         await self.redis.setex(f"session:{session_id}", self.session_ttl, session_data.model_dump_json())

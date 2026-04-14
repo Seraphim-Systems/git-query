@@ -14,6 +14,14 @@ import numpy as np
 import pytest
 import pytest_asyncio
 
+pytest.importorskip(
+    "torch", reason="Recommender tests require optional torch dependency"
+)
+pytest.importorskip(
+    "sentence_transformers",
+    reason="Recommender tests require optional sentence-transformers dependency",
+)
+
 from src.recommender.models import (
     ABTestConfig,
     ModelMetadata,
