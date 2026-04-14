@@ -264,6 +264,7 @@ app.include_router(repos.router, prefix="/api")
 # MLFlow UI proxy - admin-only, proxied to internal git-query-mlflow container
 app.include_router(mlflow_proxy.router, prefix="/mlflow", tags=["MLFlow"])
 app.include_router(mlflow_proxy.static_router, tags=["MLFlow"])
+app.include_router(mlflow_proxy.ajax_router, tags=["MLFlow"])
 
 
 # Recommender admin proxy — forward /api/admin/models/* to the recommender service

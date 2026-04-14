@@ -79,6 +79,7 @@ def _build_test_app():
     app = FastAPI()
     app.include_router(mlflow_proxy.router, prefix="/mlflow")
     app.include_router(mlflow_proxy.static_router)
+    app.include_router(mlflow_proxy.ajax_router)
     return app
 
 
@@ -343,3 +344,65 @@ def test_proxy_response_drops_representation_headers(monkeypatch):
         k.lower(): v for k, v in DummyAsyncClient.requests[0]["headers"].items()
     }
     assert normalized_forward_headers.get("accept-encoding") == "identity"
+
+
+def test_ajax_api_proxy_routes_to_mlflow(monkeypatch):
+    monkeypatch.setattr(mlflow_proxy, "require_admin", _allow_admin)
+    monkeypatch.setattr(mlflow_proxy.httpx, "AsyncClient", DummyAsyncClient)
+    monkeypatch.setattr(
+        mlflow_proxy,
+        "MLFLOW_INTERNAL_URLS",
+        ("http://git-query-mlflow:5000",),
+    )
+
+    DummyAsyncClient.requests = []
+    DummyAsyncClient.fail_hosts = set()
+    DummyAsyncClient.status_by_prefix = {}
+    DummyAsyncClient.content_by_prefix = {}
+    DummyAsyncClient.content_type_by_prefix = {}
+    DummyAsyncClient.response_headers_by_prefix = {}
+
+    app = _build_test_app()
+    client = TestClient(app)
+
+    response = client.get("/ajax-api/2.0/mlflow/experiments/search?max_results=20000")
+
+    assert response.status_code == 200
+    assert (
+        DummyAsyncClient.requests[0]["url"]
+        == "http://git-query-mlflow:5000/ajax-api/2.0/mlflow/experiments/search?max_results=20000"
+    )
+
+
+def test_ajax_api_proxy_falls_back_to_prefixed_route(monkeypatch):
+    monkeypatch.setattr(mlflow_proxy, "require_admin", _allow_admin)
+    monkeypatch.setattr(mlflow_proxy.httpx, "AsyncClient", DummyAsyncClient)
+    monkeypatch.setattr(
+        mlflow_proxy,
+        "MLFLOW_INTERNAL_URLS",
+        ("http://git-query-mlflow:5000",),
+    )
+
+    DummyAsyncClient.requests = []
+    DummyAsyncClient.fail_hosts = set()
+    DummyAsyncClient.status_by_prefix = {
+        "http://git-query-mlflow:5000/ajax-api": 404,
+    }
+    DummyAsyncClient.content_by_prefix = {}
+    DummyAsyncClient.content_type_by_prefix = {}
+    DummyAsyncClient.response_headers_by_prefix = {}
+
+    app = _build_test_app()
+    client = TestClient(app)
+
+    response = client.get("/ajax-api/2.0/mlflow/experiments/search")
+
+    assert response.status_code == 200
+    assert (
+        DummyAsyncClient.requests[0]["url"]
+        == "http://git-query-mlflow:5000/ajax-api/2.0/mlflow/experiments/search"
+    )
+    assert (
+        DummyAsyncClient.requests[1]["url"]
+        == "http://git-query-mlflow:5000/mlflow/ajax-api/2.0/mlflow/experiments/search"
+    )

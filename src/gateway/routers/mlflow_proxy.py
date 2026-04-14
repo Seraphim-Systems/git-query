@@ -53,6 +53,7 @@ _METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 
 router = APIRouter(tags=["MLFlow"])
 static_router = APIRouter(tags=["MLFlow"])
+ajax_router = APIRouter(tags=["MLFlow"])
 
 _CONDITIONAL_CACHE_HEADERS = frozenset({"if-none-match", "if-modified-since"})
 
@@ -105,6 +106,28 @@ def _build_static_targets(base_url: str, path: str, query: str) -> tuple[str, ..
         "/mlflow/static-files"
         if not normalized_path
         else f"/mlflow/static-files/{normalized_path}"
+    )
+
+    candidate_paths = [direct_path]
+    if prefixed_path != direct_path:
+        candidate_paths.append(prefixed_path)
+
+    targets: list[str] = []
+    for upstream_path in candidate_paths:
+        target = f"{base_url}{upstream_path}"
+        if query:
+            target = f"{target}?{query}"
+        targets.append(target)
+    return tuple(targets)
+
+
+def _build_ajax_targets(base_url: str, path: str, query: str) -> tuple[str, ...]:
+    normalized_path = path.lstrip("/")
+    direct_path = "/ajax-api" if not normalized_path else f"/ajax-api/{normalized_path}"
+    prefixed_path = (
+        "/mlflow/ajax-api"
+        if not normalized_path
+        else f"/mlflow/ajax-api/{normalized_path}"
     )
 
     candidate_paths = [direct_path]
@@ -240,6 +263,16 @@ async def _proxy_static(request: Request, path: str) -> Response:
     )
 
 
+async def _proxy_ajax(request: Request, path: str) -> Response:
+    """Proxy MLFlow AJAX API calls used by the MLflow web UI."""
+    await require_admin(request)
+
+    return await _forward_with_fallback(
+        request,
+        lambda base_url, query: _build_ajax_targets(base_url, path, query),
+    )
+
+
 @router.api_route("", methods=_METHODS)
 @router.api_route("/", methods=_METHODS)
 async def proxy_mlflow_root(request: Request):
@@ -264,3 +297,16 @@ async def proxy_mlflow_static_root(request: Request):
 async def proxy_mlflow_static(path: str, request: Request):
     """Proxy /static-files/{path} to the MLFlow tracking server static files."""
     return await _proxy_static(request, path)
+
+
+@ajax_router.api_route("/ajax-api", methods=_METHODS)
+@ajax_router.api_route("/ajax-api/", methods=_METHODS)
+async def proxy_mlflow_ajax_root(request: Request):
+    """Proxy /ajax-api and /ajax-api/ to MLFlow UI AJAX API roots."""
+    return await _proxy_ajax(request, "")
+
+
+@ajax_router.api_route("/ajax-api/{path:path}", methods=_METHODS)
+async def proxy_mlflow_ajax(path: str, request: Request):
+    """Proxy /ajax-api/{path} to MLFlow UI AJAX API endpoints."""
+    return await _proxy_ajax(request, path)

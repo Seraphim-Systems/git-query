@@ -15,6 +15,7 @@ GATEWAY_API_PREFIXES = (
     "/redoc",
     "/mlflow",
     "/static-files",
+    "/ajax-api",
     "/admin",
 )
 
@@ -52,4 +53,5 @@ SESSION_PATHS = [
     "/api/chat",  # Alias used by the browser frontend
     "/mlflow",  # MLFlow UI proxy - admin session required
     "/static-files",  # MLFlow static bundle fallback paths
+    "/ajax-api",  # MLFlow AJAX API paths used by frontend UI
 ]
