@@ -265,6 +265,47 @@ app.include_router(repos.router, prefix="/api")
 app.include_router(mlflow_proxy.router, prefix="/mlflow", tags=["MLFlow"])
 
 
+# Recommender admin proxy — forward /api/admin/models/* to the recommender service
+@app.api_route("/api/admin/models/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def proxy_recommender_admin(path: str, request: Request):
+    """Proxy /api/admin/models/* to the recommender service admin endpoints."""
+    import httpx
+    from fastapi.responses import Response
+
+    target = f"{settings.recommender_url}/admin/models/{path}"
+    body = await request.body()
+    forward_headers = {
+        k: v
+        for k, v in request.headers.items()
+        if k.lower() not in ("host", "content-length")
+    }
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        try:
+            resp = await client.request(
+                method=request.method,
+                url=target,
+                headers=forward_headers,
+                params=request.query_params,
+                content=body,
+            )
+        except httpx.ConnectError:
+            logger.error("Cannot connect to recommender at %s", settings.recommender_url)
+            return Response(content=b"Recommender unavailable", status_code=503)
+        except httpx.TimeoutException:
+            logger.error("Timeout proxying to recommender admin at %s", target)
+            return Response(content=b"Recommender timeout", status_code=504)
+
+    excluded = {"transfer-encoding", "connection", "keep-alive", "te", "trailers", "upgrade"}
+    resp_headers = {k: v for k, v in resp.headers.items() if k.lower() not in excluded}
+    return Response(
+        content=resp.content,
+        status_code=resp.status_code,
+        headers=resp_headers,
+        media_type=resp.headers.get("content-type"),
+    )
+
+
 # Health check
 @app.get("/health")
 async def health_check(request: Request):

@@ -14,6 +14,7 @@ GATEWAY_API_PREFIXES = (
     "/openapi.json",
     "/redoc",
     "/mlflow",
+    "/admin",
 )
 
 # Public API endpoints that don't require authentication or an API key.

@@ -160,7 +160,11 @@ async def main() -> None:
     from mlops.model_promoter import ModelPromoter
 
     with tracker.start_run(run_name="lgbm-retrain"):
-        lgbm_result = await pipeline.run()
+        try:
+            lgbm_result = await pipeline.run()
+        except ValueError as e:
+            logger.warning("LightGBM training skipped — insufficient training data: %s", e)
+            return
 
         model_id = lgbm_result.get("model_id") if isinstance(lgbm_result, dict) else None
         model_path = lgbm_result.get("model_path") if isinstance(lgbm_result, dict) else None
