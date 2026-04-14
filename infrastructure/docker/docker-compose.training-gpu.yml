@@ -1,0 +1,12 @@
+# GPU override for training — include only on hosts with NVIDIA Container Toolkit
+# Usage: docker compose -f docker-compose.base.yml -f docker-compose.training.yml -f docker-compose.training-gpu.yml up
+
+services:
+  training:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
