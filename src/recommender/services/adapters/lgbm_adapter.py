@@ -50,8 +50,5 @@ class LGBMAdapter(BaseRerankerAdapter):
         df = pd.DataFrame(rows)
         X = self._fe.extract_all(df, query=query)
         if self._feature_cols is not None:
-            try:
-                X = X[self._feature_cols]
-            except KeyError as e:
-                logger.warning("Feature column filter failed, using all features: %s", e)
+            X = X.reindex(columns=self._feature_cols, fill_value=0)
         return self._model.predict(X.values).tolist()
