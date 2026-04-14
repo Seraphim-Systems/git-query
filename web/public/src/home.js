@@ -394,7 +394,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Text part
         const textEl = document.createElement('div');
-        textEl.textContent = text;
+        if (typeof marked !== 'undefined') {
+            textEl.innerHTML = marked.parse(text);
+        } else {
+            textEl.textContent = text;
+        }
         contentWrapper.appendChild(textEl);
 
         // Top-3 repo cards
@@ -554,7 +558,11 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const content = document.createElement('div');
         content.className = 'message-content';
-        content.textContent = text;
+        if (type === 'assistant' && typeof marked !== 'undefined') {
+            content.innerHTML = marked.parse(text);
+        } else {
+            content.textContent = text;
+        }
         
         messageDiv.appendChild(avatar);
         messageDiv.appendChild(content);
@@ -730,7 +738,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     
                     const content = document.createElement('div');
                     content.className = 'message-content';
-                    content.textContent = msg.content;
+                    if (msg.role === 'assistant' && typeof marked !== 'undefined') {
+                        content.innerHTML = marked.parse(msg.content);
+                    } else {
+                        content.textContent = msg.content;
+                    }
                     
                     messageDiv.appendChild(avatar);
                     messageDiv.appendChild(content);
