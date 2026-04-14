@@ -61,6 +61,11 @@ def _build_targets(base_url: str, path: str, query: str) -> tuple[str, ...]:
     if plain_path != prefixed_path:
         candidate_paths.append(plain_path)
 
+    # Compatibility fallback for older/misconfigured deployments where MLflow
+    # UI root is served under /mlflow/static-files.
+    if not normalized_path:
+        candidate_paths.append("/mlflow/static-files")
+
     targets: list[str] = []
     for upstream_path in candidate_paths:
         target = f"{base_url}{upstream_path}"

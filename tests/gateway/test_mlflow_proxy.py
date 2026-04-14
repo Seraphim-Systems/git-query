@@ -130,3 +130,33 @@ def test_proxy_retries_without_prefix_after_prefixed_404(monkeypatch):
     assert response.status_code == 200
     assert DummyAsyncClient.requests[0]["url"] == "http://git-query-mlflow:5000/mlflow"
     assert DummyAsyncClient.requests[1]["url"] == "http://git-query-mlflow:5000/"
+
+
+def test_proxy_retries_static_files_root_after_prefixed_and_plain_404(monkeypatch):
+    monkeypatch.setattr(mlflow_proxy, "require_admin", _allow_admin)
+    monkeypatch.setattr(mlflow_proxy.httpx, "AsyncClient", DummyAsyncClient)
+    monkeypatch.setattr(
+        mlflow_proxy,
+        "MLFLOW_INTERNAL_URLS",
+        ("http://git-query-mlflow:5000",),
+    )
+
+    DummyAsyncClient.requests = []
+    DummyAsyncClient.fail_hosts = set()
+    DummyAsyncClient.status_by_prefix = {
+        "http://git-query-mlflow:5000/mlflow": 404,
+        "http://git-query-mlflow:5000/": 404,
+    }
+
+    app = _build_test_app()
+    client = TestClient(app)
+
+    response = client.get("/mlflow/")
+
+    assert response.status_code == 200
+    assert DummyAsyncClient.requests[0]["url"] == "http://git-query-mlflow:5000/mlflow"
+    assert DummyAsyncClient.requests[1]["url"] == "http://git-query-mlflow:5000/"
+    assert (
+        DummyAsyncClient.requests[2]["url"]
+        == "http://git-query-mlflow:5000/mlflow/static-files"
+    )
