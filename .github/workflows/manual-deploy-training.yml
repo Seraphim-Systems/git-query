@@ -1,4 +1,4 @@
-name: Deploy Training Pipeline (Manual)
+name: "Manual — Deploy Training Pipeline"
 
 # Single Responsibility: Run the training pipeline
 # Triggered: Manual workflow dispatch

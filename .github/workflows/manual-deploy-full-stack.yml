@@ -1,18 +1,17 @@
-name: Deploy to Production
+name: "Manual — Deploy Full Stack"
 
-# Single Responsibility: Deploy full stack to production
-# Triggered: Push to 'prod' branch
+# Single Responsibility: Deploy full stack manually from selected branch
+# Triggered: Manual workflow dispatch
 # Services: Runtime stack only (databases, gateway, recommender, MCP, web)
 
 on:
-  push:
-    branches: [prod]
+  workflow_dispatch:
 
 jobs:
   deploy:
     uses: ./.github/workflows/reusable-deploy.yml
     with:
-      compose_files: "-f docker-compose.base.yml -f docker-compose.databases.yml -f docker-compose.gateway.yml -f docker-compose.app.yml -f docker-compose.web.yml -f docker-compose.prod.yml"
+      compose_files: "-f docker-compose.base.yml -f docker-compose.databases.yml -f docker-compose.gateway.yml -f docker-compose.app.yml -f docker-compose.mlflow.yml -f docker-compose.web.yml -f docker-compose.prod.yml"
       services: ""
       force_rebuild_services: "web"
       branch: ${{ github.ref_name }}

@@ -1,4 +1,4 @@
-name: Workflow for Production Deployment
+name: "Automatic — Workflow for Production Deployment (prod branch)"
 
 # Single Responsibility: Deploy full stack to production
 # Triggered: Push to 'prod' branch

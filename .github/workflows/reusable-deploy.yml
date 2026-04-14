@@ -1,4 +1,4 @@
-name: Reusable Deploy Workflow
+name: "Reusable — Deploy Workflow"
 
 # Single Responsibility: Handle common deployment steps across all services
 # Used by: deploy-infrastructure.yml, deploy-app.yml, deploy-reco.yml, deploy-training.yml, deploy-mcp.yml

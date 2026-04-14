@@ -1,4 +1,4 @@
-name: Run Clean Repositories Population
+name: "Manual — Run Clean Repositories Population"
 
 # Single Responsibility: run clean repositories population script on server
 # Triggered: Manual workflow dispatch
@@ -242,18 +242,18 @@ jobs:
 
             docker logs -f \"\$POP_CONTAINER\" >> \"\$LOG_FILE\" 2>&1 || true
             docker wait \"\$POP_CONTAINER\" >/dev/null 2>&1 || true
-            EXIT_CODE=\"\$(docker inspect \"\$POP_CONTAINER\" --format '{{.State.ExitCode}}' 2>/dev/null || echo 1)\"
+            EXIT_CODE="\$(docker inspect \"\$POP_CONTAINER\" --format '{{.State.ExitCode}}' 2>/dev/null || echo 1)"
 
             {
               echo ""
               echo "[watcher] Container finished: \$POP_CONTAINER"
               echo "[watcher] Exit code: \$EXIT_CODE"
-              if [ -f \"\$CHECKPOINT_FILE\" ]; then
+              if [ -f "\$CHECKPOINT_FILE" ]; then
                 echo "[watcher] Checkpoint present: \$CHECKPOINT_FILE"
               else
                 echo "[watcher] Checkpoint missing: \$CHECKPOINT_FILE"
               fi
-              if [ -f \"\$EDA_FILE\" ]; then
+              if [ -f "\$EDA_FILE" ]; then
                 echo "[watcher] EDA report present: \$EDA_FILE"
               else
                 echo "[watcher] EDA report missing: \$EDA_FILE"

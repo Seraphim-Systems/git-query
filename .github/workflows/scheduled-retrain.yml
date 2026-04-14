@@ -1,4 +1,4 @@
-name: Scheduled Model Retraining
+name: "Scheduled — Model Retraining"
 
 permissions:
   contents: read
