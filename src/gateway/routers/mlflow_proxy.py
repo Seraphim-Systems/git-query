@@ -45,6 +45,10 @@ _HOP_BY_HOP = frozenset(
     }
 )
 
+# Headers tied to upstream payload representation that can become invalid
+# once httpx normalizes/decodes response content.
+_UNSAFE_PAYLOAD_HEADERS = frozenset({"content-length", "content-encoding"})
+
 _METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 
 router = APIRouter(tags=["MLFlow"])
@@ -130,6 +134,9 @@ async def _forward_with_fallback(
     host = request.headers.get("host")
     if host:
         forward_headers.setdefault("x-forwarded-host", host)
+    # Ask upstream for identity encoding. Even if upstream still compresses,
+    # we sanitize representation headers before returning to clients.
+    forward_headers["accept-encoding"] = "identity"
 
     # Do not forward conditional cache validators for /mlflow requests.
     # We need a full HTML body so asset URL rewriting can run reliably.
@@ -191,6 +198,8 @@ async def _forward_with_fallback(
     resp_headers = {
         k: v for k, v in response.headers.items() if k.lower() not in _HOP_BY_HOP
     }
+    for header_name in _UNSAFE_PAYLOAD_HEADERS:
+        resp_headers.pop(header_name, None)
 
     if request.url.path.startswith("/mlflow") and content_type:
         if "text/html" in content_type.lower():
@@ -200,8 +209,8 @@ async def _forward_with_fallback(
             resp_headers.pop("last-modified", None)
 
     if content != response.content:
-        # Let FastAPI recalculate content length after body rewrite.
-        resp_headers.pop("content-length", None)
+        # Keep cache metadata coherent when HTML body gets rewritten.
+        resp_headers.pop("etag", None)
 
     return Response(
         content=content,

@@ -10,6 +10,7 @@ class DummyAsyncClient:
     status_by_prefix = {}
     content_by_prefix = {}
     content_type_by_prefix = {}
+    response_headers_by_prefix = {}
 
     def __init__(self, *args, **kwargs):
         self.args = args
@@ -58,10 +59,19 @@ class DummyAsyncClient:
                 content_type = override_content_type
                 break
 
+        response_headers = {"content-type": content_type}
+        for (
+            prefix,
+            override_headers,
+        ) in self.__class__.response_headers_by_prefix.items():
+            if str(url).startswith(prefix):
+                response_headers.update(override_headers)
+                break
+
         return mlflow_proxy.httpx.Response(
             status_code=status_code,
             content=content,
-            headers={"content-type": content_type},
+            headers=response_headers,
         )
 
 
@@ -90,6 +100,7 @@ def test_proxy_preserves_mlflow_prefix(monkeypatch):
     DummyAsyncClient.status_by_prefix = {}
     DummyAsyncClient.content_by_prefix = {}
     DummyAsyncClient.content_type_by_prefix = {}
+    DummyAsyncClient.response_headers_by_prefix = {}
 
     app = _build_test_app()
     client = TestClient(app)
@@ -114,6 +125,7 @@ def test_proxy_falls_back_to_second_upstream_on_connect_error(monkeypatch):
     DummyAsyncClient.status_by_prefix = {}
     DummyAsyncClient.content_by_prefix = {}
     DummyAsyncClient.content_type_by_prefix = {}
+    DummyAsyncClient.response_headers_by_prefix = {}
 
     app = _build_test_app()
     client = TestClient(app)
@@ -145,6 +157,7 @@ def test_proxy_retries_without_prefix_after_prefixed_404(monkeypatch):
     DummyAsyncClient.status_by_prefix = {"http://git-query-mlflow:5000/mlflow": 404}
     DummyAsyncClient.content_by_prefix = {}
     DummyAsyncClient.content_type_by_prefix = {}
+    DummyAsyncClient.response_headers_by_prefix = {}
 
     app = _build_test_app()
     client = TestClient(app)
@@ -173,6 +186,7 @@ def test_proxy_retries_static_files_root_after_prefixed_and_plain_404(monkeypatc
     }
     DummyAsyncClient.content_by_prefix = {}
     DummyAsyncClient.content_type_by_prefix = {}
+    DummyAsyncClient.response_headers_by_prefix = {}
 
     app = _build_test_app()
     client = TestClient(app)
@@ -204,6 +218,7 @@ def test_static_files_proxy_falls_back_to_prefixed_static_path(monkeypatch):
     }
     DummyAsyncClient.content_by_prefix = {}
     DummyAsyncClient.content_type_by_prefix = {}
+    DummyAsyncClient.response_headers_by_prefix = {}
 
     app = _build_test_app()
     client = TestClient(app)
@@ -239,6 +254,7 @@ def test_proxy_rewrites_html_static_files_to_mlflow_prefix(monkeypatch):
     DummyAsyncClient.content_type_by_prefix = {
         "http://git-query-mlflow:5000/mlflow": "text/html"
     }
+    DummyAsyncClient.response_headers_by_prefix = {}
 
     app = _build_test_app()
     client = TestClient(app)
@@ -267,6 +283,7 @@ def test_proxy_strips_conditional_cache_headers_for_mlflow_html(monkeypatch):
     DummyAsyncClient.content_type_by_prefix = {
         "http://git-query-mlflow:5000/mlflow": "text/html"
     }
+    DummyAsyncClient.response_headers_by_prefix = {}
 
     app = _build_test_app()
     client = TestClient(app)
@@ -285,3 +302,44 @@ def test_proxy_strips_conditional_cache_headers_for_mlflow_html(monkeypatch):
     assert "if-modified-since" not in forward_headers
     assert response.headers.get("cache-control") == "no-store, max-age=0"
     assert "/mlflow/static-files/static/js/main.js" in response.content.decode("utf-8")
+
+
+def test_proxy_response_drops_representation_headers(monkeypatch):
+    monkeypatch.setattr(mlflow_proxy, "require_admin", _allow_admin)
+    monkeypatch.setattr(mlflow_proxy.httpx, "AsyncClient", DummyAsyncClient)
+    monkeypatch.setattr(
+        mlflow_proxy,
+        "MLFLOW_INTERNAL_URLS",
+        ("http://git-query-mlflow:5000",),
+    )
+
+    DummyAsyncClient.requests = []
+    DummyAsyncClient.fail_hosts = set()
+    DummyAsyncClient.status_by_prefix = {}
+    DummyAsyncClient.content_by_prefix = {
+        "http://git-query-mlflow:5000/static-files": b"console.log('ok');"
+    }
+    DummyAsyncClient.content_type_by_prefix = {
+        "http://git-query-mlflow:5000/static-files": "application/javascript"
+    }
+    DummyAsyncClient.response_headers_by_prefix = {
+        "http://git-query-mlflow:5000/static-files": {
+            "content-encoding": "gzip",
+            "content-length": "9",
+        }
+    }
+
+    app = _build_test_app()
+    client = TestClient(app)
+
+    response = client.get("/static-files/static/js/main.js")
+
+    assert response.status_code == 200
+    assert response.headers.get("content-type", "").startswith("application/javascript")
+    normalized_response_headers = {k.lower(): v for k, v in response.headers.items()}
+    assert "content-encoding" not in normalized_response_headers
+
+    normalized_forward_headers = {
+        k.lower(): v for k, v in DummyAsyncClient.requests[0]["headers"].items()
+    }
+    assert normalized_forward_headers.get("accept-encoding") == "identity"
