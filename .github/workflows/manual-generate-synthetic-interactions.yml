@@ -113,11 +113,11 @@ jobs:
           REPO_PATH="/home/$HETZNER_USER/git-query"
           cd "\$REPO_PATH"
 
-          echo "Triggering LGBM retraining via docker-compose..."
+          echo "Triggering LGBM-only retraining via docker-compose..."
           docker compose \
             -f infrastructure/docker/docker-compose.base.yml \
             -f infrastructure/docker/docker-compose.training.yml \
-            run --rm training
+            run --rm -e ENABLE_EMBEDDING_TRAINING=false training
 
           echo "Retraining complete."
           ENDSSH

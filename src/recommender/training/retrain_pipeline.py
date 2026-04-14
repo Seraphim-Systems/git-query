@@ -106,29 +106,33 @@ async def main() -> None:
         )
 
     # --- Step 1: Embedding indexing ---
-    logger.info("=== Step 1: Embedding indexing ===")
+    enable_embedding = os.getenv("ENABLE_EMBEDDING_TRAINING", "true").lower() != "false"
+    if not enable_embedding:
+        logger.info("ENABLE_EMBEDDING_TRAINING=false — skipping embedding indexing step.")
+    else:
+        logger.info("=== Step 1: Embedding indexing ===")
 
-    from training.pipelines.embedding_indexing_pipeline import EmbeddingIndexingPipeline
+        from training.pipelines.embedding_indexing_pipeline import EmbeddingIndexingPipeline
 
-    n_workers_env = os.getenv("N_WORKERS")
-    n_workers = int(n_workers_env) if n_workers_env else (os.cpu_count() or 1)
+        n_workers_env = os.getenv("N_WORKERS")
+        n_workers = int(n_workers_env) if n_workers_env else (os.cpu_count() or 1)
 
-    await EmbeddingIndexingPipeline(
-        api_base_url=api_url,
-        api_key=api_key,
-        model_name=os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"),
-        models_dir=models_dir,
-        data_cache_dir=os.getenv("DATA_CACHE_DIR", "/app/training_data"),
-        batch_size=int(os.getenv("BATCH_SIZE", "32")),
-        fetch_batch_size=int(os.getenv("FETCH_BATCH_SIZE", "500")),
-        max_repos=max_repos,
-        skip_if_no_new_data=os.getenv("SKIP_IF_NO_NEW_DATA", "true").lower() == "true",
-        use_chunked=os.getenv("USE_CHUNKED_PIPELINE", "true").lower() == "true",
-        chunk_size=int(os.getenv("CHUNK_SIZE", "100000")),
-        n_workers=n_workers,
-    ).run()
+        await EmbeddingIndexingPipeline(
+            api_base_url=api_url,
+            api_key=api_key,
+            model_name=os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"),
+            models_dir=models_dir,
+            data_cache_dir=os.getenv("DATA_CACHE_DIR", "/app/training_data"),
+            batch_size=int(os.getenv("BATCH_SIZE", "32")),
+            fetch_batch_size=int(os.getenv("FETCH_BATCH_SIZE", "500")),
+            max_repos=max_repos,
+            skip_if_no_new_data=os.getenv("SKIP_IF_NO_NEW_DATA", "true").lower() == "true",
+            use_chunked=os.getenv("USE_CHUNKED_PIPELINE", "true").lower() == "true",
+            chunk_size=int(os.getenv("CHUNK_SIZE", "100000")),
+            n_workers=n_workers,
+        ).run()
 
-    logger.info("Embedding indexing complete.")
+        logger.info("Embedding indexing complete.")
 
     # --- Step 2: LightGBM reranker ---
     enable_lgbm = os.getenv("ENABLE_LGBM_TRAINING", "true").lower() != "false"
