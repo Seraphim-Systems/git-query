@@ -380,6 +380,51 @@ document.addEventListener('DOMContentLoaded', () => {
         return hasRecommendWord && hasRepoWord;
     }
 
+    function stripMarkdownToPlainText(text) {
+        return text
+            .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/gi, '$1')
+            .replace(/\*\*([^*]+)\*\*/g, '$1')
+            .replace(/__([^_]+)__/g, '$1')
+            .replace(/`([^`]+)`/g, '$1')
+            .replace(/^#{1,6}\s+/gm, '')
+            .replace(/^\s*>\s?/gm, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    // Recommendation responses can include markdown repo lists; UI should only show concise text.
+    function sanitizeRecommendationResponseText(rawText) {
+        if (!rawText || typeof rawText !== 'string') {
+            return 'Here are some repositories I found:';
+        }
+
+        const markers = [
+            /\n\s*\d+\.\s*\*\*\[[^\]]+\]\((?:https?:\/\/)?github\.com\/[^\s)]+\)\*\*/i,
+            /\n\s*\d+\.\s*\[[^\]]+\]\((?:https?:\/\/)?github\.com\/[^\s)]+\)/i,
+            /\n\s*[-*]\s*\*\*\[[^\]]+\]\((?:https?:\/\/)?github\.com\/[^\s)]+\)\*\*/i,
+            /\n\s*[-*]\s*\*\*(description|language|stars?|license|forks?)\*\*:/i,
+            /\n\s*[-*]\s*(description|language|stars?|license|forks?):/i,
+            /\n\s*(description|language|stars?|license|forks?):/i,
+        ];
+
+        let cutoff = rawText.length;
+        markers.forEach((pattern) => {
+            const match = rawText.match(pattern);
+            if (match && typeof match.index === 'number') {
+                cutoff = Math.min(cutoff, match.index);
+            }
+        });
+
+        let intro = rawText.slice(0, cutoff);
+
+        // Handle single-line list formats with no newline before item "1.".
+        intro = intro.replace(/\s+\d+\.\s*\*\*\[[^\]]+\]\((?:https?:\/\/)?github\.com\/[^\s)]+\)\*\*[\s\S]*$/i, '');
+        intro = intro.replace(/\s+\d+\.\s*\[[^\]]+\]\((?:https?:\/\/)?github\.com\/[^\s)]+\)[\s\S]*$/i, '');
+
+        intro = stripMarkdownToPlainText(intro);
+        return intro || 'Here are some repositories I found:';
+    }
+
     // Add AI message that includes inline repo cards
     function addMessageWithReposToUI(text, topRepos, moreRepos, query = '', variant = 'hybrid') {
         const messageDiv = document.createElement('div');
@@ -508,11 +553,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     allRepos = await enrichRepoIds(recoData.recommendations || recoData.results || []);
                 }
 
+                const uiResponse = sanitizeRecommendationResponseText(aiResponse);
                 lastQuery = message;
                 lastVariant = recoVariant;
                 removeTypingIndicator();
-                addMessageWithReposToUI(aiResponse, allRepos.slice(0, 3), allRepos.slice(3), message, recoVariant);
-                updateChatHistory(currentChatId, aiResponse);
+                addMessageWithReposToUI(uiResponse, allRepos.slice(0, 3), allRepos.slice(3), message, recoVariant);
+                updateChatHistory(currentChatId, uiResponse);
             } else {
                 // Regular chat — no repo results
                 const response = await fetch(`${API_BASE}/chat/`, {
