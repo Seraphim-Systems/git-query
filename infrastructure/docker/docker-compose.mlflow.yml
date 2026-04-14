@@ -26,7 +26,10 @@ services:
       - MLFLOW_BACKEND_STORE_URI=${MLFLOW_BACKEND_STORE_URI:-sqlite:////mlflow/mlflow.db}
       - MLFLOW_DEFAULT_ARTIFACT_ROOT=${MLFLOW_DEFAULT_ARTIFACT_ROOT:-/mlflow/artifacts}
     networks:
-      - internal-network
+      internal-network:
+        aliases:
+          - mlflow
+          - git-query-mlflow
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/2.0/mlflow/experiments/list').read()"]
@@ -40,8 +43,3 @@ volumes:
     name: git-query-mlflow-runs
   mlflow-artifacts:
     name: git-query-mlflow-artifacts
-
-networks:
-  internal-network:
-    external: true
-    name: git-query-internal-network
