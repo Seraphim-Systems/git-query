@@ -8,6 +8,8 @@ services:
       dockerfile: infrastructure/docker/Dockerfile.mlflow
     image: git-query-mlflow:latest
     container_name: git-query-mlflow
+    ports:
+      - "5000:5000"
     expose:
       - "5000"
       - "80"
@@ -18,10 +20,8 @@ services:
       mlflow server
       --backend-store-uri ${MLFLOW_BACKEND_STORE_URI:-sqlite:////mlflow/mlflow.db}
       --default-artifact-root ${MLFLOW_DEFAULT_ARTIFACT_ROOT:-/mlflow/artifacts}
-      --static-prefix /mlflow/static-files
       --host 0.0.0.0
       --port 5000
-      --root-path /mlflow
     environment:
       - MLFLOW_BACKEND_STORE_URI=${MLFLOW_BACKEND_STORE_URI:-sqlite:////mlflow/mlflow.db}
       - MLFLOW_DEFAULT_ARTIFACT_ROOT=${MLFLOW_DEFAULT_ARTIFACT_ROOT:-/mlflow/artifacts}
