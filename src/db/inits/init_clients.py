@@ -136,6 +136,7 @@ async def startup_db_clients():
             api_key=qdrant_api_key or None,
             timeout=10,
             check_compatibility=False,
+            prefer_grpc=False,
         )
         qc.get_collections()
         _assign(clients_mod, "qdrant_client", qc)

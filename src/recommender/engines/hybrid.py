@@ -56,12 +56,15 @@ class HybridRetrievalEngine(RecommendationEngine):
         # Step 4: Rerank top candidates if reranker available
         if self.reranker_service and len(filtered_results) > 0:
             top_candidates = filtered_results[: settings.hybrid_search_top_k]
-            reranked = await self.reranker_service.rerank(
-                query=request.query,
-                candidates=top_candidates,
-                top_k=settings.rerank_top_k,
-            )
-            filtered_results = reranked + filtered_results[settings.hybrid_search_top_k :]
+            try:
+                reranked = await self.reranker_service.rerank(
+                    query=request.query,
+                    candidates=top_candidates,
+                    top_k=settings.rerank_top_k,
+                )
+                filtered_results = reranked + filtered_results[settings.hybrid_search_top_k :]
+            except RuntimeError as e:
+                logger.warning("Reranker unavailable, skipping rerank step: %s", e)
 
         # Step 5: Return top K
         final_results = filtered_results[: request.top_k]
@@ -125,10 +128,14 @@ class HybridRetrievalEngine(RecommendationEngine):
             # Requires a text index on name, description, and topics
             query_filter["$text"] = {"$search": request.query}
 
-        repos = await db_manager.search_repositories(
-            query_filter=query_filter,
-            limit=settings.hybrid_search_top_k,
-        )
+        try:
+            repos = await db_manager.search_repositories(
+                query_filter=query_filter,
+                limit=settings.hybrid_search_top_k,
+            )
+        except Exception as e:
+            logger.warning("Keyword search failed (text index may be missing), skipping: %s", e)
+            return []
 
         return [
             {
