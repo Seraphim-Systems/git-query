@@ -1,3 +1,5 @@
+import gzip
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -318,7 +320,7 @@ def test_proxy_response_drops_representation_headers(monkeypatch):
     DummyAsyncClient.fail_hosts = set()
     DummyAsyncClient.status_by_prefix = {}
     DummyAsyncClient.content_by_prefix = {
-        "http://git-query-mlflow:5000/static-files": b"console.log('ok');"
+        "http://git-query-mlflow:5000/static-files": gzip.compress(b"console.log('ok');")
     }
     DummyAsyncClient.content_type_by_prefix = {
         "http://git-query-mlflow:5000/static-files": "application/javascript"
