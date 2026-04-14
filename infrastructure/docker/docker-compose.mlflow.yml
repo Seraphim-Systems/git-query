@@ -30,13 +30,13 @@ services:
         aliases:
           - mlflow
           - git-query-mlflow
-    restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/2.0/mlflow/experiments/list').read()"]
-      interval: 30s
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health').read()"]
+      interval: 10s
       timeout: 10s
-      retries: 3
+      retries: 5
       start_period: 120s
+    restart: unless-stopped
 
 volumes:
   mlflow-runs:
