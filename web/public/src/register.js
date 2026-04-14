@@ -72,6 +72,16 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     // Handle form submission
+    const toBoolean = (value) => {
+        if (typeof value === 'boolean') return value;
+        if (typeof value === 'string') {
+            const normalized = value.trim().toLowerCase();
+            return normalized === 'true' || normalized === '1' || normalized === 'yes';
+        }
+        if (typeof value === 'number') return value === 1;
+        return false;
+    };
+
     registerForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         
@@ -107,7 +117,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 localStorage.setItem('sessionId', data.session_id || ('session_' + Date.now()));
                 localStorage.setItem('userId', data.user_id || emailInput.value.trim());
                 localStorage.setItem('username', data.username || nameInput.value.trim());
-                localStorage.setItem('isAdmin', data.is_admin ? 'true' : 'false');
+                localStorage.setItem('isAdmin', String(toBoolean(data.is_admin)));
                 
                 // Redirect to home page
                 setTimeout(() => {

@@ -91,11 +91,11 @@ async def _proxy(request: Request, path: str) -> Response:
                     content=body,
                 )
                 break
-            except httpx.ConnectError:
-                logger.warning("Cannot connect to MLFlow at %s", base_url)
+            except httpx.ConnectError as exc:
+                logger.warning("Cannot connect to MLFlow at %s (%s)", base_url, exc)
                 connect_failures.append(base_url)
-            except httpx.TimeoutException:
-                logger.warning("Timeout proxying to MLFlow at %s", target)
+            except httpx.TimeoutException as exc:
+                logger.warning("Timeout proxying to MLFlow at %s (%s)", target, exc)
                 timeout_failures.append(target)
 
     if response is None:

@@ -107,6 +107,8 @@ jobs:
           # never run `docker compose down`, never remove volumes, never prune.
           # Ensure the external proxy network exists (used by the gateway service).
           docker network inspect proxy >/dev/null 2>&1 || docker network create proxy >/dev/null
+          # Ensure the shared internal application network exists.
+          docker network inspect git-query-internal-network >/dev/null 2>&1 || docker network create git-query-internal-network >/dev/null
           docker compose ${{ inputs.compose_files }} up -d --build ${{ inputs.services }}
           if [ -n "${{ inputs.force_rebuild_services }}" ]; then
             echo "Force rebuilding services: ${{ inputs.force_rebuild_services }}"
@@ -117,6 +119,10 @@ jobs:
           # (compose skips recreation when the image is cached and config hash matches
           # the previous container, so network changes may not be applied automatically).
           docker network connect proxy git-query-gateway 2>/dev/null || true
+          # Ensure core runtime containers are attached to the shared internal network
+          # even when compose reuses pre-existing containers.
+          docker network connect git-query-internal-network git-query-gateway 2>/dev/null || true
+          docker network connect git-query-internal-network git-query-mlflow 2>/dev/null || true
           sleep 5
           ENDSSH
 

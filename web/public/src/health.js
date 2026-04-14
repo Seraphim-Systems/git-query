@@ -279,7 +279,20 @@ class HealthMonitor {
 
 // Initialize health monitor when DOM is ready — admins only
 document.addEventListener('DOMContentLoaded', () => {
-    const isAdmin = localStorage.getItem('isAdmin') === 'true';
+    const readAdminFlag = () => {
+        const raw = localStorage.getItem('isAdmin');
+        if (raw === null) return false;
+        try {
+            const parsed = JSON.parse(raw);
+            if (typeof parsed === 'boolean') return parsed;
+        } catch (_err) {
+            // Keep compatibility with legacy string values in storage.
+        }
+        const normalized = String(raw).trim().toLowerCase();
+        return normalized === 'true' || normalized === '1' || normalized === 'yes';
+    };
+
+    const isAdmin = readAdminFlag();
     if (!isAdmin) return;
     // Only initialize on home page
     if (window.location.pathname.includes('home.html') ||
