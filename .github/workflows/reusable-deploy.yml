@@ -36,10 +36,10 @@ on:
         description: "Override the entire health check command (e.g. 'docker exec <container> curl -f http://localhost:<port>/health'). When set, health_check_url is ignored."
 
 jobs:
-  deploy:
-    name: Deploy Services
+  prepare-environment:
+    name: 1) Prepare environment
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
 
     steps:
       - name: Setup SSH
@@ -52,7 +52,7 @@ jobs:
       - name: Create environment file
         run: |
           ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
-          set -e
+          set -euo pipefail
           cat > /tmp/deploy.env << EOF
           DB_MONGODB_USER=${{ secrets.DB_MONGODB_USER }}
           DB_MONGODB_PASSWORD=${{ secrets.DB_MONGODB_PASSWORD }}
@@ -75,29 +75,64 @@ jobs:
           cat /tmp/deploy.env >> ~/.bashrc
           ENDSSH
 
+  sync-repository:
+    name: 2) Sync repository
+    needs: prepare-environment
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
       - name: Sync repository
         run: |
           ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
-          set -e
+          set -euo pipefail
           REPO_PATH="/home/${{ secrets.INFRA_HETZNER_USER }}/git-query"
+          TARGET_BRANCH="${{ inputs.branch }}"
           if [ -d "$REPO_PATH/.git" ]; then
             cd "$REPO_PATH"
-            git fetch origin
-            git checkout ${{ inputs.branch }} 2>/dev/null || git checkout -b ${{ inputs.branch }} origin/${{ inputs.branch }}
-            git pull --ff-only origin ${{ inputs.branch }}
+            git fetch --prune origin
+            if ! git show-ref --verify --quiet "refs/remotes/origin/$TARGET_BRANCH"; then
+              echo "Remote branch origin/$TARGET_BRANCH not found."
+              exit 1
+            fi
+            # Align local branch to remote tip to avoid ff-only divergence failures.
+            git checkout --detach "origin/$TARGET_BRANCH"
+            git branch -f "$TARGET_BRANCH" "origin/$TARGET_BRANCH"
+            git checkout "$TARGET_BRANCH"
             # Do not run git clean/reset here: persistent bind-mount data under
             # volumes/ must survive deployments and may be container-owned.
           else
-            git clone https://github.com/Seraphim-Systems/git-query.git "$REPO_PATH"
-            cd "$REPO_PATH"
-            git checkout ${{ inputs.branch }} 2>/dev/null || true
+            git clone --branch "$TARGET_BRANCH" --single-branch https://github.com/Seraphim-Systems/git-query.git "$REPO_PATH"
           fi
+          cd "$REPO_PATH"
+          echo "Server repo commit: $(git rev-parse --short HEAD)"
           ENDSSH
+
+  deploy-services:
+    name: 3) Deploy services
+    needs: sync-repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Deploy services
         run: |
           ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
-          set -e
+          set -euo pipefail
           cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query/infrastructure/docker
           source /tmp/deploy.env
           # docker-compose services that use `env_file: .env` require the file
@@ -126,10 +161,24 @@ jobs:
           sleep 5
           ENDSSH
 
+  verify-and-health:
+    name: 4) Verify and health check
+    needs: deploy-services
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
       - name: Verify deployment
         run: |
           ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
-          set -e
+          set -euo pipefail
           cd /home/${{ secrets.INFRA_HETZNER_USER }}/git-query/infrastructure/docker
           docker compose ${{ inputs.compose_files }} ps
           ENDSSH
@@ -138,12 +187,30 @@ jobs:
         if: inputs.health_check_url != '' || inputs.health_check_command != ''
         run: |
           ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} << 'ENDSSH'
-          set -e
+          set -euo pipefail
           sleep 10
           ${{ inputs.health_check_command != '' && inputs.health_check_command || format('curl -f "{0}"', inputs.health_check_url) }} || exit 1
           ENDSSH
 
+  cleanup:
+    name: 5) Cleanup temporary files
+    needs:
+      - prepare-environment
+      - sync-repository
+      - deploy-services
+      - verify-and-health
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
       - name: Cleanup
-        if: always()
         run: |
           ssh ${{ secrets.INFRA_HETZNER_USER }}@${{ secrets.INFRA_HETZNER_HOST }} "rm -f /tmp/deploy.env /home/${{ secrets.INFRA_HETZNER_USER }}/git-query/infrastructure/docker/.env" || true
