@@ -330,16 +330,21 @@ document.addEventListener('DOMContentLoaded', () => {
         backToWelcome();
     });
 
-    // Load example repos (dev preview button)
+    // Load example repos (dev preview button — admin only)
     if (loadExamplesBtn) {
-        loadExamplesBtn.addEventListener('click', () => {
-            welcomeScreen.style.display = 'none';
-            messagesContainer.style.display = 'none';
-            repoRecommendations.style.display = 'block';
-            closeRepoBtn.style.display = 'flex';
-            currentView = 'repos';
-            displayRepos(EXAMPLE_REPOS);
-        });
+        const isAdmin = localStorage.getItem('isAdmin') === 'true';
+        if (isAdmin) {
+            loadExamplesBtn.addEventListener('click', () => {
+                welcomeScreen.style.display = 'none';
+                messagesContainer.style.display = 'none';
+                repoRecommendations.style.display = 'block';
+                closeRepoBtn.style.display = 'flex';
+                currentView = 'repos';
+                displayRepos(EXAMPLE_REPOS);
+            });
+        } else {
+            loadExamplesBtn.style.display = 'none';
+        }
     }
     
     // Modal events
@@ -551,6 +556,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const isRecoRequest = isRecommendationRequest(message);
+
+        // Build recent message history for AI context (last 20 messages max)
+        const currentChat = chats.find(c => String(c.id) === String(currentChatId));
+        const recentMessages = (currentChat && Array.isArray(currentChat.messages))
+            ? currentChat.messages.slice(-20).map(m => ({ role: m.role, content: m.content }))
+            : [];
         
         try {
             if (isRecoRequest) {
@@ -560,7 +571,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         method: 'POST',
                         headers: authHeaders(),
                         credentials: 'include',
-                        body: JSON.stringify({ message, context: { chatId: currentChatId } })
+                        body: JSON.stringify({ message, context: { chatId: currentChatId, message_history: recentMessages } })
                     }),
                     fetch(`${API_BASE}/recommend/`, {
                         method: 'POST',
@@ -598,7 +609,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     method: 'POST',
                     headers: authHeaders(),
                     credentials: 'include',
-                    body: JSON.stringify({ message, context: { chatId: currentChatId } })
+                    body: JSON.stringify({ message, context: { chatId: currentChatId, message_history: recentMessages } })
                 });
 
                 if (response.ok) {

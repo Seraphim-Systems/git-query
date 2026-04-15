@@ -130,9 +130,14 @@ async def chat_endpoint(request: ChatRequest):
         # Import the agent's chat function
         from src.client.bot import chat as bot_chat
 
-        # Call the agent with user message and ID
+        # Extract message history from context for conversation continuity
+        message_history = request.context.get("message_history", [])
+
+        # Call the agent with user message, ID, and history
         response_text, tool_calls = await bot_chat(
-            message=request.message, user_id=request.user_id
+            message=request.message,
+            user_id=request.user_id,
+            message_history=message_history,
         )
 
         logger.info(
