@@ -481,7 +481,7 @@ body.light-theme .top-search-bar { background: rgba(220, 224, 240, 0.65); }
 .message-repo-grid .repo-card-description { font-size: 12px; }
 .message-repo-grid .repo-card-stats { font-size: 11.5px; }
 
-.message-repos-more { display: none; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 10px; }
+.message-repos-more { display: none; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 10px; max-height: 600px; overflow-y: auto; }
 .message-repos-more.visible { display: grid; }
 
 .message-repos-expand-btn {
@@ -550,7 +550,7 @@ body.light-theme .top-search-bar { background: rgba(220, 224, 240, 0.65); }
     background: linear-gradient(135deg, #7c3aed, #4f46e5);
     color: #fff;
 }
-.message-content { flex: 1; line-height: 1.65; font-size: 14px; overflow-wrap: break-word; }
+.message-content { flex: 1; line-height: 1.65; font-size: 14px; overflow-wrap: break-word; min-width: 0; overflow: hidden; }
 
 /* Markdown Styling inside Messages */
 .message-content p { margin-bottom: 12px; }
