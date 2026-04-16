@@ -1,6 +1,6 @@
 """FastAPI application for the recommendation service."""
 
-from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks, File, Form, UploadFile
+from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from contextlib import asynccontextmanager
@@ -414,56 +414,3 @@ async def promote_model(model_id: str):
     if not success:
         raise HTTPException(status_code=404, detail="Model not found or promotion failed")
     return {"status": "success", "message": f"Model {model_id} promoted to active"}
-
-
-@app.post("/admin/models/upload")
-async def upload_model(
-    file: UploadFile = File(...),
-    model_id: str = Form(...),
-    variant: str = Form("default"),
-    metrics: str = Form("{}"),
-):
-    """Upload a trained model file and register it in the model registry.
-
-    Called by the local training pipeline to push a model artifact to the server
-    before promoting it. Saves the file to /app/models/ and creates a candidate
-    entry in MongoDB so that /admin/models/promote/{model_id} can find it.
-    """
-    import json
-    from datetime import UTC, datetime
-    from pathlib import Path
-
-    from .models import ModelMetadata
-
-    models_dir = Path("/app/models")
-    models_dir.mkdir(parents=True, exist_ok=True)
-
-    filename = file.filename or f"{model_id}.pkl"
-    model_path = models_dir / filename
-
-    content = await file.read()
-    model_path.write_bytes(content)
-    logger.info("Uploaded model file saved to %s (%d bytes)", model_path, len(content))
-
-    try:
-        parsed_metrics = json.loads(metrics)
-    except Exception:
-        parsed_metrics = {}
-
-    metadata = ModelMetadata(
-        model_id=model_id,
-        model_type="reranker",
-        variant=variant,
-        version="1.0.0",
-        path=filename,
-        hyperparameters={},
-        metrics={k: float(v) for k, v in parsed_metrics.items() if isinstance(v, (int, float))},
-        trained_at=datetime.now(UTC),
-        is_active=False,
-        status="candidate",
-    )
-    registry: ModelRegistryService = app.state.registry_service
-    await registry.register_model(metadata)
-    logger.info("Registered uploaded model %s in registry", model_id)
-
-    return {"status": "success", "model_id": model_id, "path": str(model_path)}

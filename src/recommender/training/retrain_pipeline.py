@@ -204,7 +204,6 @@ async def main() -> None:
                 candidate_model_id=model_id,
                 candidate_metrics=candidate_metrics,
                 candidate_mlflow_version=mlflow_version,
-                candidate_model_path=model_path,
             )
             tracker.set_tag("promoted", str(promoted))
             tracker.set_tag("mlflow_version", str(mlflow_version) if mlflow_version else "none")
