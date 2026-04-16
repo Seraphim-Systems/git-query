@@ -115,15 +115,15 @@ class ModelPromoter:
         model_path: str | None = None,
     ) -> bool:
         """Upload model file (if local path given), promote, and reload."""
-        import json
+        import json as _json
         import os
         api_key = os.getenv("APIKEY_MONGODB", "")
         headers = {"X-API-Key": api_key} if api_key else {}
 
-        # Upload model file to server so promote can find it in MongoDB
+        # Upload model file to server so the recommender can serve it.
+        # Non-fatal: training-only environments don't run the recommender service.
         if model_path and os.path.exists(model_path):
             try:
-                import json as _json
                 with open(model_path, "rb") as fh:
                     resp = requests.post(
                         f"{self.recommender_url}/admin/models/upload",
@@ -139,8 +139,7 @@ class ModelPromoter:
                 resp.raise_for_status()
                 logger.info("Uploaded model file %s to server", os.path.basename(model_path))
             except requests.RequestException as e:
-                logger.error("Failed to upload model file — aborting promotion: %s", e)
-                return False
+                logger.warning("Could not upload model file (recommender may not be running): %s", e)
 
         # Promote in model registry via recommender API
         try:
@@ -152,7 +151,6 @@ class ModelPromoter:
             resp.raise_for_status()
             logger.info("Promoted model %s via recommender registry", model_id)
         except requests.RequestException as e:
-            # Non-fatal: recommender may not be running in training-only environments
             logger.warning(
                 "Could not reach recommender for promote (will still count as promoted): %s",
                 e,
@@ -165,7 +163,7 @@ class ModelPromoter:
         except requests.RequestException:
             pass  # Non-fatal
 
-        # Update MLflow Model Registry stage — archive any existing Production versions first
+        # Update MLflow Model Registry stage — always happens regardless of recommender reachability
         if mlflow_version is not None:
             self.tracker.archive_production_versions(self.model_name, keep_version=mlflow_version)
             self.tracker.transition_model_stage(self.model_name, mlflow_version, "Production")
