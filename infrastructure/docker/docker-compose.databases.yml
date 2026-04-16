@@ -45,7 +45,7 @@ services:
       start_period: 60s
 
   qdrant:
-    image: qdrant/qdrant:v1.7.4
+    image: qdrant/qdrant:v1.13.6
     container_name: git-query-qdrant
     environment:
       QDRANT__SERVICE__GRPC_PORT: 6334

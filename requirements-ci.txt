@@ -1,6 +1,6 @@
 # CI-only requirements: everything needed for lint and unit tests.
 # Excludes only non-essential extras for CI runtime/cost, e.g. kagglehub, ijson,
-#           pyarrow, fastparquet, matplotlib, ipykernel
+#           matplotlib, ipykernel
 
 # Web Framework & API
 fastapi>=0.115.0
@@ -41,6 +41,7 @@ pandas>=2.0.0
 numpy>=1.26.3
 scikit-learn>=1.4.0
 lightgbm>=4.0.0
+pyarrow>=14.0.0
 torch>=2.2.0
 sentence-transformers>=2.3.1
 

@@ -1,0 +1,76 @@
+name: "Manual — Retrain LGBM Reranker"
+
+# Single Responsibility: Retrain LGBM reranker only (no embedding re-indexing)
+# Triggered: Manual workflow dispatch
+# Services: training container (needs running MongoDB, Qdrant, MLflow, gateway)
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to run from on server"
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  retrain:
+    name: Retrain LGBM on server
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.INFRA_HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.INFRA_HETZNER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Retrain LGBM
+        env:
+          INPUT_BRANCH: ${{ github.event.inputs.branch }}
+          HETZNER_USER: ${{ secrets.INFRA_HETZNER_USER }}
+          HETZNER_HOST: ${{ secrets.INFRA_HETZNER_HOST }}
+          DEFAULT_BRANCH: ${{ github.ref_name }}
+          APIKEY_MONGODB: ${{ secrets.APIKEY_MONGODB }}
+          APIKEY_QDRANT: ${{ secrets.APIKEY_QDRANT }}
+        run: |
+          ssh "$HETZNER_USER@$HETZNER_HOST" bash -s << ENDSSH
+          set -euo pipefail
+          REPO_PATH="/home/$HETZNER_USER/git-query"
+          TARGET_BRANCH="$INPUT_BRANCH"
+          if [ -z "\$TARGET_BRANCH" ]; then
+            TARGET_BRANCH="$DEFAULT_BRANCH"
+          fi
+
+          if [ -d "\$REPO_PATH/.git" ]; then
+            cd "\$REPO_PATH"
+            git fetch origin
+            git reset --hard "origin/\$TARGET_BRANCH"
+          else
+            git clone https://github.com/Seraphim-Systems/git-query.git "\$REPO_PATH"
+            cd "\$REPO_PATH"
+            git checkout "\$TARGET_BRANCH"
+          fi
+
+          echo "Server repo commit: \$(git rev-parse --short HEAD)"
+          cd "\$REPO_PATH"
+
+          echo "Building training image..."
+          docker build -f infrastructure/docker/Dockerfile.training -t git-query-training .
+
+          echo "Triggering LGBM-only retraining via docker-compose..."
+          docker compose \
+            -f infrastructure/docker/docker-compose.base.yml \
+            -f infrastructure/docker/docker-compose.mlflow.yml \
+            -f infrastructure/docker/docker-compose.training.yml \
+            --env-file .env \
+            run --rm \
+            -e ENABLE_EMBEDDING_TRAINING=false \
+            -e APIKEY_MONGODB="$APIKEY_MONGODB" \
+            -e APIKEY_QDRANT="$APIKEY_QDRANT" \
+            training
+
+          echo "Retraining complete."
+          ENDSSH

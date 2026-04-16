@@ -3,6 +3,7 @@
 import logging
 from typing import Any, Optional
 from pydantic_ai import Agent, RunContext
+from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, UserPromptPart, TextPart
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
@@ -14,19 +15,27 @@ logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are a helpful AI assistant for Git-Query, a GitHub repository recommendation system.
 
-You help users discover relevant GitHub repositories based on natural language queries.
+You help users understand and discuss GitHub repositories and topics related to software development.
 
-You have access to the following tools:
-- recommend_repositories: Find GitHub repos matching a query, with optional filters (language, stars, licence, etc.)
+IMPORTANT: You must NEVER list, display, or return repository recommendations in your responses.
+The frontend UI handles all repository display automatically. Your role is strictly conversational:
+- Explain concepts, technologies, and programming topics
+- Discuss what kinds of repositories might be useful and why
+- Answer questions about specific repositories when asked
+- Help users refine their search criteria
+
+Do NOT use recommend_repositories, get_recommendation, or search_items to fetch repos.
+Do NOT format repository lists, tables, or cards in your text responses.
+If a user asks for recommendations, acknowledge their request naturally and let them know
+the results will appear in the interface. Focus on explaining WHY certain types of repos
+might be helpful rather than listing specific ones.
+
+You have access to these tools for informational purposes:
 - log_repository_interaction: Record when a user clicks, saves, or rates a repository
 - get_user_preferences: View a user's learned language/topic preferences
 - query_repository_data: Run read-only MongoDB queries for repository data
 - explain_repository: Explain a repository from URL/full_name using DB + GitHub metadata
-- get_recommendation: Legacy recommendation tool
-- search_items: Generic item search
 
-When a user asks to find, search, or recommend repositories, use recommend_repositories.
-Always present results clearly with the repo name, description, stars and URL.
 Be friendly, concise, and helpful."""
 
 
@@ -252,17 +261,32 @@ async def search_items(ctx: RunContext[ChatbotDependencies], query: str, limit: 
     return result
 
 
-async def chat(message: str, user_id: str = None) -> tuple[str, list[dict]]:
+async def chat(message: str, user_id: str = None, message_history: list[dict] = None) -> tuple[str, list[dict]]:
     """
     Process a chat message and return a response.
 
     Args:
         message: User's message
         user_id: Optional user ID for personalisation
+        message_history: Optional list of prior messages [{role, content}] for context
 
     Returns:
         Tuple of (response text, list of tool calls made)
     """
     deps = ChatbotDependencies(user_id=user_id)
-    result = await agent.run(message, deps=deps)
+
+    # Build Pydantic AI message history from prior conversation
+    history: list[ModelMessage] = []
+    if message_history:
+        for msg in message_history:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if not content:
+                continue
+            if role == "user":
+                history.append(ModelRequest(parts=[UserPromptPart(content=content)]))
+            elif role == "assistant":
+                history.append(ModelResponse(parts=[TextPart(content=content)]))
+
+    result = await agent.run(message, deps=deps, message_history=history)
     return result.output, deps.tool_calls

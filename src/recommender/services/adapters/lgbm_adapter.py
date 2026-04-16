@@ -25,9 +25,11 @@ class LGBMAdapter(BaseRerankerAdapter):
         if isinstance(payload, dict):
             self._model = payload["model"]
             self._feature_cols = payload.get("feature_cols")
+            self._language_vocab = payload.get("language_vocab")
         else:
             self._model = payload
             self._feature_cols = getattr(payload, "feature_cols", None)
+            self._language_vocab = getattr(payload, "language_vocab", None)
         self._fe = FeatureExtractor()
 
     def score(self, query: str, candidates: list) -> List[float]:
@@ -48,10 +50,7 @@ class LGBMAdapter(BaseRerankerAdapter):
                 }
             )
         df = pd.DataFrame(rows)
-        X = self._fe.extract_all(df, query=query)
+        X = self._fe.extract_all(df, query=query, fixed_languages=self._language_vocab)
         if self._feature_cols is not None:
-            try:
-                X = X[self._feature_cols]
-            except KeyError as e:
-                logger.warning("Feature column filter failed, using all features: %s", e)
+            X = X.reindex(columns=self._feature_cols, fill_value=0)
         return self._model.predict(X.values).tolist()

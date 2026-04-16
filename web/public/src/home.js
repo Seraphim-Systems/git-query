@@ -85,6 +85,85 @@ document.addEventListener('DOMContentLoaded', () => {
         return headers;
     }
 
+    function normalizeMessageRole(rawRole) {
+        const role = String(rawRole || '').toLowerCase();
+        if (role === 'assistant' || role === 'bot' || role === 'ai' || role === 'system') {
+            return 'assistant';
+        }
+        return 'user';
+    }
+
+    function normalizeMessageContent(rawMessage) {
+        if (typeof rawMessage === 'string') {
+            return rawMessage;
+        }
+        if (rawMessage == null) {
+            return '';
+        }
+        if (typeof rawMessage === 'object') {
+            const direct = rawMessage.content ?? rawMessage.text ?? rawMessage.message ?? rawMessage.body;
+            if (typeof direct === 'string') {
+                return direct;
+            }
+            if (Array.isArray(direct)) {
+                return direct
+                    .map(part => (typeof part === 'string' ? part : (part && typeof part === 'object' ? String(part.text || part.content || '') : '')))
+                    .filter(Boolean)
+                    .join('\n');
+            }
+            return String(direct ?? '');
+        }
+        return String(rawMessage);
+    }
+
+    function normalizeChatMessage(rawMessage) {
+        if (typeof rawMessage === 'string') {
+            return { content: rawMessage, role: 'assistant', timestamp: Date.now() };
+        }
+
+        const msg = rawMessage && typeof rawMessage === 'object' ? rawMessage : {};
+        const rawTimestamp = Number(msg.timestamp);
+        return {
+            content: normalizeMessageContent(msg),
+            role: normalizeMessageRole(msg.role ?? msg.type ?? msg.sender),
+            timestamp: Number.isFinite(rawTimestamp) ? rawTimestamp : Date.now(),
+        };
+    }
+
+    function normalizeChatSession(rawChat, index = 0) {
+        const chat = rawChat && typeof rawChat === 'object' ? rawChat : {};
+        const rawMessages = Array.isArray(chat.messages)
+            ? chat.messages
+            : Array.isArray(chat.history)
+                ? chat.history
+                : [];
+        const messages = rawMessages.map(normalizeChatMessage).filter(msg => msg.content || msg.role === 'assistant');
+        const fallbackTitle = messages.find(m => m.role === 'assistant')?.content || messages[0]?.content || 'New Session';
+        const rawTimestamp = Number(chat.timestamp ?? chat.updated_at ?? chat.created_at);
+
+        return {
+            id: String(chat.id ?? chat.chat_id ?? chat.session_id ?? `chat-${Date.now()}-${index}`),
+            title: String(chat.title ?? chat.name ?? fallbackTitle).slice(0, 120) || 'New Session',
+            timestamp: Number.isFinite(rawTimestamp) ? rawTimestamp : Date.now(),
+            messages,
+        };
+    }
+
+    function renderAssistantMarkdown(targetEl, text) {
+        const safeText = String(text ?? '');
+        if (typeof marked === 'undefined') {
+            targetEl.textContent = safeText;
+            return;
+        }
+
+        try {
+            targetEl.innerHTML = marked.parse(safeText);
+        } catch (error) {
+            console.warn('Falling back to plain text chat rendering:', error);
+            targetEl.textContent = safeText;
+        }
+    }
+
     async function persistChatsToBackend() {
         try {
             await fetch(`${API_BASE}/user/chats`, {
@@ -251,16 +330,21 @@ document.addEventListener('DOMContentLoaded', () => {
         backToWelcome();
     });
 
-    // Load example repos (dev preview button)
+    // Load example repos (dev preview button — admin only)
     if (loadExamplesBtn) {
-        loadExamplesBtn.addEventListener('click', () => {
-            welcomeScreen.style.display = 'none';
-            messagesContainer.style.display = 'none';
-            repoRecommendations.style.display = 'block';
-            closeRepoBtn.style.display = 'flex';
-            currentView = 'repos';
-            displayRepos(EXAMPLE_REPOS);
-        });
+        const isAdmin = localStorage.getItem('isAdmin') === 'true';
+        if (isAdmin) {
+            loadExamplesBtn.addEventListener('click', () => {
+                welcomeScreen.style.display = 'none';
+                messagesContainer.style.display = 'none';
+                repoRecommendations.style.display = 'block';
+                closeRepoBtn.style.display = 'flex';
+                currentView = 'repos';
+                displayRepos(EXAMPLE_REPOS);
+            });
+        } else {
+            loadExamplesBtn.style.display = 'none';
+        }
     }
     
     // Modal events
@@ -394,7 +478,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Text part
         const textEl = document.createElement('div');
-        textEl.textContent = text;
+        renderAssistantMarkdown(textEl, text);
         contentWrapper.appendChild(textEl);
 
         // Top-3 repo cards
@@ -472,6 +556,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const isRecoRequest = isRecommendationRequest(message);
+
+        // Build recent message history for AI context (last 20 messages max)
+        const currentChat = chats.find(c => String(c.id) === String(currentChatId));
+        const recentMessages = (currentChat && Array.isArray(currentChat.messages))
+            ? currentChat.messages.slice(-20).map(m => ({ role: m.role, content: m.content }))
+            : [];
         
         try {
             if (isRecoRequest) {
@@ -481,7 +571,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         method: 'POST',
                         headers: authHeaders(),
                         credentials: 'include',
-                        body: JSON.stringify({ message, context: { chatId: currentChatId } })
+                        body: JSON.stringify({ message, context: { chatId: currentChatId, message_history: recentMessages } })
                     }),
                     fetch(`${API_BASE}/recommend/`, {
                         method: 'POST',
@@ -519,7 +609,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     method: 'POST',
                     headers: authHeaders(),
                     credentials: 'include',
-                    body: JSON.stringify({ message, context: { chatId: currentChatId } })
+                    body: JSON.stringify({ message, context: { chatId: currentChatId, message_history: recentMessages } })
                 });
 
                 if (response.ok) {
@@ -554,7 +644,11 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const content = document.createElement('div');
         content.className = 'message-content';
-        content.textContent = text;
+        if (type === 'assistant') {
+            renderAssistantMarkdown(content, text);
+        } else {
+            content.textContent = String(text ?? '');
+        }
         
         messageDiv.appendChild(avatar);
         messageDiv.appendChild(content);
@@ -571,14 +665,26 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Save chat message
     function saveChatMessage(chatId, text, type) {
-        const chat = chats.find(c => c.id === chatId);
-        if (chat) {
-            if (!chat.messages) {
-                chat.messages = [];
-            }
-            chat.messages.push({ content: text, role: type, timestamp: Date.now() });
-            void persistChatsToBackend();
+        const normalizedChatId = String(chatId);
+        let chat = chats.find(c => String(c.id) === normalizedChatId);
+
+        // Ensure first message of a new chat is not dropped.
+        if (!chat) {
+            chat = {
+                id: normalizedChatId,
+                title: 'New Session',
+                timestamp: Date.now(),
+                messages: []
+            };
+            chats.unshift(chat);
+            renderChatHistory();
         }
+
+        if (!Array.isArray(chat.messages)) {
+            chat.messages = [];
+        }
+        chat.messages.push({ content: String(text ?? ''), role: type, timestamp: Date.now() });
+        void persistChatsToBackend();
     }
     
     // Load chat history
@@ -592,7 +698,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (response.ok) {
                 const data = await response.json();
-                chats = Array.isArray(data.chats) ? data.chats : [];
+                const fetchedChats = Array.isArray(data.chats) ? data.chats : [];
+                chats = fetchedChats.map((chat, idx) => normalizeChatSession(chat, idx));
             } else {
                 chats = [];
             }
@@ -601,7 +708,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (chats.length === 0) {
                 const saved = localStorage.getItem('chats');
                 if (saved) {
-                    chats = JSON.parse(saved) || [];
+                    const parsed = JSON.parse(saved) || [];
+                    chats = Array.isArray(parsed)
+                        ? parsed.map((chat, idx) => normalizeChatSession(chat, idx))
+                        : [];
                     if (Array.isArray(chats) && chats.length > 0) {
                         await persistChatsToBackend();
                     }
@@ -653,7 +763,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             
             chatItem.addEventListener('click', () => {
-                loadChat(chat.id);
+                loadChat(String(chat.id));
             });
             
             chatHistory.appendChild(chatItem);
@@ -662,11 +772,23 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Update chat history
     function updateChatHistory(chatId, firstMessage) {
-        const existingChat = chats.find(c => c.id === chatId);
+        const normalizedChatId = String(chatId);
+        const existingChat = chats.find(c => String(c.id) === normalizedChatId);
+        const computedTitle = String(firstMessage ?? '').substring(0, 30) + (String(firstMessage ?? '').length > 30 ? '...' : '');
+
+        if (existingChat) {
+            if (!existingChat.title || existingChat.title === 'New Session') {
+                existingChat.title = computedTitle || 'New Session';
+                void persistChatsToBackend();
+                renderChatHistory();
+            }
+            return;
+        }
+
         if (!existingChat) {
             const newChat = {
-                id: chatId,
-                title: firstMessage.substring(0, 30) + (firstMessage.length > 30 ? '...' : ''),
+                id: normalizedChatId,
+                title: computedTitle || 'New Session',
                 timestamp: Date.now(),
                 messages: []
             };
@@ -708,10 +830,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Load specific chat
     async function loadChat(chatId) {
         try {
-            const chat = chats.find(c => c.id === chatId);
+            const chat = chats.find(c => String(c.id) === String(chatId));
             if (!chat) return;
             
-            currentChatId = chatId;
+            currentChatId = String(chat.id);
             messagesContainer.innerHTML = '';
             welcomeScreen.style.display = 'none';
             repoRecommendations.style.display = 'none';
@@ -719,8 +841,11 @@ document.addEventListener('DOMContentLoaded', () => {
             currentView = 'chat';
             
             // Load messages from saved chat
-            if (chat.messages && chat.messages.length > 0) {
-                chat.messages.forEach(msg => {
+            const normalizedMessages = Array.isArray(chat.messages)
+                ? chat.messages.map(normalizeChatMessage)
+                : [];
+            if (normalizedMessages.length > 0) {
+                normalizedMessages.forEach(msg => {
                     const messageDiv = document.createElement('div');
                     messageDiv.className = `message ${msg.role}`;
                     
@@ -730,7 +855,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     
                     const content = document.createElement('div');
                     content.className = 'message-content';
-                    content.textContent = msg.content;
+                    if (msg.role === 'assistant') {
+                        renderAssistantMarkdown(content, msg.content);
+                    } else {
+                        content.textContent = String(msg.content ?? '');
+                    }
                     
                     messageDiv.appendChild(avatar);
                     messageDiv.appendChild(content);
