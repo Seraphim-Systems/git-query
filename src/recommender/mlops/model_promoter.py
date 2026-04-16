@@ -117,6 +117,7 @@ class ModelPromoter:
         """Upload model file (if local path given), promote, and reload."""
         import json as _json
         import os
+
         api_key = os.getenv("APIKEY_MONGODB", "")
         headers = {"X-API-Key": api_key} if api_key else {}
 
