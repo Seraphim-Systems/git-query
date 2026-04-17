@@ -50,7 +50,17 @@ class RerankerLGBMPipeline(BasePipeline):
         )
 
     async def train(self, training_data: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            from ...mlops.dataset_versioner import DatasetVersioner
+        except ImportError:
+            from mlops.dataset_versioner import DatasetVersioner  # Docker flat layout
         from ..trainers.reranker_lgbm_trainer import RerankerLGBMTrainer
+
+        grouped_df = training_data.get("grouped_df")
+        if grouped_df is not None and "dataset_version" not in training_data:
+            versioner = DatasetVersioner()
+            training_data["dataset_version"] = versioner.compute_version(grouped_df)
+            logger.info("Computed dataset version: %s", training_data["dataset_version"])
 
         trainer = RerankerLGBMTrainer(model_dir=self.models_dir)
         return await trainer.train(

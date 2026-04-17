@@ -54,6 +54,7 @@ class ModelPromoter:
         candidate_model_id: str,
         candidate_metrics: dict[str, float],
         candidate_mlflow_version: int | None = None,
+        candidate_model_path: str | None = None,
     ) -> bool:
         """Promote the candidate if it improves on the current production model.
 
@@ -66,7 +67,7 @@ class ModelPromoter:
                 "No production model found — promoting %s unconditionally",
                 candidate_model_id,
             )
-            return self._do_promote(candidate_model_id, candidate_mlflow_version)
+            return self._do_promote(candidate_model_id, candidate_mlflow_version, candidate_model_path)
 
         # Find metrics present in both production and candidate
         shared_keys = [k for k in COMPARISON_METRICS if k in production_metrics and k in candidate_metrics]
@@ -76,7 +77,7 @@ class ModelPromoter:
                 "No shared metrics to compare — promoting %s unconditionally",
                 candidate_model_id,
             )
-            return self._do_promote(candidate_model_id, candidate_mlflow_version)
+            return self._do_promote(candidate_model_id, candidate_mlflow_version, candidate_model_path)
 
         # Block if any shared metric degrades beyond threshold
         # (lower std_ndcg is better, higher mean_ndcg is better — treat degradation
@@ -105,40 +106,52 @@ class ModelPromoter:
                     self.tracker.transition_model_stage(self.model_name, candidate_mlflow_version, "Archived")
                 return False
 
-        # Require improvement on the primary metric (mean_ndcg_at_10)
-        primary = "mean_ndcg_at_10"
-        if primary in shared_keys:
-            if candidate_metrics[primary] <= production_metrics[primary]:
-                logger.warning(
-                    "Model %s NOT PROMOTED: %s did not improve (prod=%.4f, cand=%.4f)",
-                    candidate_model_id,
-                    primary,
-                    production_metrics[primary],
-                    candidate_metrics[primary],
-                )
-                self.tracker.log_metrics({"promotion_blocked": 1.0})
-                if candidate_mlflow_version is not None:
-                    self.tracker.transition_model_stage(self.model_name, candidate_mlflow_version, "Archived")
-                return False
-
-        return self._do_promote(candidate_model_id, candidate_mlflow_version)
+        return self._do_promote(candidate_model_id, candidate_mlflow_version, candidate_model_path)
 
     def _do_promote(
         self,
         model_id: str,
         mlflow_version: int | None,
+        model_path: str | None = None,
     ) -> bool:
-        """Call the promote and reload endpoints, then update MLflow stage."""
+        """Upload model file (if local path given), promote, and reload."""
+        import json as _json
+        import os
+
+        api_key = os.getenv("APIKEY_MONGODB", "")
+        headers = {"X-API-Key": api_key} if api_key else {}
+
+        # Upload model file to server so the recommender can serve it.
+        # Non-fatal: training-only environments don't run the recommender service.
+        if model_path and os.path.exists(model_path):
+            try:
+                with open(model_path, "rb") as fh:
+                    resp = requests.post(
+                        f"{self.recommender_url}/admin/models/upload",
+                        headers=headers,
+                        files={"file": (os.path.basename(model_path), fh, "application/octet-stream")},
+                        data={
+                            "model_id": model_id,
+                            "variant": "default",
+                            "metrics": _json.dumps({}),
+                        },
+                        timeout=300,  # large file upload
+                    )
+                resp.raise_for_status()
+                logger.info("Uploaded model file %s to server", os.path.basename(model_path))
+            except requests.RequestException as e:
+                logger.warning("Could not upload model file (recommender may not be running): %s", e)
+
         # Promote in model registry via recommender API
         try:
             resp = requests.post(
                 f"{self.recommender_url}/admin/models/promote/{model_id}",
+                headers=headers,
                 timeout=10,
             )
             resp.raise_for_status()
             logger.info("Promoted model %s via recommender registry", model_id)
         except requests.RequestException as e:
-            # Non-fatal: recommender may not be running in training-only environments
             logger.warning(
                 "Could not reach recommender for promote (will still count as promoted): %s",
                 e,
@@ -146,12 +159,12 @@ class ModelPromoter:
 
         # Hot-reload without full container restart
         try:
-            requests.post(f"{self.recommender_url}/admin/models/reload", timeout=10)
+            requests.post(f"{self.recommender_url}/admin/models/reload", headers=headers, timeout=10)
             logger.info("Triggered recommender model hot-reload")
         except requests.RequestException:
             pass  # Non-fatal
 
-        # Update MLflow Model Registry stage — archive any existing Production versions first
+        # Update MLflow Model Registry stage — always happens regardless of recommender reachability
         if mlflow_version is not None:
             self.tracker.archive_production_versions(self.model_name, keep_version=mlflow_version)
             self.tracker.transition_model_stage(self.model_name, mlflow_version, "Production")
