@@ -1,114 +1,168 @@
 # Combined Training Pipeline (Embeddings + Model)
 
-This guide explains how to run the full retraining pipeline in Docker:
+This guide explains how to run the full retraining pipeline using Docker.
 
-1. Embedding indexing + upload to Qdrant
-2. Model training (LightGBM reranker)
+For a detailed explanation of how data flows through the system (ingestion, normalization, vectorization, and training), see:
+
+ `docs/DATA_PIPELINE.md`
+
+---
+
+## Overview
+
+The training pipeline has two main stages:
+
+1. **Embedding generation and indexing**
+2. **LightGBM reranker training**
+
+The goal is to transform raw repository data into:
+
+* semantic embeddings stored in Qdrant
+* a trained ranking model for improved recommendations
+
+---
 
 ## What this pipeline does
 
-The training container runs `python -m training.retrain_pipeline`, which executes:
+The training container runs:
 
-- **Step 1:** Embedding indexing pipeline
-- **Step 2:** LightGBM reranker training
+```bash
+python -m training.retrain_pipeline
+```
 
-Embeddings are uploaded to Qdrant automatically unless explicitly disabled.
+This executes:
+
+* Step 1: Fetch repository data from API
+* Step 2: Normalize and construct text representations
+* Step 3: Generate embeddings
+* Step 4: Upload embeddings to Qdrant
+* Step 5: Train LightGBM reranker
+
+---
+
+## Pipeline modes
+
+The system supports two execution modes:
+
+### 1. One-shot mode (`run()`)
+
+* Processes all repositories in one pass
+* Generates a single embeddings file
+* Simpler but less scalable
+
+### 2. Chunked mode (`run_chunked()`)
+
+* Processes repositories in chunks/windows
+* Deduplicates across batches
+* Uploads embeddings incrementally
+* Saves checkpoints after each chunk
+
+Recommended for large datasets
+
+---
 
 ## Prerequisites
 
-- Docker is installed and running.
-- You are in the repo root.
-- `infrastructure/docker/.env` is configured.
+* Docker installed and running
+* Repository cloned locally
+* Environment variables configured
 
-## Recommended environment file
+---
 
-Use `infrastructure/docker/.env` for this flow.
+## Environment configuration
 
-Minimum important variables:
+Use:
 
-- `API_BASE_URL` (gateway URL used by training)
-- `APIKEY_MONGODB`
-- `APIKEY_QDRANT`
-- `UPLOAD_BATCH_SIZE`
-- `SKIP_QDRANT_UPLOAD` (optional; default behavior is upload enabled)
-
-Stability/progress settings (recommended for visible progress):
-
-- `CHUNK_SIZE=5000`
-- `FETCH_BATCH_SIZE=200`
-- `N_WORKERS=1`
-
-## Run the combined pipeline
-
-```powershell
-docker compose -f infrastructure/docker/docker-compose.base.yml -f infrastructure/docker/docker-compose.training.yml --env-file infrastructure/docker/.env run -d --name training_run training
+```bash
+infrastructure/docker/.env
 ```
 
-## Monitor progress
+### Required variables
 
-```powershell
-docker logs -f training_run
+* `API_BASE_URL`
+* `APIKEY_MONGODB`
+* `APIKEY_QDRANT`
+
+### Recommended settings (for stability and visibility)
+
+```bash
+CHUNK_SIZE=5000
+FETCH_BATCH_SIZE=200
+N_WORKERS=1
 ```
 
-You should see:
+### Optional flags
 
-- `=== Step 1: Embedding indexing ===`
-- chunk progress (`CHUNK x/y`)
-- embedding lines (`Embedding ... texts`)
-- upload lines (`Uploading ... points to Qdrant` and `Uploaded ...`)
-- later: `=== Step 2: LightGBM reranker ===`
+* Disable upload to Qdrant (for testing):
 
-## Quick health checks
-
-Container state:
-
-```powershell
-docker ps -a --filter "name=training_run" --format "table {{.Names}}\t{{.Status}}"
+```bash
+SKIP_QDRANT_UPLOAD=true
 ```
 
-Recent Qdrant upload evidence:
+---
 
-```powershell
-docker logs --tail 200 training_run | Select-String -Pattern "Qdrant|Upload|Uploaded|upload"
+## Running the pipeline
+
+Run the training container:
+
+```bash
+docker compose \
+  -f infrastructure/docker/docker-compose.base.yml \
+  -f infrastructure/docker/docker-compose.training.yml \
+  --env-file infrastructure/docker/.env \
+  run -d --name training_run training
 ```
 
-Runtime usage:
+---
 
-```powershell
-docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}" training_run
-```
+## Checkpointing and resumability
 
-## Notes on `unhealthy` status
+The pipeline supports resumable execution.
 
-For this training container, `unhealthy` can appear during long runs due to healthcheck behavior. If logs show active chunking/embedding/uploading, the pipeline is still progressing.
+Key features:
 
-## Stop / cleanup
+* `models/metadata/repo_mapping_latest.json` stores processed repositories
+* Each chunk saves progress after completion
+* Prevents reprocessing already indexed data
+* Enables recovery after crashes
 
-Stop and remove only this training run:
+---
 
-```powershell
-docker rm -f training_run
-```
+## Outputs
 
-Remove all containers (dangerous, global cleanup):
+After a successful run, the pipeline produces:
 
-```powershell
-$all = docker ps -aq; if ($all) { docker rm -f $all }
-```
+* Embeddings stored in Qdrant
+* Trained LightGBM model
+* Metadata and mapping files
+* Logs for reproducibility
 
-## Common pitfalls
+---
 
-- Using the wrong env file (`.env` at repo root instead of `infrastructure/docker/.env`).
-- Placeholder `API_BASE_URL` (for example `your-gateway-url.com`) causing fetch failures.
-- Setting `SKIP_QDRANT_UPLOAD=true` and expecting vectors in Qdrant.
+## Tips for development
 
-## Expected success pattern in logs
+* Use smaller `CHUNK_SIZE` and `FETCH_BATCH_SIZE` for faster iteration
+* Disable Qdrant upload when testing locally
+* Run chunked mode for better visibility of progress
+* Monitor logs to debug failures early
 
-A healthy run usually repeats this cycle per chunk:
+---
 
-- `Fetched ... repos`
-- `Embedding ... texts`
-- `Uploaded .../...`
-- mapping save/update
+## Extending the pipeline
 
-After embedding phase finishes, it proceeds to LightGBM training (Step 2).
+When modifying or adding new steps:
+
+1. Keep steps modular
+2. Add logging before and after execution
+3. Ensure reproducibility
+4. Avoid breaking checkpointing
+5. Document changes in `docs/DATA_PIPELINE.md`
+
+---
+
+## Related documentation
+
+* `docs/DATA_PIPELINE.md`
+* `docs/MODEL_EXPLANATION.md`
+* `README.md`
+* `src/recommender/training/unified_pipeline.py`

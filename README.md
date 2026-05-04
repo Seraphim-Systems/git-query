@@ -93,6 +93,8 @@ docker-compose \
 
 ## Training pipeline (fetch → embed → upload)
 
+For a detailed step-by-step explanation of the data processing pipeline (ingestion, normalization, vectorization), see: `docs/DATA_PIPELINE.md`
+
 A containerized training script exists at `src/recommender/training/unified_pipeline.py`. It supports two modes:
 
 1. One-shot `run()` — fetch all repos (batched), compute embeddings in one pass, save a single embeddings `.npy` and metadata files.
