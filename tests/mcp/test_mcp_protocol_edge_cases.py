@@ -107,3 +107,32 @@ def test_execute_tool_preserves_empty_dict_result(monkeypatch):
         "result": {},
         "error": None,
     }
+
+
+def test_execute_tool_returns_404_for_empty_tool_name(monkeypatch):
+    monkeypatch.setattr(mcp_server, "get_tool", lambda tool_name: None)
+
+    with TestClient(mcp_server.app) as client:
+        response = client.post(
+            "/tools/execute",
+            json={
+                "tool_name": "",
+                "parameters": {},
+            },
+        )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Tool '' not found"
+
+
+def test_execute_tool_request_validation_error_when_parameters_is_null():
+    with TestClient(mcp_server.app) as client:
+        response = client.post(
+            "/tools/execute",
+            json={
+                "tool_name": "recommend_repositories",
+                "parameters": None,
+            },
+        )
+
+    assert response.status_code == 422
