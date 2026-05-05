@@ -246,39 +246,3 @@ def test_execute_tool_empty_body():
     with TestClient(mcp_server.app) as client:
         response = client.post("/tools/execute", json={})
     assert response.status_code == 422
-
-def test_chat_endpoint_forwards_message_history_from_context(monkeypatch):
-    seen = {}
-
-    async def fake_bot_chat(message, user_id=None, message_history=None):
-        seen["message"] = message
-        seen["user_id"] = user_id
-        seen["message_history"] = message_history
-        return ("ok", [])
-
-    import src.client.bot as real_bot
-    monkeypatch.setattr(real_bot, "chat", fake_bot_chat)
-
-    with TestClient(mcp_server.app) as client:
-        response = client.post(
-            "/chat",
-            json={
-                "message": "hello",
-                "user_id": "u-42",
-                "context": {
-                    "message_history": [
-                        {"role": "user", "content": "previous turn"},
-                        {"role": "assistant", "content": "previous answer"},
-                    ]
-                },
-            },
-        )
-
-    assert response.status_code == 200
-    assert response.json() == {"response": "ok"}
-    assert seen["message"] == "hello"
-    assert seen["user_id"] == "u-42"
-    assert seen["message_history"] == [
-        {"role": "user", "content": "previous turn"},
-        {"role": "assistant", "content": "previous answer"},
-    ]

@@ -31,6 +31,8 @@ jobs:
             backend:
               - 'src/**'
               - 'tests/**'
+              - 'scripts/**'
+              - 'docs/MCP_COVERAGE.md'
               - 'requirements*.txt'
               - 'pyproject.toml'
               - 'setup.cfg'
@@ -96,6 +98,21 @@ jobs:
           fail_ci_if_error: false
           verbose: true
 
+      - name: Generate MCP coverage report
+        if: always()
+        run: |
+          python scripts/report_mcp_coverage.py \
+            --coverage-xml coverage.xml \
+            --output docs/MCP_COVERAGE.md \
+            --prefix src/mcp/
+
+      - name: Upload MCP coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-coverage-report
+          path: docs/MCP_COVERAGE.md
+
   smoke-test:
     name: Smoke Test
     runs-on: ubuntu-latest
@@ -139,4 +156,5 @@ jobs:
             echo "One or more required jobs failed"
             exit 1
           fi
+
           echo "All required tests passed!"
